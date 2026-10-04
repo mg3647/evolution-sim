@@ -156,8 +156,18 @@
       <Chart title="Population" series={POPULATION_SERIES} data={populationData} />
       <Inspector creature={snapshot?.selected ?? null} />
 
-      <Chart title="Traits" series={TRAIT_SERIES} data={traitData} />
-      <Chart title="Brains" series={BRAIN_SERIES} data={brainData} />
+      <Chart
+        title="Traits"
+        note="Average body genes. 1 is what the first generation starts with."
+        series={TRAIT_SERIES}
+        data={traitData}
+      />
+      <Chart
+        title="Brains"
+        note="Average brain wiring. Links are rules connecting a sense to an action; hidden neurons combine senses. Both cost energy, so brains grow only when the extra wiring pays for itself."
+        series={BRAIN_SERIES}
+        data={brainData}
+      />
     </aside>
   </div>
 </div>

@@ -18,9 +18,16 @@
 
   let {
     title,
+    note,
     series,
     data,
-  }: { title: string; series: ChartSeries[]; data: uPlot.AlignedData | null } = $props();
+  }: {
+    title: string;
+    /** Optional line under the title explaining what the chart shows. */
+    note?: string;
+    series: ChartSeries[];
+    data: uPlot.AlignedData | null;
+  } = $props();
 
   let host: HTMLDivElement;
   let plot: uPlot | undefined;
@@ -80,6 +87,7 @@
 
 <section>
   <h2>{title}</h2>
+  {#if note}<p>{note}</p>{/if}
   <div bind:this={host}></div>
 </section>
 
@@ -91,6 +99,13 @@
     color: var(--muted);
     text-transform: uppercase;
     letter-spacing: 0.05em;
+  }
+
+  p {
+    margin: 0 0 6px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--muted);
   }
 
   section :global(.u-legend) {

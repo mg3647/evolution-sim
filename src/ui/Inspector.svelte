@@ -27,11 +27,23 @@
       <div><dt>Speed</dt><dd>{creature.speed.toFixed(2)}</dd></div>
       <div><dt>Sensor range</dt><dd>{creature.sensorRange.toFixed(2)}</dd></div>
       <div><dt>Mutation rate</dt><dd>{creature.mutationRate.toFixed(3)}</dd></div>
-      <div><dt>Hidden neurons</dt><dd>{creature.hiddenNeurons}</dd></div>
-      <div><dt>Links</dt><dd>{creature.links}</dd></div>
     </dl>
 
-    <h3>Brain outputs</h3>
+    <h3>Brain</h3>
+    <p class="note">
+      <b>{creature.links}</b>
+      {creature.links === 1 ? 'link' : 'links'}: wires from a sense to an action, each a simple rule such as
+      &ldquo;food on my right, turn right&rdquo;.
+      <b>{creature.hiddenNeurons}</b>
+      hidden {creature.hiddenNeurons === 1 ? 'neuron' : 'neurons'}: junctions that let it combine senses
+      before acting. Children inherit the wiring with small random changes.
+    </p>
+
+    <h3>Brain outputs: what it is doing now</h3>
+    <p class="note">
+      Turn: left of centre is left, right is right. Thrust: far left is standing still, far right is full
+      speed. Reproduce: right of centre means it splits once it has enough energy.
+    </p>
     <ul>
       {#each OUTPUT_LABELS as label, k (label)}
         <li>
@@ -42,7 +54,10 @@
       {/each}
     </ul>
 
-    <h3>Brain inputs</h3>
+    <h3>Brain inputs: what it senses now</h3>
+    <p class="note">
+      &ldquo;Kin&rdquo; is how closely the nearest creature's colour matches its own, so relatives read high.
+    </p>
     <ul>
       {#each INPUT_LABELS as label, k (label)}
         <li>
@@ -77,6 +92,16 @@
   p {
     margin: 0;
     color: var(--muted);
+  }
+
+  .note {
+    margin-bottom: 6px;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .note b {
+    color: var(--text);
   }
 
   dl {
