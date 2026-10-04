@@ -27,7 +27,7 @@ export type ToWorker =
   | { type: 'load'; json: string };
 
 /** Number of floats per creature in `Snapshot.creatures`. */
-export const CREATURE_STRIDE = 9;
+export const CREATURE_STRIDE = 10;
 
 /** Everything shown about the selected creature. */
 export interface Inspection {
@@ -113,7 +113,7 @@ export interface Snapshot {
 
   population: number;
   /** Per creature: x, y, heading, energy as a fraction of its maximum, radius, hue, diet,
-   * 1 if sick, -1 if immune, 0 otherwise, and species id. Empty when drawing is off. */
+   * 1 if sick, -1 if immune, 0 otherwise, species id, and 1 if calling. Empty when drawing is off. */
   creatures: Float32Array;
   meanSize: number;
   meanSpeed: number;
@@ -142,6 +142,8 @@ export interface Snapshot {
 
   births: number;
   reseeded: number;
+  /** Creatures calling now, and energy given since the world began, in all and to relatives. */
+  social: { calling: number; calls: number; given: number; givenToKin: number };
   deaths: { starved: number; oldAge: number; killed: number; disaster: number; thirst: number };
 
   /** The selected creature, or null if none is selected or it has died. */

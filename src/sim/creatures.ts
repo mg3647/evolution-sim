@@ -31,6 +31,8 @@ export interface Creatures {
   pain: Float32Array;
   /** Above zero: ticks of infection left. Below zero: ticks of immunity left. Zero: can catch it. */
   sick: Int32Array;
+  /** 1 if the creature called on its last turn; others hear it on the next tick. */
+  calling: Uint8Array;
   // Genes; see Genes in genome.ts.
   size: Float32Array;
   speed: Float32Array;
@@ -57,6 +59,7 @@ const FIELDS = [
   'hydration',
   'pain',
   'sick',
+  'calling',
   'size',
   'speed',
   'sensorRange',
@@ -98,6 +101,7 @@ export function createCreatures(capacity: number): Creatures {
     hydration: new Float32Array(capacity),
     pain: new Float32Array(capacity),
     sick: new Int32Array(capacity),
+    calling: new Uint8Array(capacity),
     size: new Float32Array(capacity),
     speed: new Float32Array(capacity),
     sensorRange: new Float32Array(capacity),
@@ -110,7 +114,10 @@ export function createCreatures(capacity: number): Creatures {
 
 function grow(c: Creatures): void {
   const capacity = c.capacity * 2;
-  const store = c as unknown as Record<string, Uint32Array | Int32Array | Float32Array | Float64Array>;
+  const store = c as unknown as Record<
+    string,
+    Uint8Array | Uint32Array | Int32Array | Float32Array | Float64Array
+  >;
   for (const field of FIELDS) {
     const old = store[field]!;
     const next = new (old.constructor as new (n: number) => typeof old)(capacity);
@@ -137,6 +144,7 @@ export function spawnCreature(c: Creatures, options: SpawnOptions): number {
   c.hydration[i] = options.hydration ?? 1;
   c.pain[i] = 0;
   c.sick[i] = 0;
+  c.calling[i] = 0;
   c.size[i] = options.genes.size;
   c.speed[i] = options.genes.speed;
   c.sensorRange[i] = options.genes.sensorRange;

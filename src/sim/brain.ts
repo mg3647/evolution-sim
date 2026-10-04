@@ -46,24 +46,27 @@ export const Input = {
   ScentUnderfoot: AFTER_RAYS + 5,
   /** Above zero if scent is stronger to the right, below if to the left. */
   ScentSide: AFTER_RAYS + 6,
-  Energy: AFTER_RAYS + 7,
-  Health: AFTER_RAYS + 8,
+  /** How loud calls are to the left and to the right. */
+  HearLeft: AFTER_RAYS + 7,
+  HearRight: AFTER_RAYS + 8,
+  Energy: AFTER_RAYS + 9,
+  Health: AFTER_RAYS + 10,
   /** 0 when full of water, 1 when about to die of thirst. */
-  Thirst: AFTER_RAYS + 9,
-  Age: AFTER_RAYS + 10,
+  Thirst: AFTER_RAYS + 11,
+  Age: AFTER_RAYS + 12,
   /** How badly it has been bitten since its last turn. */
-  Pain: AFTER_RAYS + 11,
+  Pain: AFTER_RAYS + 13,
   /** 1 while the creature itself is infected. */
-  Sick: AFTER_RAYS + 12,
-  Clock: AFTER_RAYS + 13,
+  Sick: AFTER_RAYS + 14,
+  Clock: AFTER_RAYS + 15,
   /** Sunlight relative to average: above zero in summer, below in winter. */
-  Season: AFTER_RAYS + 14,
-  Bias: AFTER_RAYS + 15,
+  Season: AFTER_RAYS + 16,
+  Bias: AFTER_RAYS + 17,
 } as const;
-export const INPUT_COUNT = AFTER_RAYS + 16;
+export const INPUT_COUNT = AFTER_RAYS + 18;
 
-export const Output = { Turn: 0, Thrust: 1, Reproduce: 2, Attack: 3, Emit: 4 } as const;
-export const OUTPUT_COUNT = 5;
+export const Output = { Turn: 0, Thrust: 1, Reproduce: 2, Attack: 3, Emit: 4, Call: 5, Give: 6 } as const;
+export const OUTPUT_COUNT = 7;
 
 /** Neuron ids below this are inputs and outputs; hidden neurons come after. */
 const FIXED_NODES = INPUT_COUNT + OUTPUT_COUNT;
@@ -89,6 +92,8 @@ export const INPUT_LABELS: string[] = [
   'In water',
   'Scent underfoot',
   'Scent to the right',
+  'Calls on the left',
+  'Calls on the right',
   'Energy',
   'Health',
   'Thirst',
@@ -99,7 +104,7 @@ export const INPUT_LABELS: string[] = [
   'Season',
   'Bias',
 ];
-export const OUTPUT_LABELS: string[] = ['Turn', 'Thrust', 'Reproduce', 'Attack', 'Emit scent'];
+export const OUTPUT_LABELS: string[] = ['Turn', 'Thrust', 'Reproduce', 'Attack', 'Emit scent', 'Call', 'Give'];
 
 export interface LinkGene {
   /** Id shared by every link between the same two neurons, across all brains. */

@@ -47,6 +47,11 @@ interface Summary {
   /** Share of all deaths that were from thirst, and from old age. */
   thirstShare: number;
   oldAgeShare: number;
+  /** Mean share of creatures calling at any moment. */
+  callers: number;
+  /** Energy given per thousand ticks, and the share of it that went to relatives. */
+  givenPerThousand: number;
+  givenToKin: number;
   species: { mean: number; max: number };
   meanSize: number;
   meanDiet: number;
@@ -69,6 +74,8 @@ function run(seed: string): Summary {
   let dietSum = 0;
   const started = performance.now();
 
+  let callerSum = 0;
+  let socialBefore = { ...world.social };
   let deathsBefore = { ...world.deaths };
   let reseededBefore = 0;
   for (let tick = 1; tick <= ticks; tick++) {
@@ -76,6 +83,7 @@ function run(seed: string): Summary {
     step(world);
     if (tick === from) {
       deathsBefore = { ...world.deaths };
+      socialBefore = { ...world.social };
       reseededBefore = world.reseeded;
     }
     if (tick % SAMPLE !== 0 || tick <= from) continue;
@@ -94,6 +102,7 @@ function run(seed: string): Summary {
     }
     hunterSum += hunters;
     if (hunters >= HUNTER_QUORUM) hunterSamples++;
+    callerSum += world.social.calling / Math.max(1, c.count);
     speciesSum += world.species.species.length;
     speciesMax = Math.max(speciesMax, world.species.species.length);
     sizeSum += size / Math.max(1, c.count);
@@ -109,6 +118,7 @@ function run(seed: string): Summary {
   const d = { ...world.deaths };
   for (const cause of Object.keys(d) as (keyof typeof d)[]) d[cause] -= deathsBefore[cause];
   const deaths = d.starved + d.oldAge + d.killed + d.disaster + d.thirst;
+  const given = world.social.given - socialBefore.given;
   return {
     seed,
     population: { min: popMin, mean: popSum / samples, max: popMax },
@@ -119,6 +129,9 @@ function run(seed: string): Summary {
     killShare: deaths > 0 ? d.killed / deaths : 0,
     thirstShare: deaths > 0 ? d.thirst / deaths : 0,
     oldAgeShare: deaths > 0 ? d.oldAge / deaths : 0,
+    callers: callerSum / samples,
+    givenPerThousand: (given * 1000) / Math.max(1, ticks - from),
+    givenToKin: given > 0 ? (world.social.givenToKin - socialBefore.givenToKin) / given : 0,
     species: { mean: speciesSum / samples, max: speciesMax },
     meanSize: sizeSum / samples,
     meanDiet: dietSum / samples,
@@ -143,6 +156,9 @@ it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
         `killShare=${percent(s.killShare)}`,
         `thirstShare=${percent(s.thirstShare)}`,
         `oldAgeShare=${percent(s.oldAgeShare)}`,
+        `callers=${percent(s.callers)}`,
+        `given=${s.givenPerThousand.toFixed(1)}/kt`,
+        `toKin=${percent(s.givenToKin)}`,
         `species=${s.species.mean.toFixed(1)}/${s.species.max}`,
         `size=${s.meanSize.toFixed(2)}`,
         `diet=${s.meanDiet.toFixed(2)}`,

@@ -159,6 +159,7 @@ function sendSnapshot(now: number): void {
       creatures[o + 6] = c.diet[i]!;
       creatures[o + 7] = Math.sign(c.sick[i]!);
       creatures[o + 8] = c.species[i]!;
+      creatures[o + 9] = c.calling[i]!;
     }
     if (c.sick[i]! > 0) infected++;
     dietTotal += c.diet[i]!;
@@ -219,6 +220,7 @@ function sendSnapshot(now: number): void {
     },
     births: world.births,
     reseeded: world.reseeded,
+    social: { ...world.social },
     deaths: { ...world.deaths },
     selected,
     rendered: rendering,

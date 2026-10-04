@@ -7,6 +7,7 @@ import { Lineage, type LineageNode } from './lineage';
 import { waterDerived } from './plants';
 import { Rng, type RngState } from './rng';
 import { Senses } from './senses';
+import { createSoundField } from './sound';
 import { SpatialHash } from './spatialHash';
 import type { SpeciesState } from './species';
 import { createHistory, HISTORY_SERIES } from './stats';
@@ -18,7 +19,7 @@ import type { World } from './world';
  */
 
 /** Bumped whenever the saved layout changes; older files are refused. */
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 
 /** Per-creature number arrays, saved up to the live count. */
 const CREATURE_FIELDS = [
@@ -34,6 +35,7 @@ const CREATURE_FIELDS = [
   'health',
   'hydration',
   'pain',
+  'calling',
   'sick',
   'size',
   'speed',
@@ -67,6 +69,7 @@ export interface SavedWorld {
   history: { interval: number; count: number } & Record<(typeof HISTORY_SERIES)[number], number[]>;
   births: number;
   reseeded: number;
+  social: World['social'];
   deaths: World['deaths'];
   infected: number;
   plagueDeaths: number;
@@ -113,6 +116,7 @@ export function saveWorld(world: World): SavedWorld {
     history: savedHistory,
     births: world.births,
     reseeded: world.reseeded,
+    social: { ...world.social },
     deaths: { ...world.deaths },
     infected: world.infected,
     plagueDeaths: world.plagueDeaths,
@@ -182,6 +186,7 @@ export function loadWorld(saved: SavedWorld): World {
   const rng = new Rng(config.seed);
   rng.setState(saved.rng);
   const hash = new SpatialHash(config.worldWidth, config.worldHeight, config.senseRange);
+  const sound = createSoundField(config);
 
   return {
     config,
@@ -192,7 +197,10 @@ export function loadWorld(saved: SavedWorld): World {
     creatures,
     innovations: Innovations.load(saved.innovations),
     hash,
-    senses: new Senses(config, plants, hash),
+    // What is heard is rebuilt each tick from who called, so only the flags are saved.
+    sound,
+    senses: new Senses(config, plants, hash, sound),
+    social: { ...saved.social },
     ledger: { ...saved.ledger },
     history,
     births: saved.births,

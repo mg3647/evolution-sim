@@ -61,6 +61,16 @@ export interface SimConfig {
   senseCost: number;
   /** Ticks per cycle of the clock input. */
   clockPeriod: number;
+  /** Side of one cell of the sound grid. A call carries about one and a half cells. */
+  soundCellSize: number;
+  /** Energy per tick that calling costs. */
+  callCost: number;
+  /** Whether creatures can hear calls. Off, the hearing inputs read zero. */
+  hearing: boolean;
+  /** Energy a creature of size 1 passes per tick to the creature in front while giving. */
+  giveRate: number;
+  /** A creature keeps this share of a full store for itself and gives only from the rest. */
+  giveReserve: number;
   /**
    * Whether creatures sense what others eat, whether they are approaching or
    * hurt, what is behind them, crowding and pain. Off, those inputs read
@@ -251,6 +261,11 @@ export const defaultConfig: SimConfig = {
   raySpread: 0.6,
   senseCost: 0.01,
   clockPeriod: 60,
+  soundCellSize: 100,
+  callCost: 0.01,
+  hearing: true,
+  giveRate: 0.5,
+  giveReserve: 0.25,
   socialSenses: true,
 
   brainNeuronCost: 0.002,

@@ -5,6 +5,7 @@ import { createCreatures, spawnCreature, type Creatures } from './creatures';
 import { cellIndexAt, createPlantField } from './plants';
 import { Rng } from './rng';
 import { Senses } from './senses';
+import { buildSound, createSoundField } from './sound';
 import { SpatialHash } from './spatialHash';
 
 // A dry world, so each test places only the water it means to.
@@ -31,13 +32,15 @@ function setup(overrides: Partial<SimConfig> = {}) {
       brain,
       age: 900,
     });
+  const sound = createSoundField(cfg);
   const sense = (c: Creatures, i: number, tick = 0) => {
     hash.build(c.x, c.y, c.count);
+    buildSound(sound, c);
     const inputs = new Float32Array(INPUT_COUNT);
-    new Senses(cfg, plants, hash).sense(c, i, tick, inputs);
+    new Senses(cfg, plants, hash, sound).sense(c, i, tick, inputs);
     return inputs;
   };
-  return { plants, creatures, add, sense };
+  return { plants, creatures, add, sense, sound };
 }
 
 describe('the list of senses', () => {
@@ -214,6 +217,36 @@ describe('Senses', () => {
     expect(sense(creatures, i)[Input.Pain]).toBe(1);
   });
 
+  it('hears a call on the side it comes from, and nothing when nobody calls', () => {
+    const { creatures, add, sense } = setup();
+    // Facing +x, so its right-hand side is +y. The sound cells here are 100 across.
+    const i = add(150, 150, 0);
+    const caller = add(150, 250, 0);
+    let inputs = sense(creatures, i);
+    expect(inputs[Input.HearLeft]).toBe(0);
+    expect(inputs[Input.HearRight]).toBe(0);
+
+    creatures.calling[caller] = 1;
+    inputs = sense(creatures, i);
+    expect(inputs[Input.HearRight]).toBe(1);
+    expect(inputs[Input.HearRight]).toBeGreaterThan(inputs[Input.HearLeft]!);
+
+    // Turned around, the same call is on its left.
+    creatures.heading[i] = Math.PI;
+    inputs = sense(creatures, i);
+    expect(inputs[Input.HearLeft]).toBe(1);
+    expect(inputs[Input.HearLeft]).toBeGreaterThan(inputs[Input.HearRight]!);
+  });
+
+  it('hears nothing when hearing is switched off', () => {
+    const { creatures, add, sense } = setup({ hearing: false });
+    const i = add(150, 150, 0);
+    creatures.calling[add(150, 250, 0)] = 1;
+    const inputs = sense(creatures, i);
+    expect(inputs[Input.HearLeft]).toBe(0);
+    expect(inputs[Input.HearRight]).toBe(0);
+  });
+
   it('reads none of the social senses when they are switched off', () => {
     const { creatures, add, sense } = setup({ socialSenses: false });
     const i = add(200, 200, 0);
@@ -247,7 +280,7 @@ describe('Senses', () => {
     add(190, 200, 0); // closer, but behind
     const hash = new SpatialHash(config.worldWidth, config.worldHeight, config.senseRange);
     hash.build(creatures.x, creatures.y, creatures.count);
-    const senses = new Senses(config, plants, hash);
+    const senses = new Senses(config, plants, hash, createSoundField(config));
     senses.sense(creatures, i, 0, new Float32Array(INPUT_COUNT));
     expect(senses.targetIndex).toBe(near);
     expect(senses.targetGap).toBeCloseTo(15 - 2 * config.creatureRadius, 5);

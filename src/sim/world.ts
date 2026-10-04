@@ -63,6 +63,7 @@ import {
 } from './plants';
 import { Rng } from './rng';
 import { Senses } from './senses';
+import { buildSound, createSoundField, type SoundField } from './sound';
 import { SpatialHash } from './spatialHash';
 import { classifySpecies, createSpeciesState, type SpeciesState } from './species';
 import { createHistory, meanOf, recordSample, type History } from './stats';
@@ -78,7 +79,15 @@ export interface World {
   innovations: Innovations;
   /** Creature positions as of the start of the current tick. */
   hash: SpatialHash;
+  /** Calls made last tick, as creatures hear them this tick. */
+  sound: SoundField;
   senses: Senses;
+  /**
+   * How much creatures signal and share. `calling` is how many called on the
+   * last tick; the rest are totals since the world was created: `calls` in
+   * creature-ticks, and energy given in all and to relatives (close in colour).
+   */
+  social: { calling: number; calls: number; given: number; givenToKin: number };
   ledger: EnergyLedger;
   history: History;
   /** Cumulative counts since the world was created. */
@@ -96,6 +105,9 @@ export interface World {
   /** The climate used for the most recent tick. */
   climate: Climate;
 }
+
+/** Two creatures whose hues differ by less than this count as relatives when tallying gifts. */
+const KIN_HUE = 0.1;
 
 /** Health value that marks a creature struck down by an event this tick. */
 const STRUCK = -2;
@@ -130,6 +142,7 @@ export function createWorld(config: SimConfig): World {
   const rng = new Rng(config.seed);
   const plants = createPlantField(config, rng);
   const hash = new SpatialHash(config.worldWidth, config.worldHeight, config.senseRange);
+  const sound = createSoundField(config);
   const world: World = {
     config,
     tick: 0,
@@ -139,11 +152,13 @@ export function createWorld(config: SimConfig): World {
     creatures: createCreatures(Math.max(16, config.initialCreatures)),
     innovations: new Innovations(),
     hash,
-    senses: new Senses(config, plants, hash),
+    sound,
+    senses: new Senses(config, plants, hash, sound),
     ledger: createLedger(),
     history: createHistory(config.statsInterval, config.statsCapacity),
     births: 0,
     reseeded: 0,
+    social: { calling: 0, calls: 0, given: 0, givenToKin: 0 },
     deaths: { starved: 0, oldAge: 0, killed: 0, disaster: 0, thirst: 0 },
     environment: createEnvironment(config, rng, plants),
     lineage: new Lineage(),
@@ -181,6 +196,8 @@ export function step(world: World): void {
   decayMeat(plants, config.meatDecayRate, ledger);
   spreadScent(env, plants, config);
   world.hash.build(creatures.x, creatures.y, creatures.count);
+  world.social.calling = buildSound(world.sound, creatures);
+  world.social.calls += world.social.calling;
 
   // Children born this tick are appended past `alive` and first act next tick.
   const alive = creatures.count;
@@ -199,6 +216,9 @@ export function step(world: World): void {
     const wantsChild = brain.activation[INPUT_COUNT + Output.Reproduce]! >= 0;
     const attacking = brain.activation[INPUT_COUNT + Output.Attack]! > 0;
     const emitting = brain.activation[INPUT_COUNT + Output.Emit]! > 0;
+    const calling = brain.activation[INPUT_COUNT + Output.Call]! > 0;
+    const giving = brain.activation[INPUT_COUNT + Output.Give]! > 0;
+    creatures.calling[i] = calling ? 1 : 0;
     const sick = updateInfection(world, i);
     const diet = creatures.diet[i]!;
 
@@ -272,12 +292,31 @@ export function step(world: World): void {
       (tickCostFor(size, speed, thrust, config) +
         (attacking ? config.attackCost * size * size : 0) +
         (emitting ? config.scentCost : 0) +
+        (calling ? config.callCost : 0) +
         senseCostFor(creatures.sensorRange[i]!, config) +
         brainCost(brain, config));
     const paid = Math.min(cost, energy);
     energy -= paid;
     ledger.heatOut += paid;
     const age = ++creatures.age[i]!;
+
+    // Give: pass energy to the creature in front, as much as it has room for.
+    // A creature gives only from what it holds above a reserve, so giving
+    // alone never starves it.
+    if (giving && world.senses.targetIndex >= 0 && world.senses.targetGap <= config.attackReach) {
+      const other = world.senses.targetIndex;
+      if (creatures.health[other]! > 0) {
+        const room = maxEnergyFor(creatures.size[other]!, config) - creatures.energy[other]!;
+        const spare = energy - config.giveReserve * maxEnergy;
+        const gift = Math.max(0, Math.min(config.giveRate * size * size, spare, room));
+        energy -= gift;
+        creatures.energy[other]! += gift;
+        world.social.given += gift;
+        if (Math.abs(wrappedDelta(creatures.hue[i]!, creatures.hue[other]!, 1)) < KIN_HUE) {
+          world.social.givenToKin += gift;
+        }
+      }
+    }
 
     if (
       wantsChild &&
@@ -528,7 +567,7 @@ function hashBytes(h: number, bytes: Uint8Array): number {
 }
 
 function bytesOf(
-  array: Uint16Array | Uint32Array | Int32Array | Float32Array | Float64Array,
+  array: Uint8Array | Uint16Array | Uint32Array | Int32Array | Float32Array | Float64Array,
   count = array.length,
 ): Uint8Array {
   return new Uint8Array(array.buffer, array.byteOffset, count * array.BYTES_PER_ELEMENT);
@@ -563,6 +602,7 @@ export function hashWorld(world: World): number {
     c.hydration,
     c.pain,
     c.sick,
+    c.calling,
     c.size,
     c.speed,
     c.sensorRange,

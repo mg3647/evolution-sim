@@ -70,6 +70,8 @@ const TOOL_COLORS: Record<ToolKind, number> = {
 };
 /** Ring drawn around creatures infected with the plague. */
 const SICK_COLOR = 0xb6ff3c;
+/** Ring drawn around creatures that are calling. */
+const CALL_COLOR = 0x9fd8ff;
 /** Smallest radius a creature is drawn at, in screen pixels. */
 const MIN_SCREEN_RADIUS = 2.5;
 
@@ -346,6 +348,17 @@ export class WorldRenderer {
       anySick = true;
     }
     if (anySick) ring.stroke({ color: SICK_COLOR, pixelLine: true });
+
+    // A wider, fainter ring around each creature that is calling.
+    let anyCalling = false;
+    for (let i = 0; i < population; i++) {
+      const o = i * CREATURE_STRIDE;
+      if (creatures[o + 9]! === 0) continue;
+      const radius = Math.max(creatures[o + 4]!, minRadius) * 2.2;
+      ring.circle(creatures[o]!, creatures[o + 1]!, radius);
+      anyCalling = true;
+    }
+    if (anyCalling) ring.stroke({ color: CALL_COLOR, alpha: 0.55, pixelLine: true });
     if (snapshot.selected) {
       const o = snapshot.selected.index * CREATURE_STRIDE;
       const radius = Math.max(creatures[o + 4]!, minRadius) + 4 / this.camera.scale.x;

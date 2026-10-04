@@ -373,6 +373,22 @@
             <dt>Reseeded</dt>
             <dd>{count(snapshot?.reseeded)}</dd>
           </div>
+          <div title="Creatures making a call right now; each is drawn with a pale blue ring">
+            <dt>Calling now</dt>
+            <dd>{count(snapshot?.social.calling)}</dd>
+          </div>
+          <div title="Energy creatures have handed to one another since the world began">
+            <dt>Energy given</dt>
+            <dd>{count(snapshot ? Math.round(snapshot.social.given) : undefined)}</dd>
+          </div>
+          <div title="Share of the energy given that went to a creature of nearly the same colour, so probably a relative">
+            <dt>Given to relatives</dt>
+            <dd>
+              {snapshot && snapshot.social.given > 0
+                ? `${Math.round((snapshot.social.givenToKin / snapshot.social.given) * 100)}%`
+                : '-'}
+            </dd>
+          </div>
         </dl>
 
         <EnvironmentPanel environment={snapshot?.environment ?? null} />

@@ -4,6 +4,7 @@ import type { Creatures } from './creatures';
 import { seasonAt } from './environment';
 import { maxEnergyFor } from './genome';
 import { cellIndexAt, type PlantField } from './plants';
+import { soundCellAt, type SoundField } from './sound';
 import type { SpatialHash } from './spatialHash';
 
 /** Points along each ray where the ground is sampled, as fractions of its length. */
@@ -58,6 +59,7 @@ export class Senses {
     private readonly config: SimConfig,
     private readonly field: PlantField,
     private readonly hash: SpatialHash,
+    private readonly sound: SoundField,
   ) {
     this.cosSpread = Math.cos(config.raySpread);
     this.sinSpread = Math.sin(config.raySpread);
@@ -148,6 +150,25 @@ export class Senses {
     inputs[Input.InWater] = field.water[cell]!;
     inputs[Input.ScentUnderfoot] = Math.min(1, field.scent[cell]!);
     inputs[Input.ScentSide] = Math.min(1, scentRight) - Math.min(1, scentLeft);
+
+    // Hearing: how loud calls are one sound cell to the left and to the right.
+    if (config.hearing) {
+      const { sound } = this;
+      const reach = config.soundCellSize;
+      let leftX = x + sinHeading * reach;
+      let leftY = y - cosHeading * reach;
+      let rightX = x - sinHeading * reach;
+      let rightY = y + cosHeading * reach;
+      leftX -= Math.floor(leftX / worldWidth) * worldWidth;
+      leftY -= Math.floor(leftY / worldHeight) * worldHeight;
+      rightX -= Math.floor(rightX / worldWidth) * worldWidth;
+      rightY -= Math.floor(rightY / worldHeight) * worldHeight;
+      inputs[Input.HearLeft] = Math.min(1, sound.loudness[soundCellAt(sound, leftX, leftY)]!);
+      inputs[Input.HearRight] = Math.min(1, sound.loudness[soundCellAt(sound, rightX, rightY)]!);
+    } else {
+      inputs[Input.HearLeft] = 0;
+      inputs[Input.HearRight] = 0;
+    }
     inputs[Input.Energy] = creatures.energy[i]! / maxEnergyFor(creatures.size[i]!, config);
     inputs[Input.Health] = creatures.health[i]!;
     inputs[Input.Thirst] = 1 - creatures.hydration[i]!;

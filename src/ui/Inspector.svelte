@@ -73,7 +73,8 @@
       Turn: left of centre is left, right is right. Thrust: far left is standing still, far right is full
       speed. Reproduce: right of centre means it splits once it has enough energy. Attack: right of centre
       means it bites the nearest creature in reach. Emit scent: right of centre means it leaves a scent on
-      the ground that others can smell.
+      the ground that others can smell. Call: right of centre means it makes a sound others can hear from
+      farther than they can see. Give: right of centre means it hands energy to the creature in front.
     </p>
     <ul>
       {#each OUTPUT_LABELS as label, k (label)}
@@ -100,7 +101,8 @@
     <p class="note">
       &ldquo;Creature behind&rdquo; is how close the nearest creature out of sight is. &ldquo;Crowding&rdquo;
       counts creatures all around. &ldquo;Pain&rdquo; is how hard it was just bitten. &ldquo;Scent to the
-      right&rdquo; is right of centre when scent is stronger on that side.
+      right&rdquo; is right of centre when scent is stronger on that side. &ldquo;Calls on the left&rdquo;
+      and &ldquo;on the right&rdquo; are how loud other creatures' calls are on each side.
     </p>
     <ul>
       {#each INPUT_LABELS as label, k (label)}
