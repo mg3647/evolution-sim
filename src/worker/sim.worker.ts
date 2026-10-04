@@ -66,6 +66,7 @@ function inspect(world: World, i: number): Inspection {
     sensorRange: c.sensorRange[i]!,
     diet: c.diet[i]!,
     health: c.health[i]!,
+    sick: c.sick[i]!,
     hue: c.hue[i]!,
     mutationRate: c.mutationRate[i]!,
     hiddenNeurons: brain.hiddenIds.length,
@@ -86,6 +87,7 @@ function sendSnapshot(now: number): void {
   let senseTotal = 0;
   let dietTotal = 0;
   let meatEaters = 0;
+  let infected = 0;
   let maxGeneration = 0;
   let selected: Inspection | null = null;
   for (let i = 0; i < c.count; i++) {
@@ -98,6 +100,8 @@ function sendSnapshot(now: number): void {
     creatures[o + 4] = config.creatureRadius * size;
     creatures[o + 5] = c.hue[i]!;
     creatures[o + 6] = c.diet[i]!;
+    creatures[o + 7] = Math.sign(c.sick[i]!);
+    if (c.sick[i]! > 0) infected++;
     dietTotal += c.diet[i]!;
     if (c.diet[i]! > 0.5) meatEaters++;
     sizeTotal += size;
@@ -149,6 +153,7 @@ function sendSnapshot(now: number): void {
         remaining: event.endTick - world.tick,
       })),
       randomEvents: world.environment.randomEvents,
+      infected,
       log: world.environment.log.slice(),
     },
     births: world.births,

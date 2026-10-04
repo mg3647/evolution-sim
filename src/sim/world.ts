@@ -36,6 +36,7 @@ import {
   driftFertility,
   expireEvents,
   maybeRandomEvent,
+  notePlagueOver,
   spreadScent,
   triggerEvent,
   type Climate,
@@ -79,6 +80,9 @@ export interface World {
   /** Killed counts bites; disaster counts plagues and meteors. */
   deaths: { starved: number; oldAge: number; killed: number; disaster: number };
   environment: Environment;
+  /** Creatures infected right now, and deaths in the current outbreak. */
+  infected: number;
+  plagueDeaths: number;
   /** The climate used for the most recent tick. */
   climate: Climate;
 }
@@ -124,6 +128,8 @@ export function createWorld(config: SimConfig): World {
     reseeded: 0,
     deaths: { starved: 0, oldAge: 0, killed: 0, disaster: 0 },
     environment: createEnvironment(config, rng, plants),
+    infected: 0,
+    plagueDeaths: 0,
     climate: { season: 1, growth: 1, cost: 1 },
   };
 
@@ -167,10 +173,11 @@ export function step(world: World): void {
     world.senses.sense(creatures, i, world.tick, brain.activation);
     think(brain);
     const turn = brain.activation[INPUT_COUNT + Output.Turn]! * config.maxTurn;
-    const thrust = (brain.activation[INPUT_COUNT + Output.Thrust]! + 1) / 2;
+    let thrust = (brain.activation[INPUT_COUNT + Output.Thrust]! + 1) / 2;
     const wantsChild = brain.activation[INPUT_COUNT + Output.Reproduce]! >= 0;
     const attacking = brain.activation[INPUT_COUNT + Output.Attack]! > 0;
     const emitting = brain.activation[INPUT_COUNT + Output.Emit]! > 0;
+    const sick = updateInfection(world, i);
     const diet = creatures.diet[i]!;
 
     // Bite the closest creature in view if it is within reach. Teeth made for
@@ -183,6 +190,9 @@ export function step(world: World): void {
       creatures.health[victim]! -= config.attackDamage * teeth * ratio;
     }
 
+    // Illness saps strength.
+    if (sick) thrust *= config.plagueSlow;
+
     // Act: turn, then move forward.
     const speed = creatures.speed[i]!;
     const heading = creatures.heading[i]! + turn;
@@ -191,12 +201,16 @@ export function step(world: World): void {
     // Rounded to stored precision first, so the cell checked is the cell it lands in.
     const toX = Math.fround(wrap(creatures.x[i]! + Math.cos(heading) * distance, config.worldWidth));
     const toY = Math.fround(wrap(creatures.y[i]! + Math.sin(heading) * distance, config.worldHeight));
-    // A wall stops a creature entering its cell; one already inside may walk out.
-    if (
-      plants.walls[cellIndexAt(plants, toX, toY)] === 0 ||
-      plants.walls[cellIndexAt(plants, creatures.x[i]!, creatures.y[i]!)] === 1
-    ) {
+    const fromX = creatures.x[i]!;
+    const fromY = creatures.y[i]!;
+    // A wall stops a creature entering its cell; one already inside may walk
+    // out. A blocked creature slides along the wall instead of stopping dead.
+    if (plants.walls[cellIndexAt(plants, toX, toY)] === 0 || plants.walls[cellIndexAt(plants, fromX, fromY)] === 1) {
       creatures.x[i] = toX;
+      creatures.y[i] = toY;
+    } else if (plants.walls[cellIndexAt(plants, toX, fromY)] === 0) {
+      creatures.x[i] = toX;
+    } else if (plants.walls[cellIndexAt(plants, fromX, toY)] === 0) {
       creatures.y[i] = toY;
     }
 
@@ -221,6 +235,7 @@ export function step(world: World): void {
     // spent leaves as heat. Cold weather makes everything cost more.
     const cost =
       climate.cost *
+      (sick ? config.plagueCost : 1) *
       (tickCostFor(size, speed, thrust, config) +
         (attacking ? config.attackCost * size * size : 0) +
         (emitting ? config.scentCost : 0) +
@@ -250,7 +265,10 @@ export function step(world: World): void {
     const killed = creatures.health[i]! <= 0;
     const starved = creatures.energy[i]! <= 0;
     if (!killed && !starved && creatures.age[i]! < config.maxAge) continue;
-    if (struck) world.deaths.disaster++;
+    if (struck) {
+      world.deaths.disaster++;
+      if (creatures.sick[i]! > 0) world.plagueDeaths++;
+    }
     else if (killed) world.deaths.killed++;
     else if (starved) world.deaths.starved++;
     else world.deaths.oldAge++;
@@ -260,6 +278,16 @@ export function step(world: World): void {
     removeCreature(creatures, i);
   }
 
+  if (env.plagueActive) {
+    let infected = 0;
+    for (let i = 0; i < creatures.count; i++) if (creatures.sick[i]! > 0) infected++;
+    world.infected = infected;
+    if (infected === 0) {
+      notePlagueOver(env, world.tick, world.plagueDeaths);
+      world.plagueDeaths = 0;
+    }
+  }
+
   // Keep a dying world going with fresh parentless creatures.
   while (creatures.count < config.minPopulation) {
     ledger.seedIn += spawnFounder(world, 0);
@@ -267,6 +295,31 @@ export function step(world: World): void {
   }
 
   if (world.tick % world.history.interval === 0) sampleHistory(world);
+}
+
+/**
+ * Advance creature i's infection by one tick: spread it to healthy neighbors,
+ * maybe die of it, and recover into immunity when it has run its course.
+ * Returns whether the creature is sick this tick.
+ */
+function updateInfection(world: World, i: number): boolean {
+  const { creatures, config, rng } = world;
+  const state = creatures.sick[i]!;
+  if (state === 0) return false;
+  if (state < 0) {
+    creatures.sick[i] = state + 1;
+    return false;
+  }
+
+  world.hash.query(creatures.x[i]!, creatures.y[i]!, config.plagueRadius, (j) => {
+    if (creatures.sick[j] === 0 && rng.chance(config.plagueTransmission)) {
+      creatures.sick[j] = config.plagueDuration;
+    }
+  });
+  if (rng.chance(config.plagueDeathChance)) creatures.health[i] = STRUCK;
+  // The last tick of illness turns into immunity.
+  creatures.sick[i] = state > 1 ? state - 1 : -config.plagueImmunity;
+  return true;
 }
 
 /** The view of the world that events act through. */
@@ -280,7 +333,11 @@ function eventTarget(world: World): EventTarget {
     count: () => creatures.count,
     x: (i) => creatures.x[i]!,
     y: (i) => creatures.y[i]!,
-    hue: (i) => creatures.hue[i]!,
+    infect: (i) => {
+      if (creatures.sick[i] !== 0) return false;
+      creatures.sick[i] = world.config.plagueDuration;
+      return true;
+    },
     strike: (i) => {
       creatures.health[i] = STRUCK;
     },
@@ -389,7 +446,7 @@ function hashBytes(h: number, bytes: Uint8Array): number {
 }
 
 function bytesOf(
-  array: Uint16Array | Uint32Array | Float32Array | Float64Array,
+  array: Uint16Array | Uint32Array | Int32Array | Float32Array | Float64Array,
   count = array.length,
 ): Uint8Array {
   return new Uint8Array(array.buffer, array.byteOffset, count * array.BYTES_PER_ELEMENT);
@@ -420,6 +477,7 @@ export function hashWorld(world: World): number {
     c.energy,
     c.age,
     c.health,
+    c.sick,
     c.size,
     c.speed,
     c.sensorRange,

@@ -32,6 +32,8 @@ const PICK_RADIUS = 14;
 /** A press that moves less than this many pixels is a click, not a drag. */
 const CLICK_SLOP = 4;
 const SELECTION_COLOR = 0xffffff;
+/** Ring drawn around creatures infected with the plague. */
+const SICK_COLOR = 0xb6ff3c;
 /** Smallest radius a creature is drawn at, in screen pixels. */
 const MIN_SCREEN_RADIUS = 2.5;
 
@@ -251,6 +253,15 @@ export class WorldRenderer {
 
     const ring = this.selectionRing;
     ring.clear();
+    let anySick = false;
+    for (let i = 0; i < population; i++) {
+      const o = i * CREATURE_STRIDE;
+      if (creatures[o + 7]! <= 0) continue;
+      const radius = Math.max(creatures[o + 4]!, minRadius) + 2 / this.camera.scale.x;
+      ring.circle(creatures[o]!, creatures[o + 1]!, radius);
+      anySick = true;
+    }
+    if (anySick) ring.stroke({ color: SICK_COLOR, pixelLine: true });
     if (snapshot.selected) {
       const o = snapshot.selected.index * CREATURE_STRIDE;
       const radius = Math.max(creatures[o + 4]!, minRadius) + 4 / this.camera.scale.x;

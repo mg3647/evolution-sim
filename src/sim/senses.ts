@@ -15,9 +15,11 @@ const TWO_PI = Math.PI * 2;
 const RAY_PLANTS = 0;
 const RAY_MEAT = 1;
 const RAY_SCENT = 2;
-const RAY_NEARNESS = 3;
-const RAY_KIN = 4;
-const RAY_BIGGER = 5;
+const RAY_WALL = 3;
+const RAY_NEARNESS = 4;
+const RAY_KIN = 5;
+const RAY_BIGGER = 6;
+const RAY_SICK = 7;
 
 /**
  * Fills a brain's inputs with what a creature perceives. Vision is three
@@ -64,6 +66,7 @@ export class Senses {
       let plants = 0;
       let meat = 0;
       let scent = 0;
+      let wall = 0;
       for (const t of GROUND_SAMPLES) {
         const px = wrap(x + dx * t, config.worldWidth);
         const py = wrap(y + dy * t, config.worldHeight);
@@ -71,11 +74,15 @@ export class Senses {
         plants += field.energy[cell]!;
         meat += field.meat[cell]!;
         scent += field.scent[cell]!;
+        // A nearer wall reads stronger.
+        if (field.walls[cell]) wall = Math.max(wall, 1.5 - t);
       }
       const o = Input.Rays + ray * INPUTS_PER_RAY;
       inputs[o + RAY_PLANTS] = (plants / GROUND_SAMPLES.length) * plantScale;
       inputs[o + RAY_MEAT] = Math.min(1, (meat / GROUND_SAMPLES.length) * meatScale);
       inputs[o + RAY_SCENT] = Math.min(1, scent / GROUND_SAMPLES.length);
+      inputs[o + RAY_WALL] = Math.min(1, wall);
+      inputs[o + RAY_SICK] = 0;
       inputs[o + RAY_NEARNESS] = 0;
       inputs[o + RAY_KIN] = 0;
       inputs[o + RAY_BIGGER] = 0;
@@ -102,6 +109,7 @@ export class Senses {
     inputs[Input.Age] = creatures.age[i]! / config.maxAge;
     inputs[Input.Clock] = Math.sin((TWO_PI * tick) / config.clockPeriod);
     inputs[Input.Season] = config.seasonStrength > 0 ? (seasonAt(tick, config) - 1) / config.seasonStrength : 0;
+    inputs[Input.Sick] = creatures.sick[i]! > 0 ? 1 : 0;
     inputs[Input.Bias] = 1;
   }
 
@@ -134,5 +142,6 @@ export class Senses {
     this.inputs[o + RAY_NEARNESS] = 1 - distance / this.range;
     this.inputs[o + RAY_KIN] = Math.cos(TWO_PI * (creatures.hue[j]! - creatures.hue[this.self]!));
     this.inputs[o + RAY_BIGGER] = (theirSize - mySize) / (theirSize + mySize);
+    this.inputs[o + RAY_SICK] = creatures.sick[j]! > 0 ? 1 : 0;
   };
 }

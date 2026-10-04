@@ -8,8 +8,11 @@ import type { Rng } from './rng';
  */
 
 export const RAY_COUNT = 3;
-/** Per vision ray: plant cover, meat, scent, creature nearness, colour match, relative size. */
-export const INPUTS_PER_RAY = 6;
+/**
+ * Per vision ray: plant cover, meat, scent, wall, then for the nearest
+ * creature its nearness, colour match, relative size and whether it is sick.
+ */
+export const INPUTS_PER_RAY = 8;
 
 export const Input = {
   /** First of RAY_COUNT * INPUTS_PER_RAY ray inputs, ordered left, ahead, right. */
@@ -23,9 +26,11 @@ export const Input = {
   Clock: RAY_COUNT * INPUTS_PER_RAY + 6,
   /** Sunlight relative to average: above zero in summer, below in winter. */
   Season: RAY_COUNT * INPUTS_PER_RAY + 7,
-  Bias: RAY_COUNT * INPUTS_PER_RAY + 8,
+  /** 1 while the creature itself is infected. */
+  Sick: RAY_COUNT * INPUTS_PER_RAY + 8,
+  Bias: RAY_COUNT * INPUTS_PER_RAY + 9,
 } as const;
-export const INPUT_COUNT = RAY_COUNT * INPUTS_PER_RAY + 9;
+export const INPUT_COUNT = RAY_COUNT * INPUTS_PER_RAY + 10;
 
 export const Output = { Turn: 0, Thrust: 1, Reproduce: 2, Attack: 3, Emit: 4 } as const;
 export const OUTPUT_COUNT = 5;
@@ -39,9 +44,11 @@ export const INPUT_LABELS: string[] = [
     `Plants ${ray}`,
     `Meat ${ray}`,
     `Scent ${ray}`,
+    `Wall ${ray}`,
     `Creature ${ray}`,
     `Kin ${ray}`,
     `Bigger ${ray}`,
+    `Sick ${ray}`,
   ]),
   'Plants underfoot',
   'Meat underfoot',
@@ -51,6 +58,7 @@ export const INPUT_LABELS: string[] = [
   'Age',
   'Clock',
   'Season',
+  'Sick',
   'Bias',
 ];
 export const OUTPUT_LABELS: string[] = ['Turn', 'Thrust', 'Reproduce', 'Attack', 'Emit scent'];

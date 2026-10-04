@@ -23,6 +23,8 @@ export interface Creatures {
   age: Uint32Array;
   /** 1 is unhurt; the creature dies at 0. */
   health: Float32Array;
+  /** Above zero: ticks of infection left. Below zero: ticks of immunity left. Zero: can catch it. */
+  sick: Int32Array;
   // Genes; see Genes in genome.ts.
   size: Float32Array;
   speed: Float32Array;
@@ -45,6 +47,7 @@ const FIELDS = [
   'energy',
   'age',
   'health',
+  'sick',
   'size',
   'speed',
   'sensorRange',
@@ -79,6 +82,7 @@ export function createCreatures(capacity: number): Creatures {
     energy: new Float64Array(capacity),
     age: new Uint32Array(capacity),
     health: new Float32Array(capacity),
+    sick: new Int32Array(capacity),
     size: new Float32Array(capacity),
     speed: new Float32Array(capacity),
     sensorRange: new Float32Array(capacity),
@@ -91,7 +95,7 @@ export function createCreatures(capacity: number): Creatures {
 
 function grow(c: Creatures): void {
   const capacity = c.capacity * 2;
-  const store = c as unknown as Record<string, Uint32Array | Float32Array | Float64Array>;
+  const store = c as unknown as Record<string, Uint32Array | Int32Array | Float32Array | Float64Array>;
   for (const field of FIELDS) {
     const old = store[field]!;
     const next = new (old.constructor as new (n: number) => typeof old)(capacity);
@@ -114,6 +118,7 @@ export function spawnCreature(c: Creatures, options: SpawnOptions): number {
   c.energy[i] = options.energy;
   c.age[i] = options.age ?? 0;
   c.health[i] = 1;
+  c.sick[i] = 0;
   c.size[i] = options.genes.size;
   c.speed[i] = options.genes.speed;
   c.sensorRange[i] = options.genes.sensorRange;

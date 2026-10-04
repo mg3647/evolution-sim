@@ -70,24 +70,89 @@ describe('timed events', () => {
 });
 
 describe('plague', () => {
-  it('strikes one colour family and leaves the rest', () => {
-    const world = createWorld({ ...smallConfig, plagueLethality: 1, attackDamage: 0 });
-    const { creatures } = world;
-    const huesBefore = Array.from(creatures.hue.subarray(0, creatures.count));
-    triggerWorldEvent(world, 'plague');
-    step(world);
+  /** A crowded world where nothing else kills, so the disease can be watched alone. */
+  const crowded: SimConfig = {
+    ...smallConfig,
+    worldWidth: 300,
+    worldHeight: 300,
+    initialCreatures: 120,
+    attackDamage: 0,
+    reproduceThreshold: 2,
+    upkeepCost: 0,
+    moveCost: 0,
+    senseCost: 0,
+    maxAge: 100000,
+  };
+  const infected = (world: ReturnType<typeof createWorld>) =>
+    Array.from(world.creatures.sick.subarray(0, world.creatures.count)).filter((s) => s > 0).length;
 
-    const dead = world.deaths.disaster;
-    expect(dead).toBeGreaterThan(0);
-    expect(dead).toBeLessThan(huesBefore.length);
-    // Survivors' hues leave a gap as wide as the plague around where the dead were.
-    const survivors = new Set(Array.from(creatures.hue.subarray(0, creatures.count)));
-    const struckHues = huesBefore.filter((hue) => !survivors.has(hue));
-    const centre = struckHues[0]!;
-    for (const hue of struckHues) {
-      expect(Math.abs(wrappedDelta(centre, hue, 1))).toBeLessThanOrEqual(2 * smallConfig.plagueHueWidth + 1e-6);
-    }
+  it('starts by infecting a few creatures and logs the outbreak', () => {
+    const world = createWorld(crowded);
+    triggerWorldEvent(world, 'plague');
+    const seeds = infected(world);
+    expect(seeds).toBeGreaterThanOrEqual(3);
+    expect(seeds).toBeLessThanOrEqual(Math.round(120 * crowded.plagueSeedShare));
+    expect(world.environment.log[0]!.text).toBe(`Plague broke out: ${seeds} infected`);
+  });
+
+  it('spreads by contact through a crowd', () => {
+    const world = createWorld({ ...crowded, plagueDeathChance: 0 });
+    triggerWorldEvent(world, 'plague');
+    const seeds = infected(world);
+    for (let t = 0; t < 150; t++) step(world);
+    expect(infected(world)).toBeGreaterThan(seeds * 3);
+  });
+
+  it('does not spread when it cannot be passed on', () => {
+    const world = createWorld({ ...crowded, plagueTransmission: 0, plagueDeathChance: 0 });
+    triggerWorldEvent(world, 'plague');
+    const seeds = infected(world);
+    for (let t = 0; t < 150; t++) step(world);
+    expect(infected(world)).toBe(seeds);
+  });
+
+  it('kills some of the sick, counted as disaster deaths, and conserves energy', () => {
+    const world = createWorld({ ...crowded, plagueDeathChance: 0.01 });
+    triggerWorldEvent(world, 'plague');
+    for (let t = 0; t < 600; t++) step(world);
+    expect(world.deaths.disaster).toBeGreaterThan(0);
+    expect(world.deaths.killed).toBe(0);
+    expect(world.creatures.count).toBe(120 - world.deaths.disaster - world.deaths.starved);
     expect(totalEnergy(world)).toBeCloseTo(expectedEnergy(world.ledger), 6);
+  });
+
+  it('ends in recovery and immunity, and the immune cannot be reinfected', () => {
+    const world = createWorld({ ...crowded, plagueDeathChance: 0, plagueDuration: 50 });
+    triggerWorldEvent(world, 'plague');
+    for (let t = 0; t < 600; t++) step(world);
+    expect(infected(world)).toBe(0);
+    const { creatures } = world;
+    const immune = Array.from(creatures.sick.subarray(0, creatures.count)).filter((s) => s < 0).length;
+    expect(immune).toBeGreaterThan(60);
+
+    triggerWorldEvent(world, 'plague');
+    for (let i = 0; i < creatures.count; i++) {
+      if (creatures.sick[i]! > 0) expect(creatures.sick[i]).toBe(world.config.plagueDuration);
+    }
+    expect(infected(world)).toBeLessThanOrEqual(creatures.count - immune);
+  });
+
+  it('slows the sick', () => {
+    const moved = (sick: boolean) => {
+      const world = createWorld({ ...crowded, initialCreatures: 40, plagueTransmission: 0, plagueDeathChance: 0 });
+      const { creatures } = world;
+      if (sick) creatures.sick.fill(1000);
+      let distance = 0;
+      for (let t = 0; t < 20; t++) {
+        const before = Array.from(creatures.x.subarray(0, creatures.count));
+        step(world);
+        for (let i = 0; i < creatures.count; i++) {
+          distance += Math.abs(wrappedDelta(before[i]!, creatures.x[i]!, world.config.worldWidth));
+        }
+      }
+      return distance;
+    };
+    expect(moved(true)).toBeLessThan(moved(false) * 0.7);
   });
 });
 
@@ -115,6 +180,23 @@ describe('walls', () => {
     expect(cells).toBeLessThan(world.plants.walls.length / 4);
     clearWorldWalls(world);
     expect(world.plants.walls.every((cell) => cell === 0)).toBe(true);
+  });
+
+  it('let a blocked creature slide along the wall instead of stopping', () => {
+    const world = createWorld({ ...smallConfig, initialCreatures: 1, reproduceThreshold: 2, founderLinks: 0 });
+    const { creatures, plants } = world;
+    // A wall across the whole world along the row below the creature.
+    creatures.x[0] = 210;
+    creatures.y[0] = 210;
+    creatures.heading[0] = Math.PI / 4;
+    const wallRow = Math.floor(210 / plants.cellHeight) + 1;
+    for (let cx = 0; cx < plants.cols; cx++) plants.walls[wallRow * plants.cols + cx] = 1;
+    // With no links the brain holds thrust at half and never turns: it heads down and right.
+    for (let t = 0; t < 120; t++) step(world);
+    expect(creatures.count).toBe(1);
+    expect(creatures.y[0]).toBeLessThan(wallRow * plants.cellHeight);
+    expect(creatures.y[0]).toBeGreaterThan(wallRow * plants.cellHeight - 3);
+    expect(wrappedDelta(210, creatures.x[0]!, world.config.worldWidth)).toBeGreaterThan(40);
   });
 
   it('stop creatures from entering walled cells', () => {

@@ -14,9 +14,11 @@ const RIGHT = 2;
 /** Offsets of the per-ray inputs. */
 const MEAT = 1;
 const SCENT = 2;
-const NEAR = 3;
-const KIN = 4;
-const BIGGER = 5;
+const WALL = 3;
+const NEAR = 4;
+const KIN = 5;
+const BIGGER = 6;
+const SICK = 7;
 const ray = (index: number) => Input.Rays + index * INPUTS_PER_RAY;
 
 function setup() {
@@ -90,6 +92,37 @@ describe('Senses', () => {
     expect(summer[ray(LEFT) + SCENT]).toBe(0);
     expect(summer[Input.Season]).toBeCloseTo(1, 5);
     expect(sense(creatures, i, (config.seasonLength * 3) / 4)[Input.Season]).toBeCloseTo(-1, 5);
+  });
+
+  it('sees walls on the ray that crosses them, stronger when nearer', () => {
+    const { plants, creatures, add, sense } = setup();
+    const i = add(210, 210, 0);
+    plants.walls[cellIndexAt(plants, 210 + config.senseRange, 210)] = 1;
+    expect(sense(creatures, i)[ray(AHEAD) + WALL]).toBeCloseTo(0.5, 6);
+    plants.walls[cellIndexAt(plants, 210 + config.senseRange / 2, 210)] = 1;
+    const inputs = sense(creatures, i);
+    expect(inputs[ray(AHEAD) + WALL]).toBe(1);
+    expect(inputs[ray(LEFT) + WALL]).toBe(0);
+  });
+
+  it('knows when it is sick and sees when another creature is', () => {
+    const { creatures, add, sense } = setup();
+    const i = add(200, 200, 0);
+    const other = add(230, 200, 0);
+    let inputs = sense(creatures, i);
+    expect(inputs[Input.Sick]).toBe(0);
+    expect(inputs[ray(AHEAD) + SICK]).toBe(0);
+    creatures.sick[i] = 100;
+    creatures.sick[other] = 100;
+    inputs = sense(creatures, i);
+    expect(inputs[Input.Sick]).toBe(1);
+    expect(inputs[ray(AHEAD) + SICK]).toBe(1);
+    // Immunity is not sickness.
+    creatures.sick[i] = -100;
+    creatures.sick[other] = -100;
+    inputs = sense(creatures, i);
+    expect(inputs[Input.Sick]).toBe(0);
+    expect(inputs[ray(AHEAD) + SICK]).toBe(0);
   });
 
   it('reports health and whether the creature in view is bigger or smaller', () => {

@@ -47,6 +47,8 @@ export interface Environment {
   active: ActiveEvent[];
   /** Most recent events, oldest first. */
   log: LogEntry[];
+  /** True from an outbreak until nobody is infected any more. */
+  plagueActive: boolean;
   /** When true, events also strike at random. */
   randomEvents: boolean;
   /** Fertility is blended from `fertilityFrom` to `fertilityTo` over a drift period. */
@@ -71,6 +73,7 @@ export function createEnvironment(config: SimConfig, rng: Rng, field: PlantField
   return {
     active: [],
     log: [],
+    plagueActive: false,
     randomEvents: config.randomEvents,
     fertilityFrom: field.fertility.slice(),
     fertilityTo: generateFertility(config, rng, field.cols, field.rows),
@@ -108,6 +111,12 @@ export function climateAt(env: Environment, tick: number, config: SimConfig): Cl
     }
   }
   return { season, growth, cost };
+}
+
+/** Record the end of an outbreak once the last infection has cleared. */
+export function notePlagueOver(env: Environment, tick: number, deaths: number): void {
+  env.plagueActive = false;
+  addLog(env, tick, `Plague over after ${deaths} deaths`);
 }
 
 /** Drop timed events that have run their course. */
@@ -194,11 +203,12 @@ export interface EventTarget {
   rng: Rng;
   field: PlantField;
   ledger: EnergyLedger;
-  /** Number of living creatures and their positions and colours. */
+  /** Number of living creatures and their positions. */
   count(): number;
   x(i: number): number;
   y(i: number): number;
-  hue(i: number): number;
+  /** Infect creature i if it can catch the plague. Returns whether it did. */
+  infect(i: number): boolean;
   /** Mark creature i to die in this tick's death pass. */
   strike(i: number): void;
 }
@@ -215,7 +225,9 @@ export function triggerEvent(env: Environment, kind: EventKind, tick: number, ta
     else env.active.push({ kind, endTick: tick + length });
     addLog(env, tick, `${EVENT_LABELS[kind]} began`);
   } else if (kind === 'plague') {
-    addLog(env, tick, `Plague killed ${plague(target)} creatures of one colour family`);
+    const infected = plague(target);
+    if (infected > 0) env.plagueActive = true;
+    addLog(env, tick, `Plague broke out: ${infected} infected`);
   } else if (kind === 'meteor') {
     const x = rng.range(0, config.worldWidth);
     const y = rng.range(0, config.worldHeight);
@@ -227,24 +239,19 @@ export function triggerEvent(env: Environment, kind: EventKind, tick: number, ta
 }
 
 /**
- * A disease that spreads through one family: it strikes creatures whose
- * colour is close to that of a randomly chosen creature, so the most common
- * family is the most likely to be hit.
+ * Start an outbreak by infecting a share of the population at random. From
+ * there it spreads by contact; see the infection step in world.ts.
  */
 function plague(target: EventTarget): number {
   const { config, rng } = target;
   const count = target.count();
   if (count === 0) return 0;
-  const centre = target.hue(rng.int(0, count));
-  let struck = 0;
-  for (let i = 0; i < count; i++) {
-    const difference = Math.abs(wrappedDelta(centre, target.hue(i), 1));
-    if (difference <= config.plagueHueWidth && rng.chance(config.plagueLethality)) {
-      target.strike(i);
-      struck++;
-    }
+  const seeds = Math.max(3, Math.round(count * config.plagueSeedShare));
+  let infected = 0;
+  for (let k = 0; k < seeds; k++) {
+    if (target.infect(rng.int(0, count))) infected++;
   }
-  return struck;
+  return infected;
 }
 
 /** Kill every creature, and burn every plant, within the blast radius. */

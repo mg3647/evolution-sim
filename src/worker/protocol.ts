@@ -17,7 +17,7 @@ export type ToWorker =
   | { type: 'setRandomEvents'; enabled: boolean };
 
 /** Number of floats per creature in `Snapshot.creatures`. */
-export const CREATURE_STRIDE = 7;
+export const CREATURE_STRIDE = 8;
 
 /** Everything shown about the selected creature. */
 export interface Inspection {
@@ -36,6 +36,8 @@ export interface Inspection {
   diet: number;
   // 1 is unhurt; it dies at 0.
   health: number;
+  // Above zero: ticks of infection left. Below zero: ticks of immunity left.
+  sick: number;
   hue: number;
   mutationRate: number;
   hiddenNeurons: number;
@@ -57,6 +59,8 @@ export interface EnvironmentView {
   cost: number;
   active: { kind: TimedEventKind; remaining: number }[];
   randomEvents: boolean;
+  /** Creatures infected with the plague right now. */
+  infected: number;
   /** Recent events, oldest first. */
   log: LogEntry[];
 }
@@ -71,7 +75,8 @@ export interface Snapshot {
   measuredTps: number;
 
   population: number;
-  /** Per creature: x, y, heading, energy as a fraction of its maximum, radius, hue, diet. */
+  /** Per creature: x, y, heading, energy as a fraction of its maximum, radius, hue, diet,
+   * and 1 if sick, -1 if immune, 0 otherwise. */
   creatures: Float32Array;
   meanSize: number;
   meanSpeed: number;

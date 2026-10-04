@@ -146,9 +146,19 @@ export interface SimConfig {
   iceAgeLength: number;
   /** Multiplier on creatures' per-tick energy cost during an ice age. */
   iceAgeCost: number;
-  /** A plague strikes creatures whose hue is within this distance of its centre, with this chance each. */
-  plagueHueWidth: number;
-  plagueLethality: number;
+  /** Share of the population a plague event infects to begin with. */
+  plagueSeedShare: number;
+  /** Each tick, a sick creature infects each healthy one within this distance with this chance. */
+  plagueRadius: number;
+  plagueTransmission: number;
+  /** Ticks an infection lasts, and the chance per tick that it kills. */
+  plagueDuration: number;
+  plagueDeathChance: number;
+  /** Ticks a recovered creature stays immune. */
+  plagueImmunity: number;
+  /** While sick: multiplier on thrust, and on the cost of living. */
+  plagueSlow: number;
+  plagueCost: number;
   /** Radius within which a meteor kills creatures and burns the ground bare. */
   meteorRadius: number;
   /** Whether events strike at random, and the average number of ticks between them. */
@@ -252,8 +262,14 @@ export const defaultConfig: SimConfig = {
   iceAgeGrowth: 0.4,
   iceAgeLength: 8000,
   iceAgeCost: 1.4,
-  plagueHueWidth: 0.12,
-  plagueLethality: 0.9,
+  plagueSeedShare: 0.05,
+  plagueRadius: 30,
+  plagueTransmission: 0.03,
+  plagueDuration: 500,
+  plagueDeathChance: 0.001,
+  plagueImmunity: 3000,
+  plagueSlow: 0.5,
+  plagueCost: 1.3,
   meteorRadius: 350,
   randomEvents: false,
   randomEventInterval: 15000,

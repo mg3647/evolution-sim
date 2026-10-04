@@ -38,8 +38,14 @@
       {/if}
     </dl>
 
-    {#if environment.active.length > 0}
+    {#if environment.active.length > 0 || environment.infected > 0}
       <ul class="active">
+        {#if environment.infected > 0}
+          <li class="plague">
+            <b>Plague</b>
+            <span>{environment.infected.toLocaleString()} infected</span>
+          </li>
+        {/if}
         {#each environment.active as event (event.kind)}
           <li>
             <b>{EVENT_LABELS[event.kind]}</b>
@@ -110,6 +116,11 @@
     background: #2a2233;
     border-left: 3px solid #b08cff;
     border-radius: 2px;
+  }
+
+  .active .plague {
+    background: #26301a;
+    border-left-color: #b6ff3c;
   }
 
   .active span,

@@ -32,6 +32,10 @@
       <div><dt>Size</dt><dd>{creature.size.toFixed(2)}</dd></div>
       <div><dt>Speed</dt><dd>{creature.speed.toFixed(2)}</dd></div>
       <div><dt>Health</dt><dd>{Math.round(creature.health * 100)}%</dd></div>
+      <div title="Sick creatures move slower, burn more energy and may die; survivors are immune for a while">
+        <dt>Plague</dt>
+        <dd>{creature.sick > 0 ? 'sick' : creature.sick < 0 ? 'immune' : 'healthy'}</dd>
+      </div>
       <div title="0 eats only plants, 1 eats only meat">
         <dt>Diet</dt>
         <dd>{creature.diet.toFixed(2)} ({dietName(creature.diet)})</dd>
@@ -70,8 +74,9 @@
     <h3>Brain inputs: what it senses now</h3>
     <p class="note">
       For the nearest creature on each ray: &ldquo;Creature&rdquo; is how close it is, &ldquo;Kin&rdquo; is how
-      closely its colour matches (relatives read high), and &ldquo;Bigger&rdquo; is right of centre if it is
-      larger.
+      closely its colour matches (relatives read high), &ldquo;Bigger&rdquo; is right of centre if it is
+      larger, and &ldquo;Sick&rdquo; is whether it has the plague. &ldquo;Wall&rdquo; reads higher the nearer a
+      wall is on that ray.
     </p>
     <ul>
       {#each INPUT_LABELS as label, k (label)}

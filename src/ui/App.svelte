@@ -22,7 +22,7 @@
     drought: 'Plants grow at 15% of normal for 3,000 ticks',
     iceAge: 'Plants grow at 40% and living costs 40% more, for 8,000 ticks',
     foodBoom: 'Plants grow three times as fast for 3,000 ticks',
-    plague: 'Kills about 90% of one colour family, chosen at random',
+    plague: 'Infects a few creatures; it spreads by contact, weakens the sick and kills some',
     meteor: 'Kills everything and burns the ground within a circle at a random spot',
     wall: 'Raises a wall that creatures cannot cross, at a random place',
   };
@@ -209,7 +209,7 @@
         <div><dt>Births</dt><dd>{count(snapshot?.births)}</dd></div>
         <div><dt>Starved</dt><dd>{count(snapshot?.deaths.starved)}</dd></div>
         <div><dt>Killed</dt><dd>{count(snapshot?.deaths.killed)}</dd></div>
-        <div title="Deaths from plagues and meteors">
+        <div title="Deaths from plague and meteors">
           <dt>Died in disasters</dt>
           <dd>{count(snapshot?.deaths.disaster)}</dd>
         </div>
