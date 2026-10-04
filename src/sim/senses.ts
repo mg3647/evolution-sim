@@ -1,7 +1,7 @@
 import { Input, INPUTS_PER_RAY, RAY_COUNT, Ray } from './brain';
 import type { SimConfig } from './config';
 import type { Creatures } from './creatures';
-import { seasonAt } from './environment';
+import { daylightAt, seasonAt } from './environment';
 import { maxEnergyFor } from './genome';
 import { cellIndexAt, type PlantField } from './plants';
 import { soundCellAt, type SoundField } from './sound';
@@ -54,6 +54,7 @@ export class Senses {
   private cachedTick = -1;
   private clock = 0;
   private season = 0;
+  private daylight = 1;
 
   constructor(
     private readonly config: SimConfig,
@@ -75,7 +76,17 @@ export class Senses {
     const x = creatures.x[i]!;
     const y = creatures.y[i]!;
     const heading = creatures.heading[i]!;
-    const range = config.senseRange * creatures.sensorRange[i]!;
+    if (tick !== this.cachedTick) {
+      this.cachedTick = tick;
+      this.clock = Math.sin((TWO_PI * tick) / config.clockPeriod);
+      this.season = config.seasonStrength > 0 ? (seasonAt(tick, config) - 1) / config.seasonStrength : 0;
+      this.daylight = daylightAt(tick, config);
+    }
+    // Sight shortens in the dark.
+    const range =
+      config.senseRange *
+      creatures.sensorRange[i]! *
+      (config.nightVision + (1 - config.nightVision) * this.daylight);
     // Plant cover is relative to the richest possible cell; a barren world reads as zero.
     const plantScale = config.plantCapacity > 0 ? 1 / config.plantCapacity : 0;
     const meatScale = 1 / config.meatScale;
@@ -174,13 +185,9 @@ export class Senses {
     inputs[Input.Thirst] = 1 - creatures.hydration[i]!;
     inputs[Input.Age] = creatures.age[i]! / config.maxAge;
     inputs[Input.Sick] = creatures.sick[i]! > 0 ? 1 : 0;
-    if (tick !== this.cachedTick) {
-      this.cachedTick = tick;
-      this.clock = Math.sin((TWO_PI * tick) / config.clockPeriod);
-      this.season = config.seasonStrength > 0 ? (seasonAt(tick, config) - 1) / config.seasonStrength : 0;
-    }
     inputs[Input.Clock] = this.clock;
     inputs[Input.Season] = this.season;
+    inputs[Input.Daylight] = this.daylight;
     inputs[Input.Bias] = 1;
   }
 

@@ -48,6 +48,8 @@ export const SETTING_GROUPS: SettingGroup[] = [
       { key: 'plantGrowthRate', label: 'Plant growth speed', hint: 'How fast eaten plants grow back', min: 0.001, max: 0.03, step: 0.001 },
       { key: 'seasonStrength', label: 'Season strength', hint: '0 is no seasons; 0.9 swings from near-dark winters to bright summers', min: 0, max: 0.9, step: 0.05 },
       { key: 'seasonLength', label: 'Year length (ticks)', hint: 'Ticks in one full cycle of seasons', min: 1000, max: 30000, step: 500 },
+      { key: 'dayLength', label: 'Day length (ticks)', hint: 'Ticks in one day and night; 0 turns night off', min: 0, max: 3000, step: 50 },
+      { key: 'nightVision', label: 'Sight at night', hint: 'How far creatures see at midnight, as a share of how far they see at noon', min: 0.1, max: 1, step: 0.05 },
       { key: 'fertilityDriftPeriod', label: 'Land drift (ticks)', hint: 'Ticks for rich and barren land to move to entirely new places; 0 keeps it fixed', min: 0, max: 300000, step: 10000 },
     ],
   },

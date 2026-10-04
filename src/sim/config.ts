@@ -165,6 +165,10 @@ export interface SimConfig {
   seasonLength: number;
   /** How far sunlight swings above and below average: 0.4 means from 60% to 140%. */
   seasonStrength: number;
+  /** Ticks in one day and night. 0 turns night off. */
+  dayLength: number;
+  /** How far creatures see at midnight, as a share of how far they see at noon. */
+  nightVision: number;
   /** Ticks over which the fertility map drifts to a completely new one. 0 keeps it fixed. */
   fertilityDriftPeriod: number;
   /** Ticks between updates of the drifting fertility map. */
@@ -317,6 +321,8 @@ export const defaultConfig: SimConfig = {
 
   seasonLength: 6000,
   seasonStrength: 0.4,
+  dayLength: 600,
+  nightVision: 0.4,
   fertilityDriftPeriod: 80000,
   fertilityUpdateInterval: 100,
 

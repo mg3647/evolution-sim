@@ -8,8 +8,9 @@ import { Senses } from './senses';
 import { buildSound, createSoundField } from './sound';
 import { SpatialHash } from './spatialHash';
 
-// A dry world, so each test places only the water it means to.
-const config: SimConfig = { ...defaultConfig, worldWidth: 400, worldHeight: 400, waterShare: 0 };
+// A dry world in permanent daylight, so each test places only the water it
+// means to and sight does not change with the tick.
+const config: SimConfig = { ...defaultConfig, worldWidth: 400, worldHeight: 400, waterShare: 0, dayLength: 0 };
 const LEFT = 0;
 const AHEAD = 1;
 const RIGHT = 2;
@@ -236,6 +237,29 @@ describe('Senses', () => {
     inputs = sense(creatures, i);
     expect(inputs[Input.HearLeft]).toBe(1);
     expect(inputs[Input.HearLeft]).toBeGreaterThan(inputs[Input.HearRight]!);
+  });
+
+  it('sees less far at night, and knows how light it is', () => {
+    const { creatures, add, sense } = setup({ dayLength: 600, nightVision: 0.4 });
+    const i = add(200, 200, 0);
+    add(200 + config.senseRange * 0.7, 200, 0);
+    const noon = sense(creatures, i, 0);
+    expect(noon[Input.Daylight]).toBe(1);
+    expect(noon[ray(AHEAD) + Ray.Near]).toBeCloseTo(0.3, 5);
+
+    const midnight = sense(creatures, i, 300);
+    expect(midnight[Input.Daylight]).toBeCloseTo(0, 6);
+    // At 40% of its range, the other creature is now out of sight.
+    expect(midnight[ray(AHEAD) + Ray.Near]).toBe(0);
+
+    const dusk = sense(creatures, i, 150);
+    expect(dusk[Input.Daylight]).toBeCloseTo(0.5, 6);
+  });
+
+  it('always reads full daylight when days are switched off', () => {
+    const { creatures, add, sense } = setup({ dayLength: 0 });
+    const i = add(200, 200, 0);
+    for (const tick of [0, 150, 300, 451]) expect(sense(creatures, i, tick)[Input.Daylight]).toBe(1);
   });
 
   it('hears nothing when hearing is switched off', () => {

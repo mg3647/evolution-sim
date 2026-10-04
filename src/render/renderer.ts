@@ -43,6 +43,10 @@ function seasonColors(yearFraction: number): { soil: number[]; plant: number[] }
 const MEAT_COLOR = [190, 60, 70] as const;
 const WALL_COLOR = [120, 126, 134] as const;
 const WATER_COLOR = [34, 78, 128] as const;
+/** How much darker the ground is drawn at midnight than at noon. */
+const NIGHT_DIMMING = 0.55;
+/** Darkness shown when days pass too fast to draw one by one. */
+const STEADY_DARK = 0.2;
 const SCENT_COLOR = [170, 120, 255] as const;
 /** How strongly full scent covers the ground when the scent overlay is on. */
 const SCENT_OPACITY = 0.7;
@@ -280,6 +284,14 @@ export class WorldRenderer {
       ? seasonColors(environment.yearFraction)
       : { soil: SOIL_COLOR, plant: PLANT_COLOR };
 
+    // Night dims the ground and cools it toward blue. Walls stay as they are.
+    // Run fast enough and whole days pass in a blink: rather than strobe, the
+    // dimming fades out to a steady half-light as a day drops under two seconds.
+    const daySeconds = snapshot.measuredTps > 0 ? config.dayLength / snapshot.measuredTps : Infinity;
+    const steadiness = Math.min(1, Math.max(0, (daySeconds - 0.5) / 1.5));
+    const dark = (1 - environment.daylight) * steadiness + STEADY_DARK * (1 - steadiness);
+    const dim: Rgb = [1 - NIGHT_DIMMING * dark, 1 - NIGHT_DIMMING * dark, 1 - NIGHT_DIMMING * 0.6 * dark];
+
     const pixels = this.plantImage.data;
     for (let i = 0; i < plants.length; i++) {
       const t = plants[i]! / 255;
@@ -295,12 +307,12 @@ export class WorldRenderer {
         if (water[i]) {
           // Meat and scent still show on water, so a floating body can be seen.
           const withMeat = WATER_COLOR[c]! + (MEAT_COLOR[c]! - WATER_COLOR[c]!) * m;
-          pixels[o + c] = withMeat + (SCENT_COLOR[c]! - withMeat) * s;
+          pixels[o + c] = (withMeat + (SCENT_COLOR[c]! - withMeat) * s) * dim[c]!;
           continue;
         }
         const ground = soil[c]! + (plant[c]! - soil[c]!) * t;
         const withMeat = ground + (MEAT_COLOR[c]! - ground) * m;
-        pixels[o + c] = withMeat + (SCENT_COLOR[c]! - withMeat) * s;
+        pixels[o + c] = (withMeat + (SCENT_COLOR[c]! - withMeat) * s) * dim[c]!;
       }
       pixels[o + 3] = 255;
     }

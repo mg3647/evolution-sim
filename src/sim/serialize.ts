@@ -19,7 +19,7 @@ import type { World } from './world';
  */
 
 /** Bumped whenever the saved layout changes; older files are refused. */
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 
 /** Per-creature number arrays, saved up to the live count. */
 const CREATURE_FIELDS = [
@@ -201,6 +201,7 @@ export function loadWorld(saved: SavedWorld): World {
     sound,
     senses: new Senses(config, plants, hash, sound),
     social: { ...saved.social },
+    activity: 0,
     ledger: { ...saved.ledger },
     history,
     births: saved.births,

@@ -18,6 +18,7 @@
  */
 import { it } from 'vitest';
 import { defaultConfig, type SimConfig } from '../src/sim/config';
+import { daylightAt } from '../src/sim/environment';
 import { createWorld, step } from '../src/sim/world';
 
 const seeds = (process.env.SEEDS ?? 'genesis,second,third').split(',');
@@ -49,6 +50,9 @@ interface Summary {
   oldAgeShare: number;
   /** Mean share of creatures calling at any moment. */
   callers: number;
+  /** Mean thrust creatures chose by day and by night: 0 still, 1 flat out. */
+  dayActivity: number;
+  nightActivity: number;
   /** Energy given per thousand ticks, and the share of it that went to relatives. */
   givenPerThousand: number;
   givenToKin: number;
@@ -75,6 +79,10 @@ function run(seed: string): Summary {
   const started = performance.now();
 
   let callerSum = 0;
+  let dayActivity = 0;
+  let daySamples = 0;
+  let nightActivity = 0;
+  let nightSamples = 0;
   let socialBefore = { ...world.social };
   let deathsBefore = { ...world.deaths };
   let reseededBefore = 0;
@@ -85,6 +93,16 @@ function run(seed: string): Summary {
       deathsBefore = { ...world.deaths };
       socialBefore = { ...world.social };
       reseededBefore = world.reseeded;
+    }
+    // Activity is sampled often and at odd intervals, so it does not fall in step with the day.
+    if (tick > from && tick % 37 === 0) {
+      if (daylightAt(tick, world.config) >= 0.5) {
+        dayActivity += world.activity;
+        daySamples++;
+      } else {
+        nightActivity += world.activity;
+        nightSamples++;
+      }
     }
     if (tick % SAMPLE !== 0 || tick <= from) continue;
     samples++;
@@ -130,6 +148,8 @@ function run(seed: string): Summary {
     thirstShare: deaths > 0 ? d.thirst / deaths : 0,
     oldAgeShare: deaths > 0 ? d.oldAge / deaths : 0,
     callers: callerSum / samples,
+    dayActivity: dayActivity / Math.max(1, daySamples),
+    nightActivity: nightActivity / Math.max(1, nightSamples),
     givenPerThousand: (given * 1000) / Math.max(1, ticks - from),
     givenToKin: given > 0 ? (world.social.givenToKin - socialBefore.givenToKin) / given : 0,
     species: { mean: speciesSum / samples, max: speciesMax },
@@ -157,6 +177,7 @@ it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
         `thirstShare=${percent(s.thirstShare)}`,
         `oldAgeShare=${percent(s.oldAgeShare)}`,
         `callers=${percent(s.callers)}`,
+        `activity day/night=${s.dayActivity.toFixed(3)}/${s.nightActivity.toFixed(3)}`,
         `given=${s.givenPerThousand.toFixed(1)}/kt`,
         `toKin=${percent(s.givenToKin)}`,
         `species=${s.species.mean.toFixed(1)}/${s.species.max}`,

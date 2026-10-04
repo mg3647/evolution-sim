@@ -90,6 +90,8 @@ export interface EnvironmentView {
   season: number;
   /** How far through the year it is, from 0 to 1. A quarter of the way is midsummer. */
   yearFraction: number;
+  /** How light it is: 0 at midnight, 1 at noon. */
+  daylight: number;
   /** Multiplier on plant growth from the season and events together. */
   growth: number;
   /** Multiplier on creatures' energy costs. */

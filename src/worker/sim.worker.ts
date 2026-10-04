@@ -1,5 +1,6 @@
 import { enabledLinks, INPUT_COUNT, OUTPUT_COUNT } from '../sim/brain';
 import type { SimConfig } from '../sim/config';
+import { daylightAt } from '../sim/environment';
 import { maxEnergyFor } from '../sim/genome';
 import { RESTART_KEYS } from '../sim/presets';
 import { brainProfile } from '../sim/profile';
@@ -208,6 +209,7 @@ function sendSnapshot(now: number): void {
     environment: {
       season: world.climate.season,
       yearFraction: config.seasonLength > 0 ? (world.tick % config.seasonLength) / config.seasonLength : 0,
+      daylight: daylightAt(world.tick, config),
       growth: world.climate.growth,
       cost: world.climate.cost,
       active: world.environment.active.map((event) => ({

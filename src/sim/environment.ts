@@ -91,6 +91,16 @@ function addLog(env: Environment, tick: number, text: string): void {
   if (env.log.length > LOG_LENGTH) env.log.shift();
 }
 
+/**
+ * How light it is at a tick, from 0 at midnight to 1 at noon, rising and
+ * falling smoothly so there is a dusk and a dawn. A world begins at noon.
+ * Always 1 if days are off.
+ */
+export function daylightAt(tick: number, config: SimConfig): number {
+  if (config.dayLength <= 0) return 1;
+  return 0.5 + 0.5 * Math.cos((TWO_PI * tick) / config.dayLength);
+}
+
 /** Seasonal sunlight at a tick: swings around 1 by the configured strength. */
 export function seasonAt(tick: number, config: SimConfig): number {
   if (config.seasonLength <= 0) return 1;

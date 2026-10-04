@@ -61,9 +61,11 @@ export const Input = {
   Clock: AFTER_RAYS + 15,
   /** Sunlight relative to average: above zero in summer, below in winter. */
   Season: AFTER_RAYS + 16,
-  Bias: AFTER_RAYS + 17,
+  /** 0 at midnight, 1 at noon. */
+  Daylight: AFTER_RAYS + 17,
+  Bias: AFTER_RAYS + 18,
 } as const;
-export const INPUT_COUNT = AFTER_RAYS + 18;
+export const INPUT_COUNT = AFTER_RAYS + 19;
 
 export const Output = { Turn: 0, Thrust: 1, Reproduce: 2, Attack: 3, Emit: 4, Call: 5, Give: 6 } as const;
 export const OUTPUT_COUNT = 7;
@@ -102,6 +104,7 @@ export const INPUT_LABELS: string[] = [
   'Sick',
   'Clock',
   'Season',
+  'Daylight',
   'Bias',
 ];
 export const OUTPUT_LABELS: string[] = ['Turn', 'Thrust', 'Reproduce', 'Attack', 'Emit scent', 'Call', 'Give'];

@@ -88,6 +88,8 @@ export interface World {
    * creature-ticks, and energy given in all and to relatives (close in colour).
    */
   social: { calling: number; calls: number; given: number; givenToKin: number };
+  /** How hard creatures chose to move on the last tick, on average: 0 still, 1 flat out. */
+  activity: number;
   ledger: EnergyLedger;
   history: History;
   /** Cumulative counts since the world was created. */
@@ -159,6 +161,7 @@ export function createWorld(config: SimConfig): World {
     births: 0,
     reseeded: 0,
     social: { calling: 0, calls: 0, given: 0, givenToKin: 0 },
+    activity: 0,
     deaths: { starved: 0, oldAge: 0, killed: 0, disaster: 0, thirst: 0 },
     environment: createEnvironment(config, rng, plants),
     lineage: new Lineage(),
@@ -201,6 +204,7 @@ export function step(world: World): void {
 
   // Children born this tick are appended past `alive` and first act next tick.
   const alive = creatures.count;
+  let thrustTotal = 0;
   for (let i = 0; i < alive; i++) {
     // Killed earlier this tick: it no longer acts, and leaves its body in the death pass.
     if (creatures.health[i]! <= 0) continue;
@@ -213,6 +217,7 @@ export function step(world: World): void {
     think(brain);
     const turn = brain.activation[INPUT_COUNT + Output.Turn]! * config.maxTurn;
     let thrust = (brain.activation[INPUT_COUNT + Output.Thrust]! + 1) / 2;
+    thrustTotal += thrust;
     const wantsChild = brain.activation[INPUT_COUNT + Output.Reproduce]! >= 0;
     const attacking = brain.activation[INPUT_COUNT + Output.Attack]! > 0;
     const emitting = brain.activation[INPUT_COUNT + Output.Emit]! > 0;
@@ -330,6 +335,8 @@ export function step(world: World): void {
     // Health is read here, after any bites taken earlier this tick, so healing never hides a kill.
     if (creatures.health[i]! > 0) creatures.health[i] = Math.min(1, creatures.health[i]! + config.healRate);
   }
+
+  world.activity = alive > 0 ? thrustTotal / alive : 0;
 
   // Deaths. Backwards, so a removal only moves an already-checked creature.
   for (let i = creatures.count - 1; i >= 0; i--) {

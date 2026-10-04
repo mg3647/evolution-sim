@@ -15,6 +15,12 @@
     return 'Winter';
   }
 
+  function timeOfDay(daylight: number): string {
+    if (daylight > 0.7) return 'Day';
+    if (daylight < 0.3) return 'Night';
+    return 'Twilight';
+  }
+
   const recent = $derived(environment ? environment.log.slice(-LOG_SHOWN).reverse() : []);
 </script>
 
@@ -25,6 +31,10 @@
       <div title="Sunlight swings over the year, and plant growth with it">
         <dt>Season</dt>
         <dd>{seasonName(environment.yearFraction)}</dd>
+      </div>
+      <div title="Creatures see less far in the dark. The map darkens at night.">
+        <dt>Time of day</dt>
+        <dd>{timeOfDay(environment.daylight)}</dd>
       </div>
       <div title="Plant growth relative to normal, from the season and any events together">
         <dt>Plant growth</dt>
