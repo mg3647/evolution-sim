@@ -3,8 +3,8 @@
 A 2D world of creatures whose bodies and brains evolve under natural selection
 alone: no fitness score, just a closed energy economy. Runs in the browser.
 
-Status: milestone 1 of 8 (skeleton). The world is empty; the tick loop, seeded
-randomness, rendering and controls are in place.
+Status: milestone 2 of 8. Plants regrow on a fertility map and creatures
+wander, eat, pay energy costs and die. Nothing reproduces or evolves yet.
 
 ## Run it
 

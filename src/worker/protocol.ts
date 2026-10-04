@@ -10,16 +10,30 @@ export type ToWorker =
   | { type: 'step'; ticks: number }
   | { type: 'setSpeed'; speed: Speed };
 
+/** Number of floats per creature in `Snapshot.creatures`. */
+export const CREATURE_STRIDE = 4;
+
 /** What the page needs to draw one frame and update the controls. */
 export interface Snapshot {
+  config: SimConfig;
   tick: number;
   running: boolean;
   speed: Speed;
   /** Ticks per second actually achieved over the last sampling window. */
   measuredTps: number;
-  worldWidth: number;
-  worldHeight: number;
-  seed: string;
+
+  population: number;
+  /** Per creature: x, y, heading, energy as a fraction of the maximum. */
+  creatures: Float32Array;
+
+  plantCols: number;
+  plantRows: number;
+  /** Per cell: plant energy as 0..255 of the configured plant capacity. */
+  plants: Uint8Array;
+  /** Plant energy in the world as a fraction of what it holds when fully grown. */
+  plantFill: number;
+
+  deaths: { starved: number; oldAge: number };
 }
 
 export type FromWorker = { type: 'snapshot'; snapshot: Snapshot };

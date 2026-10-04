@@ -1,4 +1,4 @@
-import type { FromWorker, Snapshot, ToWorker } from './protocol';
+import { CREATURE_STRIDE, type FromWorker, type Snapshot, type ToWorker } from './protocol';
 import { SimRunner } from './runner';
 
 /** Wall time per loop iteration spent ticking, leaving room for messages. */
@@ -13,23 +13,48 @@ let windowStart = 0;
 let windowTicks = 0;
 let measuredTps = 0;
 
-function post(message: FromWorker): void {
-  self.postMessage(message);
+function post(message: FromWorker, transfer: Transferable[]): void {
+  self.postMessage(message, { transfer });
 }
 
 function sendSnapshot(now: number): void {
   if (!runner) return;
   const { world } = runner;
+  const { config, creatures: c, plants: p } = world;
+
+  const creatures = new Float32Array(c.count * CREATURE_STRIDE);
+  for (let i = 0; i < c.count; i++) {
+    const o = i * CREATURE_STRIDE;
+    creatures[o] = c.x[i]!;
+    creatures[o + 1] = c.y[i]!;
+    creatures[o + 2] = c.heading[i]!;
+    creatures[o + 3] = c.energy[i]! / config.creatureMaxEnergy;
+  }
+
+  const plants = new Uint8Array(p.energy.length);
+  let plantEnergy = 0;
+  let plantCapacity = 0;
+  for (let i = 0; i < plants.length; i++) {
+    plants[i] = (p.energy[i]! / config.plantCapacity) * 255;
+    plantEnergy += p.energy[i]!;
+    plantCapacity += p.capacity[i]!;
+  }
+
   const snapshot: Snapshot = {
+    config,
     tick: world.tick,
     running: runner.running,
     speed: runner.speed,
     measuredTps: runner.running ? measuredTps : 0,
-    worldWidth: world.config.worldWidth,
-    worldHeight: world.config.worldHeight,
-    seed: world.config.seed,
+    population: c.count,
+    creatures,
+    plantCols: p.cols,
+    plantRows: p.rows,
+    plants,
+    plantFill: plantCapacity > 0 ? plantEnergy / plantCapacity : 0,
+    deaths: { ...world.deaths },
   };
-  post({ type: 'snapshot', snapshot });
+  post({ type: 'snapshot', snapshot }, [creatures.buffer, plants.buffer]);
   lastSnapshotTime = now;
 }
 

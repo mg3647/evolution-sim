@@ -16,7 +16,7 @@
   let host: HTMLDivElement;
   let client: SimClient | undefined;
   let renderer: WorldRenderer | undefined;
-  let snapshot = $state<Snapshot | null>(null);
+  let snapshot = $state.raw<Snapshot | null>(null);
   let seed = $state(defaultConfig.seed);
 
   onMount(() => {
@@ -30,7 +30,7 @@
       renderer = r;
       client = new SimClient((s) => {
         snapshot = s;
-        r.setWorldSize(s.worldWidth, s.worldHeight);
+        r.update(s);
       });
       client.init({ ...defaultConfig, seed });
     });
@@ -84,6 +84,13 @@
     </form>
 
     <div class="stats">
+      <span>Creatures <b>{snapshot ? snapshot.population.toLocaleString() : '-'}</b></span>
+      <span>Plants <b>{snapshot ? Math.round(snapshot.plantFill * 100) : '-'}%</b></span>
+      <span
+        title="Deaths so far: {snapshot?.deaths.starved ?? 0} starved, {snapshot?.deaths.oldAge ?? 0} of old age"
+      >
+        Deaths <b>{snapshot ? (snapshot.deaths.starved + snapshot.deaths.oldAge).toLocaleString() : '-'}</b>
+      </span>
       <span>Tick <b>{snapshot ? snapshot.tick.toLocaleString() : '-'}</b></span>
       <span><b>{snapshot ? Math.round(snapshot.measuredTps).toLocaleString() : '-'}</b> ticks/s</span>
     </div>

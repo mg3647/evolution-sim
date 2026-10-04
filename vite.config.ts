@@ -6,6 +6,8 @@ export default defineConfig({
   base: './',
   plugins: [svelte()],
   worker: { format: 'es' },
+  // Native file events were missed on Windows during development; polling is reliable.
+  server: { watch: { usePolling: true, interval: 300 } },
   test: {
     include: ['src/**/*.test.ts'],
     environment: 'node',
