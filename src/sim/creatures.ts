@@ -1,3 +1,4 @@
+import type { Brain } from './brain';
 import type { Genes } from './genome';
 
 /**
@@ -23,8 +24,11 @@ export interface Creatures {
   // Genes; see Genes in genome.ts.
   size: Float32Array;
   speed: Float32Array;
+  sensorRange: Float32Array;
   hue: Float32Array;
   mutationRate: Float32Array;
+  /** One brain per creature, parallel to the arrays above. */
+  brain: Brain[];
 }
 
 /** Every per-creature array, so growing and removing cannot miss one. */
@@ -39,6 +43,7 @@ const FIELDS = [
   'age',
   'size',
   'speed',
+  'sensorRange',
   'hue',
   'mutationRate',
 ] as const satisfies readonly (keyof Creatures)[];
@@ -49,6 +54,7 @@ export interface SpawnOptions {
   heading: number;
   energy: number;
   genes: Genes;
+  brain: Brain;
   age?: number;
   parentId?: number;
   generation?: number;
@@ -69,8 +75,10 @@ export function createCreatures(capacity: number): Creatures {
     age: new Uint32Array(capacity),
     size: new Float32Array(capacity),
     speed: new Float32Array(capacity),
+    sensorRange: new Float32Array(capacity),
     hue: new Float32Array(capacity),
     mutationRate: new Float32Array(capacity),
+    brain: [],
   };
 }
 
@@ -100,22 +108,28 @@ export function spawnCreature(c: Creatures, options: SpawnOptions): number {
   c.age[i] = options.age ?? 0;
   c.size[i] = options.genes.size;
   c.speed[i] = options.genes.speed;
+  c.sensorRange[i] = options.genes.sensorRange;
   c.hue[i] = options.genes.hue;
   c.mutationRate[i] = options.genes.mutationRate;
+  c.brain[i] = options.brain;
   return i;
 }
 
 /** Remove the creature at index i by moving the last creature into its slot. */
 export function removeCreature(c: Creatures, i: number): void {
   const last = --c.count;
-  if (i === last) return;
-  for (const field of FIELDS) c[field][i] = c[field][last]!;
+  if (i !== last) {
+    for (const field of FIELDS) c[field][i] = c[field][last]!;
+    c.brain[i] = c.brain[last]!;
+  }
+  c.brain.length = c.count;
 }
 
 export function genesOf(c: Creatures, i: number): Genes {
   return {
     size: c.size[i]!,
     speed: c.speed[i]!,
+    sensorRange: c.sensorRange[i]!,
     hue: c.hue[i]!,
     mutationRate: c.mutationRate[i]!,
   };

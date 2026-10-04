@@ -4,7 +4,7 @@ import { biteFor, founderGenes, maxEnergyFor, mutateGenes, tickCostFor, type Gen
 import { Rng } from './rng';
 
 const config = defaultConfig;
-const base: Genes = { size: 1, speed: 1, hue: 0.5, mutationRate: 0.1 };
+const base: Genes = { size: 1, speed: 1, sensorRange: 1, hue: 0.5, mutationRate: 0.1 };
 
 describe('mutateGenes', () => {
   it('is repeatable for a seed and leaves the parent untouched', () => {
@@ -34,6 +34,8 @@ describe('mutateGenes', () => {
       expect(genes.size).toBeLessThanOrEqual(config.maxSize);
       expect(genes.speed).toBeGreaterThanOrEqual(config.minSpeed);
       expect(genes.speed).toBeLessThanOrEqual(config.maxSpeed);
+      expect(genes.sensorRange).toBeGreaterThanOrEqual(config.minSensorRange);
+      expect(genes.sensorRange).toBeLessThanOrEqual(config.maxSensorRange);
       expect(genes.hue).toBeGreaterThanOrEqual(0);
       expect(genes.hue).toBeLessThan(1);
       expect(genes.mutationRate).toBeGreaterThanOrEqual(config.minMutationRate);
@@ -58,20 +60,26 @@ describe('trait costs', () => {
   it('matches the base config values at size 1 and speed 1', () => {
     expect(maxEnergyFor(1, config)).toBe(config.creatureMaxEnergy);
     expect(biteFor(1, config)).toBe(config.biteSize);
-    expect(tickCostFor(1, 1, config)).toBeCloseTo(
+    expect(tickCostFor(1, 1, 1, config)).toBeCloseTo(
       config.upkeepCost + config.moveCost * config.creatureSpeed,
       12,
     );
   });
 
   it('charges more for bigger and for faster bodies', () => {
-    expect(tickCostFor(2, 1, config)).toBeGreaterThan(tickCostFor(1, 1, config));
-    expect(tickCostFor(1, 2, config)).toBeGreaterThan(tickCostFor(1, 1, config));
+    expect(tickCostFor(2, 1, 1, config)).toBeGreaterThan(tickCostFor(1, 1, 1, config));
+    expect(tickCostFor(1, 2, 1, config)).toBeGreaterThan(tickCostFor(1, 1, 1, config));
+  });
+
+  it('charges nothing for movement at zero thrust, and more per distance for a faster body', () => {
+    expect(tickCostFor(1, 3, 0, config)).toBe(tickCostFor(1, 1, 0, config));
+    // Same distance covered: speed 2 at half thrust against speed 1 at full thrust.
+    expect(tickCostFor(1, 2, 0.5, config)).toBeGreaterThan(tickCostFor(1, 1, 1, config));
   });
 
   it('makes upkeep per unit of bite fall as size grows', () => {
     const upkeepOnly = { ...config, moveCost: 0 };
-    const perBite = (size: number) => tickCostFor(size, 1, upkeepOnly) / biteFor(size, upkeepOnly);
+    const perBite = (size: number) => tickCostFor(size, 1, 1, upkeepOnly) / biteFor(size, upkeepOnly);
     expect(perBite(2)).toBeLessThan(perBite(1));
   });
 });

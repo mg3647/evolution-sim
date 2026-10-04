@@ -17,9 +17,22 @@ export interface History {
   plantFill: Float32Array;
   meanSize: Float32Array;
   meanSpeed: Float32Array;
+  meanSensorRange: Float32Array;
+  /** Mean number of enabled links and of hidden neurons per brain. */
+  meanLinks: Float32Array;
+  meanNeurons: Float32Array;
 }
 
-const SERIES = ['tick', 'population', 'plantFill', 'meanSize', 'meanSpeed'] as const;
+const SERIES = [
+  'tick',
+  'population',
+  'plantFill',
+  'meanSize',
+  'meanSpeed',
+  'meanSensorRange',
+  'meanLinks',
+  'meanNeurons',
+] as const;
 
 export interface Sample {
   tick: number;
@@ -27,6 +40,9 @@ export interface Sample {
   plantFill: number;
   meanSize: number;
   meanSpeed: number;
+  meanSensorRange: number;
+  meanLinks: number;
+  meanNeurons: number;
 }
 
 export function createHistory(interval: number, capacity: number): History {
@@ -39,6 +55,9 @@ export function createHistory(interval: number, capacity: number): History {
     plantFill: new Float32Array(capacity),
     meanSize: new Float32Array(capacity),
     meanSpeed: new Float32Array(capacity),
+    meanSensorRange: new Float32Array(capacity),
+    meanLinks: new Float32Array(capacity),
+    meanNeurons: new Float32Array(capacity),
   };
 }
 

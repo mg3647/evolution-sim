@@ -92,7 +92,8 @@ describe('energy economy', () => {
   it('starves every creature when nothing grows', () => {
     const world = runWorld({ plantCapacity: 0, ...noReseed }, 1500);
     expect(world.creatures.count).toBe(0);
-    expect(world.deaths.starved).toBe(smallConfig.initialCreatures);
+    // A small founder can hold enough to split once before it starves.
+    expect(world.deaths.starved).toBe(smallConfig.initialCreatures + world.births);
     expect(totalEnergy(world)).toBeCloseTo(0, 6);
   });
 
@@ -100,6 +101,18 @@ describe('energy economy', () => {
     const world = runWorld({ maxAge: 200, upkeepCost: 0, moveCost: 0, ...noBirths, ...noReseed }, 200);
     expect(world.creatures.count).toBe(0);
     expect(world.deaths.oldAge).toBe(smallConfig.initialCreatures);
+  });
+
+  it('keeps every creature number finite, even in a barren world', () => {
+    for (const overrides of [{}, { plantCapacity: 0 }]) {
+      const { creatures } = runWorld(overrides, 300);
+      for (let i = 0; i < creatures.count; i++) {
+        expect(Number.isFinite(creatures.energy[i])).toBe(true);
+        expect(Number.isFinite(creatures.x[i])).toBe(true);
+        expect(Number.isFinite(creatures.heading[i])).toBe(true);
+        for (const v of creatures.brain[i]!.activation) expect(Number.isFinite(v)).toBe(true);
+      }
+    }
   });
 
   it('lets grazing creatures eat plants down', () => {

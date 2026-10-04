@@ -33,8 +33,36 @@ export interface SimConfig {
   creatureRadius: number;
   /** Distance moved per tick at speed 1. */
   creatureSpeed: number;
-  /** Largest random heading change per tick, in radians. */
-  wanderTurn: number;
+  /** Largest heading change per tick, in radians. */
+  maxTurn: number;
+  /** Fraction of the bite lost when moving at full thrust; grazing well means slowing down. */
+  eatSlowdown: number;
+
+  /** Length of the vision rays for a creature with sensor range 1. */
+  senseRange: number;
+  /** Angle between neighboring vision rays, in radians. */
+  raySpread: number;
+  /** Energy per tick that senses cost at sensor range 1. Scales with range squared. */
+  senseCost: number;
+  /** Ticks per cycle of the clock input. */
+  clockPeriod: number;
+
+  /** Energy per tick for each hidden neuron and each enabled link. */
+  brainNeuronCost: number;
+  brainLinkCost: number;
+  /** Random input-to-output links in the brain of a creature with no parent. */
+  founderLinks: number;
+  maxHiddenNeurons: number;
+  maxLinks: number;
+  /** Per birth: chance that each link's weight shifts, and how far relative to the mutation rate. */
+  weightChangeChance: number;
+  weightChangeScale: number;
+  /** Per birth: chance that each link's weight is replaced outright. */
+  weightResetChance: number;
+  /** Per birth: chances of gaining a link, splitting a link with a new neuron, and toggling a link. */
+  addLinkChance: number;
+  addNeuronChance: number;
+  toggleLinkChance: number;
   /** Energy a creature of size 1 spends per tick just staying alive. */
   upkeepCost: number;
   /** Share of upkeep that every body pays regardless of its size. */
@@ -64,6 +92,8 @@ export interface SimConfig {
   maxSize: number;
   minSpeed: number;
   maxSpeed: number;
+  minSensorRange: number;
+  maxSensorRange: number;
   /** Mutation rate of creatures with no parent. */
   initialMutationRate: number;
   minMutationRate: number;
@@ -92,7 +122,25 @@ export const defaultConfig: SimConfig = {
   creatureMaxEnergy: 100,
   creatureRadius: 5,
   creatureSpeed: 1.5,
-  wanderTurn: 0.3,
+  maxTurn: 0.3,
+  eatSlowdown: 0.7,
+
+  senseRange: 60,
+  raySpread: 0.6,
+  senseCost: 0.01,
+  clockPeriod: 60,
+
+  brainNeuronCost: 0.002,
+  brainLinkCost: 0.0005,
+  founderLinks: 4,
+  maxHiddenNeurons: 16,
+  maxLinks: 96,
+  weightChangeChance: 0.5,
+  weightChangeScale: 4,
+  weightResetChance: 0.02,
+  addLinkChance: 0.1,
+  addNeuronChance: 0.03,
+  toggleLinkChance: 0.03,
   upkeepCost: 0.12,
   upkeepFixedShare: 0.5,
   moveCost: 0.05,
@@ -110,6 +158,8 @@ export const defaultConfig: SimConfig = {
   maxSize: 3,
   minSpeed: 0.2,
   maxSpeed: 4,
+  minSensorRange: 0.3,
+  maxSensorRange: 3,
   initialMutationRate: 0.08,
   minMutationRate: 0.005,
   maxMutationRate: 0.5,

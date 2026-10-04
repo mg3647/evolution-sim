@@ -8,10 +8,34 @@ export type ToWorker =
   | { type: 'play' }
   | { type: 'pause' }
   | { type: 'step'; ticks: number }
-  | { type: 'setSpeed'; speed: Speed };
+  | { type: 'setSpeed'; speed: Speed }
+  /** Select the creature nearest a world position within `radius`, or none. */
+  | { type: 'pick'; x: number; y: number; radius: number };
 
 /** Number of floats per creature in `Snapshot.creatures`. */
 export const CREATURE_STRIDE = 6;
+
+/** Everything shown about the selected creature. */
+export interface Inspection {
+  /** Position of this creature in `Snapshot.creatures`. */
+  index: number;
+  id: number;
+  parentId: number;
+  generation: number;
+  age: number;
+  energy: number;
+  maxEnergy: number;
+  size: number;
+  speed: number;
+  sensorRange: number;
+  hue: number;
+  mutationRate: number;
+  hiddenNeurons: number;
+  links: number;
+  /** Brain inputs and outputs this tick, in the order of INPUT_LABELS and OUTPUT_LABELS. */
+  inputs: number[];
+  outputs: number[];
+}
 
 /** What the page needs to draw one frame and update the controls. */
 export interface Snapshot {
@@ -27,6 +51,7 @@ export interface Snapshot {
   creatures: Float32Array;
   meanSize: number;
   meanSpeed: number;
+  meanSensorRange: number;
   /** Highest generation among living creatures. */
   maxGeneration: number;
 
@@ -40,6 +65,9 @@ export interface Snapshot {
   births: number;
   reseeded: number;
   deaths: { starved: number; oldAge: number };
+
+  /** The selected creature, or null if none is selected or it has died. */
+  selected: Inspection | null;
 }
 
 /** Statistics over the whole run so far, one entry per sample, for charts. */
@@ -50,6 +78,9 @@ export interface HistoryData {
   plantPercent: Float32Array;
   meanSize: Float32Array;
   meanSpeed: Float32Array;
+  meanSensorRange: Float32Array;
+  meanLinks: Float32Array;
+  meanNeurons: Float32Array;
 }
 
 export type FromWorker =

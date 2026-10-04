@@ -19,6 +19,11 @@ const CREATURE_SATURATION = 0.7;
 /** Brightness of a starving creature; a well-fed one is at 1. */
 const DIMMEST = 0.45;
 const CREATURE_TEXTURE_SIZE = 64;
+/** A click selects the nearest creature within this many screen pixels. */
+const PICK_RADIUS = 14;
+/** A press that moves less than this many pixels is a click, not a drag. */
+const CLICK_SLOP = 4;
+const SELECTION_COLOR = 0xffffff;
 /** Smallest radius a creature is drawn at, in screen pixels. */
 const MIN_SCREEN_RADIUS = 2.5;
 
@@ -50,11 +55,15 @@ function createCreatureTexture(): Texture {
 
 /** Draws the world onto a PixiJS canvas and handles the pan/zoom camera. */
 export class WorldRenderer {
+  /** Called with a world position and radius when the user clicks the world. */
+  onPick: ((x: number, y: number, radius: number) => void) | null = null;
+
   private app = new Application();
   private camera = new Container();
   private plantSprite = new Sprite();
   private overlay = new Graphics();
   private creatureLayer = new Container();
+  private selectionRing = new Graphics();
   private creatureSprites: Sprite[] = [];
   private creatureTexture = Texture.EMPTY;
   private plantCanvas = document.createElement('canvas');
@@ -66,6 +75,7 @@ export class WorldRenderer {
   private dragging = false;
   private cameraMoved = false;
   private lastPointer = { x: 0, y: 0 };
+  private pressPoint = { x: 0, y: 0 };
 
   async init(host: HTMLElement): Promise<void> {
     await this.app.init({
@@ -77,7 +87,7 @@ export class WorldRenderer {
     });
     host.appendChild(this.app.canvas);
     this.creatureTexture = createCreatureTexture();
-    this.camera.addChild(this.plantSprite, this.overlay, this.creatureLayer);
+    this.camera.addChild(this.plantSprite, this.overlay, this.creatureLayer, this.selectionRing);
     this.app.stage.addChild(this.camera);
     this.attachCameraControls(this.app.canvas);
     // Keep the world fitted through window resizes until the user moves the camera.
@@ -199,26 +209,48 @@ export class WorldRenderer {
       const fed = Math.min(1, creatures[o + 3]! * 2);
       sprite.tint = hsvToRgb(creatures[o + 5]!, CREATURE_SATURATION, DIMMEST + (1 - DIMMEST) * fed);
     }
+
+    const ring = this.selectionRing;
+    ring.clear();
+    if (snapshot.selected) {
+      const o = snapshot.selected.index * CREATURE_STRIDE;
+      const radius = Math.max(creatures[o + 4]!, minRadius) + 4 / this.camera.scale.x;
+      ring.circle(creatures[o]!, creatures[o + 1]!, radius).stroke({ color: SELECTION_COLOR, pixelLine: true });
+    }
   }
 
   private attachCameraControls(canvas: HTMLCanvasElement): void {
     canvas.addEventListener('pointerdown', (event) => {
       this.dragging = true;
       this.lastPointer = { x: event.clientX, y: event.clientY };
+      this.pressPoint = { x: event.clientX, y: event.clientY };
       canvas.setPointerCapture(event.pointerId);
     });
     canvas.addEventListener('pointermove', (event) => {
       if (!this.dragging) return;
-      this.cameraMoved = true;
       this.camera.position.x += event.clientX - this.lastPointer.x;
       this.camera.position.y += event.clientY - this.lastPointer.y;
+      if (Math.hypot(event.clientX - this.pressPoint.x, event.clientY - this.pressPoint.y) > CLICK_SLOP) {
+        this.cameraMoved = true;
+      }
       this.lastPointer = { x: event.clientX, y: event.clientY };
     });
     const endDrag = (event: PointerEvent) => {
       this.dragging = false;
       if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
     };
-    canvas.addEventListener('pointerup', endDrag);
+    canvas.addEventListener('pointerup', (event) => {
+      endDrag(event);
+      const moved = Math.hypot(event.clientX - this.pressPoint.x, event.clientY - this.pressPoint.y);
+      if (moved > CLICK_SLOP) return;
+      const rect = canvas.getBoundingClientRect();
+      const zoom = this.camera.scale.x;
+      this.onPick?.(
+        (event.clientX - rect.left - this.camera.position.x) / zoom,
+        (event.clientY - rect.top - this.camera.position.y) / zoom,
+        PICK_RADIUS / zoom,
+      );
+    });
     canvas.addEventListener('pointercancel', endDrag);
 
     canvas.addEventListener(

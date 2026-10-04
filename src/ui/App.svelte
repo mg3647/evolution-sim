@@ -6,6 +6,7 @@
   import { SimClient } from '../worker/client';
   import type { HistoryData, Snapshot, Speed } from '../worker/protocol';
   import Chart, { type ChartSeries } from './Chart.svelte';
+  import Inspector from './Inspector.svelte';
 
   const SPEEDS: { label: string; value: Speed }[] = [
     { label: '1x', value: 1 },
@@ -22,6 +23,11 @@
   const TRAIT_SERIES: ChartSeries[] = [
     { label: 'Mean size', color: '#6cb6ff' },
     { label: 'Mean speed', color: '#ff8f6b' },
+    { label: 'Mean sensor range', color: '#b08cff' },
+  ];
+  const BRAIN_SERIES: ChartSeries[] = [
+    { label: 'Mean links', color: '#e8c468' },
+    { label: 'Mean hidden neurons', color: '#6cb6ff', axis: 'right' },
   ];
 
   let host: HTMLDivElement;
@@ -35,7 +41,10 @@
     history && [history.tick, history.population, history.plantPercent],
   );
   const traitData = $derived<uPlot.AlignedData | null>(
-    history && [history.tick, history.meanSize, history.meanSpeed],
+    history && [history.tick, history.meanSize, history.meanSpeed, history.meanSensorRange],
+  );
+  const brainData = $derived<uPlot.AlignedData | null>(
+    history && [history.tick, history.meanLinks, history.meanNeurons],
   );
 
   onMount(() => {
@@ -55,6 +64,7 @@
         onHistory: (h) => (history = h),
       });
       client.init({ ...defaultConfig, seed });
+      r.onPick = (x, y, radius) => client?.pick(x, y, radius);
     });
     return () => {
       disposed = true;
@@ -130,6 +140,7 @@
         <div><dt>Plants</dt><dd>{snapshot ? Math.round(snapshot.plantFill * 100) : '-'}%</dd></div>
         <div><dt>Mean size</dt><dd>{decimal(snapshot?.meanSize)}</dd></div>
         <div><dt>Mean speed</dt><dd>{decimal(snapshot?.meanSpeed)}</dd></div>
+        <div><dt>Mean sensor range</dt><dd>{decimal(snapshot?.meanSensorRange)}</dd></div>
         <div><dt>Generation</dt><dd>{count(snapshot?.maxGeneration)}</dd></div>
         <div><dt>Births</dt><dd>{count(snapshot?.births)}</dd></div>
         <div><dt>Starved</dt><dd>{count(snapshot?.deaths.starved)}</dd></div>
@@ -143,7 +154,10 @@
       </dl>
 
       <Chart title="Population" series={POPULATION_SERIES} data={populationData} />
+      <Inspector creature={snapshot?.selected ?? null} />
+
       <Chart title="Traits" series={TRAIT_SERIES} data={traitData} />
+      <Chart title="Brains" series={BRAIN_SERIES} data={brainData} />
     </aside>
   </div>
 </div>

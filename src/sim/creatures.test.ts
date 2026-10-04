@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { founderBrain, Innovations } from './brain';
+import { defaultConfig } from './config';
 import {
   createCreatures,
   genesOf,
@@ -7,11 +9,13 @@ import {
   totalCreatureEnergy,
   type SpawnOptions,
 } from './creatures';
+import { Rng } from './rng';
 
-const genes = { size: 1, speed: 1, hue: 0.25, mutationRate: 0.05 };
+const genes = { size: 1, speed: 1, sensorRange: 1, hue: 0.25, mutationRate: 0.05 };
+const brain = founderBrain(new Rng('brain'), new Innovations(), defaultConfig);
 
 function options(overrides: Partial<SpawnOptions> = {}): SpawnOptions {
-  return { x: 0, y: 0, heading: 0, energy: 1, genes, ...overrides };
+  return { x: 0, y: 0, heading: 0, energy: 1, genes, brain, ...overrides };
 }
 
 describe('creatures', () => {
@@ -60,6 +64,7 @@ describe('creatures', () => {
     expect(Array.from(c.size.subarray(0, 3))).toEqual([1, 4, 3]);
     removeCreature(c, 2);
     expect(Array.from(c.id.subarray(0, 2))).toEqual([1, 4]);
+    expect(c.brain).toHaveLength(2);
   });
 
   it('never reuses an id after a removal', () => {

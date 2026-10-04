@@ -1,8 +1,12 @@
+import { enabledLinks, INPUT_COUNT, OUTPUT_COUNT } from '../sim/brain';
 import { maxEnergyFor } from '../sim/genome';
+import { wrappedDelta } from '../sim/geometry';
+import type { World } from '../sim/world';
 import {
   CREATURE_STRIDE,
   type FromWorker,
   type HistoryData,
+  type Inspection,
   type Snapshot,
   type ToWorker,
 } from './protocol';
@@ -16,6 +20,8 @@ const TPS_WINDOW_MS = 500;
 
 let runner: SimRunner | null = null;
 let loopTimer: ReturnType<typeof setTimeout> | null = null;
+/** Id of the creature being inspected, or 0 for none. */
+let selectedId = 0;
 let lastSnapshotTime = 0;
 let lastHistoryTime = 0;
 /** History version last sent, or -1 to force a send. */
@@ -28,6 +34,45 @@ function post(message: FromWorker, transfer: Transferable[]): void {
   self.postMessage(message, { transfer });
 }
 
+/** Select the creature nearest (x, y) within `radius`, or clear the selection. */
+function pick(world: World, x: number, y: number, radius: number): void {
+  const { creatures: c, config } = world;
+  let best = radius * radius;
+  selectedId = 0;
+  for (let i = 0; i < c.count; i++) {
+    const dx = wrappedDelta(x, c.x[i]!, config.worldWidth);
+    const dy = wrappedDelta(y, c.y[i]!, config.worldHeight);
+    const d2 = dx * dx + dy * dy;
+    if (d2 <= best) {
+      best = d2;
+      selectedId = c.id[i]!;
+    }
+  }
+}
+
+function inspect(world: World, i: number): Inspection {
+  const { creatures: c, config } = world;
+  const brain = c.brain[i]!;
+  return {
+    index: i,
+    id: c.id[i]!,
+    parentId: c.parentId[i]!,
+    generation: c.generation[i]!,
+    age: c.age[i]!,
+    energy: c.energy[i]!,
+    maxEnergy: maxEnergyFor(c.size[i]!, config),
+    size: c.size[i]!,
+    speed: c.speed[i]!,
+    sensorRange: c.sensorRange[i]!,
+    hue: c.hue[i]!,
+    mutationRate: c.mutationRate[i]!,
+    hiddenNeurons: brain.hiddenIds.length,
+    links: enabledLinks(brain),
+    inputs: Array.from(brain.activation.subarray(0, INPUT_COUNT)),
+    outputs: Array.from(brain.activation.subarray(INPUT_COUNT, INPUT_COUNT + OUTPUT_COUNT)),
+  };
+}
+
 function sendSnapshot(now: number): void {
   if (!runner) return;
   const { world } = runner;
@@ -36,7 +81,9 @@ function sendSnapshot(now: number): void {
   const creatures = new Float32Array(c.count * CREATURE_STRIDE);
   let sizeTotal = 0;
   let speedTotal = 0;
+  let senseTotal = 0;
   let maxGeneration = 0;
+  let selected: Inspection | null = null;
   for (let i = 0; i < c.count; i++) {
     const size = c.size[i]!;
     const o = i * CREATURE_STRIDE;
@@ -48,6 +95,8 @@ function sendSnapshot(now: number): void {
     creatures[o + 5] = c.hue[i]!;
     sizeTotal += size;
     speedTotal += c.speed[i]!;
+    senseTotal += c.sensorRange[i]!;
+    if (selectedId !== 0 && c.id[i] === selectedId) selected = inspect(world, i);
     if (c.generation[i]! > maxGeneration) maxGeneration = c.generation[i]!;
   }
 
@@ -68,6 +117,7 @@ function sendSnapshot(now: number): void {
     creatures,
     meanSize: c.count > 0 ? sizeTotal / c.count : 0,
     meanSpeed: c.count > 0 ? speedTotal / c.count : 0,
+    meanSensorRange: c.count > 0 ? senseTotal / c.count : 0,
     maxGeneration,
     plantCols: p.cols,
     plantRows: p.rows,
@@ -76,6 +126,7 @@ function sendSnapshot(now: number): void {
     births: world.births,
     reseeded: world.reseeded,
     deaths: { ...world.deaths },
+    selected,
   };
   post({ type: 'snapshot', snapshot }, [creatures.buffer, plants.buffer]);
   lastSnapshotTime = now;
@@ -92,6 +143,9 @@ function sendHistory(now: number): void {
     plantPercent: h.plantFill.slice(0, h.count).map((fill) => fill * 100),
     meanSize: h.meanSize.slice(0, h.count),
     meanSpeed: h.meanSpeed.slice(0, h.count),
+    meanSensorRange: h.meanSensorRange.slice(0, h.count),
+    meanLinks: h.meanLinks.slice(0, h.count),
+    meanNeurons: h.meanNeurons.slice(0, h.count),
   };
   post({ type: 'history', history }, [
     history.tick.buffer,
@@ -99,6 +153,9 @@ function sendHistory(now: number): void {
     history.plantPercent.buffer,
     history.meanSize.buffer,
     history.meanSpeed.buffer,
+    history.meanSensorRange.buffer,
+    history.meanLinks.buffer,
+    history.meanNeurons.buffer,
   ]);
   sentHistoryVersion = h.version;
   lastHistoryTime = now;
@@ -137,6 +194,7 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
     runner = new SimRunner(message.config);
     runner.setSpeed(speed);
     sentHistoryVersion = -1;
+    selectedId = 0;
     if (wasRunning) {
       runner.play();
       startLoop();
@@ -152,6 +210,8 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
     runner.stepTicks(message.ticks);
   } else if (message.type === 'setSpeed') {
     runner.setSpeed(message.speed);
+  } else if (message.type === 'pick') {
+    pick(runner.world, message.x, message.y, message.radius);
   }
   const now = performance.now();
   sendSnapshot(now);

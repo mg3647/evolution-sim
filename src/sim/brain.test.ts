@@ -1,0 +1,234 @@
+import { describe, expect, it } from 'vitest';
+import {
+  brainCost,
+  enabledLinks,
+  founderBrain,
+  Innovations,
+  INPUT_COUNT,
+  INPUT_LABELS,
+  Input,
+  mutateBrain,
+  OUTPUT_COUNT,
+  OUTPUT_LABELS,
+  Output,
+  think,
+  type Brain,
+} from './brain';
+import { defaultConfig, type SimConfig } from './config';
+import { Rng } from './rng';
+
+const config = defaultConfig;
+const FIXED = INPUT_COUNT + OUTPUT_COUNT;
+
+/** A config where exactly one kind of structural mutation always happens. */
+function only(overrides: Partial<SimConfig>): SimConfig {
+  return {
+    ...config,
+    weightChangeChance: 0,
+    weightResetChance: 0,
+    addLinkChance: 0,
+    addNeuronChance: 0,
+    toggleLinkChance: 0,
+    ...overrides,
+  };
+}
+
+function output(brain: Brain, index: number): number {
+  return brain.activation[INPUT_COUNT + index]!;
+}
+
+describe('labels', () => {
+  it('names every input and output', () => {
+    expect(INPUT_LABELS).toHaveLength(INPUT_COUNT);
+    expect(OUTPUT_LABELS).toHaveLength(OUTPUT_COUNT);
+    expect(INPUT_LABELS[Input.Bias]).toBe('Bias');
+    expect(OUTPUT_LABELS[Output.Thrust]).toBe('Thrust');
+  });
+});
+
+describe('Innovations', () => {
+  it('gives the same id to the same link and new ids to new links', () => {
+    const innovations = new Innovations();
+    const a = innovations.linkId(0, 15);
+    expect(innovations.linkId(0, 15)).toBe(a);
+    expect(innovations.linkId(1, 15)).not.toBe(a);
+  });
+
+  it('gives the same neuron for splitting the same link, numbered after the fixed neurons', () => {
+    const innovations = new Innovations();
+    const node = innovations.splitNode(7);
+    expect(node).toBe(FIXED);
+    expect(innovations.splitNode(7)).toBe(node);
+    expect(innovations.splitNode(8)).toBe(FIXED + 1);
+  });
+});
+
+describe('founderBrain', () => {
+  it('has only input-to-output links and no hidden neurons', () => {
+    const brain = founderBrain(new Rng('f'), new Innovations(), config);
+    expect(brain.hiddenIds).toEqual([]);
+    expect(brain.links.length).toBeGreaterThan(0);
+    expect(brain.links.length).toBeLessThanOrEqual(config.founderLinks);
+    for (const link of brain.links) {
+      expect(link.from).toBeLessThan(INPUT_COUNT);
+      expect(link.to).toBeGreaterThanOrEqual(INPUT_COUNT);
+      expect(link.to).toBeLessThan(FIXED);
+    }
+  });
+});
+
+describe('think', () => {
+  it('outputs zero with no links', () => {
+    const brain = founderBrain(new Rng('f'), new Innovations(), { ...config, founderLinks: 0 });
+    brain.activation[Input.Bias] = 1;
+    think(brain);
+    for (let k = 0; k < OUTPUT_COUNT; k++) expect(output(brain, k)).toBe(0);
+  });
+
+  it('computes tanh of the weighted sum of its inputs', () => {
+    const innovations = new Innovations();
+    const brain = mutateBrain(
+      founderBrain(new Rng('f'), innovations, { ...config, founderLinks: 0 }),
+      0,
+      new Rng('m'),
+      innovations,
+      only({}),
+    );
+    brain.links.push(
+      { innovation: 0, from: Input.Bias, to: INPUT_COUNT + Output.Turn, weight: 0.5, enabled: true },
+      { innovation: 1, from: Input.Energy, to: INPUT_COUNT + Output.Turn, weight: -2, enabled: true },
+    );
+    const wired = mutateBrain(brain, 0, new Rng('m'), innovations, only({}));
+    wired.activation[Input.Bias] = 1;
+    wired.activation[Input.Energy] = 0.25;
+    think(wired);
+    expect(output(wired, Output.Turn)).toBeCloseTo(Math.tanh(0.5 * 1 - 2 * 0.25), 6);
+    expect(output(wired, Output.Thrust)).toBe(0);
+  });
+
+  it('keeps outputs within [-1, 1]', () => {
+    const innovations = new Innovations();
+    const rng = new Rng('range');
+    let brain = founderBrain(rng, innovations, config);
+    for (let i = 0; i < 200; i++) brain = mutateBrain(brain, 0.5, rng, innovations, config);
+    for (let t = 0; t < 50; t++) {
+      for (let k = 0; k < INPUT_COUNT; k++) brain.activation[k] = rng.range(-1, 1);
+      think(brain);
+      for (let k = INPUT_COUNT; k < brain.activation.length; k++) {
+        expect(Math.abs(brain.activation[k]!)).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  it('remembers through a self-link: output persists after the input goes away', () => {
+    const innovations = new Innovations();
+    const turn = INPUT_COUNT + Output.Turn;
+    const base = founderBrain(new Rng('f'), innovations, { ...config, founderLinks: 0 });
+    base.links.push(
+      { innovation: 0, from: Input.Bias, to: turn, weight: 3, enabled: true },
+      { innovation: 1, from: turn, to: turn, weight: 3, enabled: true },
+    );
+    const brain = mutateBrain(base, 0, new Rng('m'), innovations, only({}));
+    brain.activation[Input.Bias] = 1;
+    think(brain);
+    brain.activation[Input.Bias] = 0;
+    for (let t = 0; t < 20; t++) think(brain);
+    expect(output(brain, Output.Turn)).toBeGreaterThan(0.9);
+  });
+});
+
+describe('mutateBrain', () => {
+  it('copies the parent without changing it', () => {
+    const innovations = new Innovations();
+    const parent = founderBrain(new Rng('p'), innovations, config);
+    const before = JSON.stringify(parent.links);
+    const child = mutateBrain(parent, 0.3, new Rng('c'), innovations, only({ weightChangeChance: 1 }));
+    expect(JSON.stringify(parent.links)).toBe(before);
+    expect(child.links).toHaveLength(parent.links.length);
+    expect(child.links.some((link, k) => link.weight !== parent.links[k]!.weight)).toBe(true);
+  });
+
+  it('starts the child with a blank mind', () => {
+    const innovations = new Innovations();
+    const parent = founderBrain(new Rng('p'), innovations, config);
+    parent.activation.fill(0.5);
+    const child = mutateBrain(parent, 0.1, new Rng('c'), innovations, config);
+    expect(Array.from(child.activation).every((v) => v === 0)).toBe(true);
+  });
+
+  it('adds links up to the cap and never into an input', () => {
+    const innovations = new Innovations();
+    const rng = new Rng('links');
+    const cfg = only({ addLinkChance: 1, maxLinks: 12 });
+    let brain = founderBrain(rng, innovations, cfg);
+    for (let i = 0; i < 300; i++) brain = mutateBrain(brain, 0.1, rng, innovations, cfg);
+    expect(brain.links.length).toBe(12);
+    for (const link of brain.links) expect(link.to).toBeGreaterThanOrEqual(INPUT_COUNT);
+    const pairs = new Set(brain.links.map((link) => `${link.from}>${link.to}`));
+    expect(pairs.size).toBe(brain.links.length);
+  });
+
+  it('splits a link with a new neuron that carries the same signal path', () => {
+    const innovations = new Innovations();
+    const rng = new Rng('split');
+    const parent = founderBrain(rng, innovations, { ...config, founderLinks: 1 });
+    const original = parent.links[0]!;
+    const child = mutateBrain(parent, 0.1, rng, innovations, only({ addNeuronChance: 1 }));
+
+    expect(child.hiddenIds).toHaveLength(1);
+    const node = child.hiddenIds[0]!;
+    expect(node).toBeGreaterThanOrEqual(FIXED);
+    expect(child.links).toHaveLength(3);
+    expect(child.links[0]!.enabled).toBe(false);
+    expect(child.links.find((link) => link.to === node)).toMatchObject({ from: original.from, weight: 1 });
+    expect(child.links.find((link) => link.from === node)).toMatchObject({
+      to: original.to,
+      weight: original.weight,
+    });
+    expect(enabledLinks(child)).toBe(2);
+    expect(child.activation).toHaveLength(FIXED + 1);
+  });
+
+  it('respects the hidden neuron cap', () => {
+    const innovations = new Innovations();
+    const rng = new Rng('cap');
+    const cfg = only({ addNeuronChance: 1, maxHiddenNeurons: 3 });
+    let brain = founderBrain(rng, innovations, cfg);
+    for (let i = 0; i < 100; i++) brain = mutateBrain(brain, 0.1, rng, innovations, cfg);
+    expect(brain.hiddenIds.length).toBe(3);
+    expect(brain.hiddenIds).toEqual([...brain.hiddenIds].sort((a, b) => a - b));
+  });
+
+  it('toggles a link on or off', () => {
+    const innovations = new Innovations();
+    const rng = new Rng('toggle');
+    const parent = founderBrain(rng, innovations, { ...config, founderLinks: 1 });
+    const child = mutateBrain(parent, 0.1, rng, innovations, only({ toggleLinkChance: 1 }));
+    expect(child.links[0]!.enabled).toBe(false);
+    expect(enabledLinks(child)).toBe(0);
+    const grandchild = mutateBrain(child, 0.1, rng, innovations, only({ toggleLinkChance: 1 }));
+    expect(grandchild.links[0]!.enabled).toBe(true);
+  });
+
+  it('is repeatable for a seed', () => {
+    const build = () => {
+      const innovations = new Innovations();
+      const rng = new Rng('repeat');
+      let brain = founderBrain(rng, innovations, config);
+      for (let i = 0; i < 100; i++) brain = mutateBrain(brain, 0.2, rng, innovations, config);
+      return JSON.stringify([brain.links, brain.hiddenIds]);
+    };
+    expect(build()).toBe(build());
+  });
+});
+
+describe('brainCost', () => {
+  it('charges per hidden neuron and per enabled link', () => {
+    const innovations = new Innovations();
+    const rng = new Rng('cost');
+    const parent = founderBrain(rng, innovations, { ...config, founderLinks: 1 });
+    expect(brainCost(parent, config)).toBeCloseTo(config.brainLinkCost, 12);
+    const child = mutateBrain(parent, 0.1, rng, innovations, only({ addNeuronChance: 1 }));
+    expect(brainCost(child, config)).toBeCloseTo(config.brainNeuronCost + 2 * config.brainLinkCost, 12);
+  });
+});

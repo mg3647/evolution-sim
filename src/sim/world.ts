@@ -1,3 +1,13 @@
+import {
+  brainCost,
+  enabledLinks,
+  founderBrain,
+  Innovations,
+  INPUT_COUNT,
+  mutateBrain,
+  Output,
+  think,
+} from './brain';
 import type { SimConfig } from './config';
 import {
   createCreatures,
@@ -7,11 +17,21 @@ import {
   totalCreatureEnergy,
   type Creatures,
 } from './creatures';
-import { biteFor, founderGenes, maxEnergyFor, mutateGenes, strideFor, tickCostFor } from './genome';
+import {
+  biteFor,
+  founderGenes,
+  maxEnergyFor,
+  mutateGenes,
+  senseCostFor,
+  strideFor,
+  tickCostFor,
+} from './genome';
 import { wrap } from './geometry';
 import { createLedger, type EnergyLedger } from './ledger';
 import { cellIndexAt, createPlantField, growPlants, totalPlantEnergy, type PlantField } from './plants';
 import { Rng } from './rng';
+import { Senses } from './senses';
+import { SpatialHash } from './spatialHash';
 import { createHistory, meanOf, recordSample, type History } from './stats';
 
 export interface World {
@@ -22,6 +42,10 @@ export interface World {
   /** Plant energy the field holds when fully grown. */
   plantCapacityTotal: number;
   creatures: Creatures;
+  innovations: Innovations;
+  /** Creature positions as of the start of the current tick. */
+  hash: SpatialHash;
+  senses: Senses;
   ledger: EnergyLedger;
   history: History;
   /** Cumulative counts since the world was created. */
@@ -41,6 +65,7 @@ function spawnFounder(world: World, age: number): number {
     heading: rng.range(0, Math.PI * 2),
     energy,
     genes,
+    brain: founderBrain(rng, world.innovations, config),
     age,
   });
   return energy;
@@ -50,6 +75,7 @@ export function createWorld(config: SimConfig): World {
   config = { ...config };
   const rng = new Rng(config.seed);
   const plants = createPlantField(config, rng);
+  const hash = new SpatialHash(config.worldWidth, config.worldHeight, config.senseRange);
   const world: World = {
     config,
     tick: 0,
@@ -57,6 +83,9 @@ export function createWorld(config: SimConfig): World {
     plants,
     plantCapacityTotal: totalPlantEnergy(plants),
     creatures: createCreatures(Math.max(16, config.initialCreatures)),
+    innovations: new Innovations(),
+    hash,
+    senses: new Senses(config, plants, hash),
     ledger: createLedger(),
     history: createHistory(config.statsInterval, config.statsCapacity),
     births: 0,
@@ -75,39 +104,54 @@ export function createWorld(config: SimConfig): World {
 
 /** Advance the world by one fixed timestep. */
 export function step(world: World): void {
-  const { config, rng, plants, creatures, ledger } = world;
+  const { config, plants, creatures, ledger } = world;
   world.tick++;
 
   growPlants(plants, config.plantGrowthRate, config.plantBareGrowth, ledger);
+  world.hash.build(creatures.x, creatures.y, creatures.count);
 
   // Children born this tick are appended past `alive` and first act next tick.
   const alive = creatures.count;
   for (let i = 0; i < alive; i++) {
     const size = creatures.size[i]!;
-    const speed = creatures.speed[i]!;
+    const brain = creatures.brain[i]!;
 
-    // Wander: a small random turn, then a step forward.
-    const heading = creatures.heading[i]! + rng.range(-config.wanderTurn, config.wanderTurn);
-    const distance = strideFor(size, speed, config);
+    // Sense, then think. Outputs are in [-1, 1].
+    world.senses.sense(creatures, i, world.tick, brain.activation);
+    think(brain);
+    const turn = brain.activation[INPUT_COUNT + Output.Turn]! * config.maxTurn;
+    const thrust = (brain.activation[INPUT_COUNT + Output.Thrust]! + 1) / 2;
+    const wantsChild = brain.activation[INPUT_COUNT + Output.Reproduce]! >= 0;
+
+    // Act: turn, then move forward.
+    const speed = creatures.speed[i]!;
+    const heading = creatures.heading[i]! + turn;
+    const distance = strideFor(size, speed, config) * thrust;
     creatures.heading[i] = heading;
     creatures.x[i] = wrap(creatures.x[i]! + Math.cos(heading) * distance, config.worldWidth);
     creatures.y[i] = wrap(creatures.y[i]! + Math.sin(heading) * distance, config.worldHeight);
 
-    // Eat from the cell underfoot, limited by bite size and stomach room.
+    // Eat from the cell underfoot. Moving fast makes for a poor bite.
     const cell = cellIndexAt(plants, creatures.x[i]!, creatures.y[i]!);
     const maxEnergy = maxEnergyFor(size, config);
     let energy = creatures.energy[i]!;
-    const bite = Math.max(0, Math.min(biteFor(size, config), plants.energy[cell]!, maxEnergy - energy));
+    const reach = biteFor(size, config) * (1 - config.eatSlowdown * thrust);
+    const bite = Math.max(0, Math.min(reach, plants.energy[cell]!, maxEnergy - energy));
     plants.energy[cell]! -= bite;
     energy += bite;
 
-    // Pay for living and moving; whatever is spent leaves the world as heat.
-    const paid = Math.min(tickCostFor(size, speed, config), energy);
+    // Pay for body, movement, senses and brain; what is spent leaves as heat.
+    const cost =
+      tickCostFor(size, speed, thrust, config) +
+      senseCostFor(creatures.sensorRange[i]!, config) +
+      brainCost(brain, config);
+    const paid = Math.min(cost, energy);
     energy -= paid;
     ledger.heatOut += paid;
     const age = ++creatures.age[i]!;
 
     if (
+      wantsChild &&
       energy >= config.reproduceThreshold * maxEnergy &&
       age >= config.minReproduceAge &&
       creatures.count < config.maxCreatures
@@ -143,7 +187,15 @@ export function step(world: World): void {
  */
 function giveBirth(world: World, parent: number, energy: number): number {
   const { config, rng, creatures, ledger } = world;
-  const genes = mutateGenes(genesOf(creatures, parent), rng, config);
+  const parentGenes = genesOf(creatures, parent);
+  const genes = mutateGenes(parentGenes, rng, config);
+  const brain = mutateBrain(
+    creatures.brain[parent]!,
+    parentGenes.mutationRate,
+    rng,
+    world.innovations,
+    config,
+  );
   // A smaller child may not be able to hold a full share; the parent keeps the rest.
   const childMax = maxEnergyFor(genes.size, config);
   const given = Math.min(energy * config.offspringShare, childMax / (1 - config.birthCost));
@@ -156,6 +208,7 @@ function giveBirth(world: World, parent: number, energy: number): number {
     heading: rng.range(0, Math.PI * 2),
     energy: given - lost,
     genes,
+    brain,
     parentId: creatures.id[parent]!,
     generation: creatures.generation[parent]! + 1,
   });
@@ -165,12 +218,22 @@ function giveBirth(world: World, parent: number, energy: number): number {
 
 function sampleHistory(world: World): void {
   const { creatures } = world;
+  let links = 0;
+  let neurons = 0;
+  for (let i = 0; i < creatures.count; i++) {
+    links += enabledLinks(creatures.brain[i]!);
+    neurons += creatures.brain[i]!.hiddenIds.length;
+  }
+  const count = Math.max(1, creatures.count);
   recordSample(world.history, {
     tick: world.tick,
     population: creatures.count,
     plantFill: world.plantCapacityTotal > 0 ? totalPlantEnergy(world.plants) / world.plantCapacityTotal : 0,
     meanSize: meanOf(creatures.size, creatures),
     meanSpeed: meanOf(creatures.speed, creatures),
+    meanSensorRange: meanOf(creatures.sensorRange, creatures),
+    meanLinks: links / count,
+    meanNeurons: neurons / count,
   });
 }
 
@@ -187,7 +250,10 @@ function hashBytes(h: number, bytes: Uint8Array): number {
   return h;
 }
 
-function bytesOf(array: Uint32Array | Float32Array | Float64Array, count: number): Uint8Array {
+function bytesOf(
+  array: Uint16Array | Uint32Array | Float32Array | Float64Array,
+  count = array.length,
+): Uint8Array {
   return new Uint8Array(array.buffer, array.byteOffset, count * array.BYTES_PER_ELEMENT);
 }
 
@@ -198,9 +264,10 @@ function bytesOf(array: Uint32Array | Float32Array | Float64Array, count: number
 export function hashWorld(world: World): number {
   const { creatures: c, plants } = world;
   const s = world.rng.getState();
+  const header = [world.tick, s.a, s.b, s.c, s.d, c.count, c.nextId, ...world.innovations.counts()];
   let h = 2166136261;
-  h = hashBytes(h, bytesOf(new Uint32Array([world.tick, s.a, s.b, s.c, s.d, c.count, c.nextId]), 7));
-  h = hashBytes(h, bytesOf(plants.energy, plants.energy.length));
+  h = hashBytes(h, bytesOf(new Uint32Array(header)));
+  h = hashBytes(h, bytesOf(plants.energy));
   for (const field of [
     c.id,
     c.parentId,
@@ -212,10 +279,19 @@ export function hashWorld(world: World): number {
     c.age,
     c.size,
     c.speed,
+    c.sensorRange,
     c.hue,
     c.mutationRate,
   ]) {
     h = hashBytes(h, bytesOf(field, c.count));
+  }
+  for (let i = 0; i < c.count; i++) {
+    const brain = c.brain[i]!;
+    h = hashBytes(h, bytesOf(new Uint32Array(brain.links.map((link) => link.innovation * 2 + +link.enabled))));
+    h = hashBytes(h, bytesOf(new Float32Array(brain.links.map((link) => link.weight))));
+    h = hashBytes(h, bytesOf(brain.linkFrom));
+    h = hashBytes(h, bytesOf(brain.linkTo));
+    h = hashBytes(h, bytesOf(brain.activation));
   }
   return h >>> 0;
 }

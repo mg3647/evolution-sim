@@ -8,6 +8,8 @@ import type { Rng } from './rng';
 export interface Genes {
   size: number;
   speed: number;
+  /** Multiplier on the configured length of the vision rays. */
+  sensorRange: number;
   /** Body colour as a hue in [0, 1). No effect on survival; it marks lineages. */
   hue: number;
   /** Standard deviation of the changes applied to each gene at birth. */
@@ -24,7 +26,7 @@ function clamp(value: number, min: number, max: number): number {
 /** Genes for a creature with no parent: average traits and a random colour. */
 export function founderGenes(rng: Rng, config: SimConfig): Genes {
   return mutateGenes(
-    { size: 1, speed: 1, hue: rng.float(), mutationRate: config.initialMutationRate },
+    { size: 1, speed: 1, sensorRange: 1, hue: rng.float(), mutationRate: config.initialMutationRate },
     rng,
     config,
   );
@@ -40,6 +42,11 @@ export function mutateGenes(parent: Genes, rng: Rng, config: SimConfig): Genes {
   return {
     size: clamp(parent.size * Math.exp(rng.gaussian() * rate), config.minSize, config.maxSize),
     speed: clamp(parent.speed * Math.exp(rng.gaussian() * rate), config.minSpeed, config.maxSpeed),
+    sensorRange: clamp(
+      parent.sensorRange * Math.exp(rng.gaussian() * rate),
+      config.minSensorRange,
+      config.maxSensorRange,
+    ),
     hue: hue - Math.floor(hue),
     mutationRate: clamp(
       rate * Math.exp(rng.gaussian() * rate),
@@ -59,8 +66,13 @@ export function biteFor(size: number, config: SimConfig): number {
   return config.biteSize * size * size;
 }
 
+/** Energy the senses cost per tick. Seeing farther means watching a larger area. */
+export function senseCostFor(sensorRange: number, config: SimConfig): number {
+  return config.senseCost * sensorRange * sensorRange;
+}
+
 /**
- * Distance moved per tick. Longer legs cover more ground, so a bigger body
+ * Distance moved per tick at full thrust. Longer legs cover more ground, so a bigger body
  * reaches more food per tick at the same speed gene.
  */
 export function strideFor(size: number, speed: number, config: SimConfig): number {
@@ -73,9 +85,11 @@ export function strideFor(size: number, speed: number, config: SimConfig): numbe
  * size than the stride does, which penalises huge ones. Moving costs grow
  * with the square of speed, so speed pays off only where food is sparse.
  */
-export function tickCostFor(size: number, speed: number, config: SimConfig): number {
+export function tickCostFor(size: number, speed: number, thrust: number, config: SimConfig): number {
   const fixed = config.upkeepFixedShare;
   const upkeep = config.upkeepCost * (fixed + (1 - fixed) * size * Math.sqrt(size));
-  const movement = config.moveCost * config.creatureSpeed * size * size * speed * speed;
+  // A body built for speed is costly per unit of distance even when it ambles,
+  // so the speed gene is not a free option to hold in reserve.
+  const movement = config.moveCost * config.creatureSpeed * size * size * speed * speed * thrust;
   return upkeep + movement;
 }

@@ -43,6 +43,11 @@ export class SimClient {
     this.send({ type: 'setSpeed', speed });
   }
 
+  /** Select the creature nearest a world position within `radius`, or none. */
+  pick(x: number, y: number, radius: number): void {
+    this.send({ type: 'pick', x, y, radius });
+  }
+
   destroy(): void {
     this.worker.terminate();
   }
