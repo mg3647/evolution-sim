@@ -46,6 +46,12 @@ describe('plant field', () => {
     expect(totalPlantEnergy(field)).toBeGreaterThan(0);
   });
 
+  it('spans the full range of fertility, from barren to fully fertile', () => {
+    const field = createPlantField(config, new Rng('f'));
+    expect(Math.max(...field.fertility)).toBeCloseTo(1, 5);
+    expect(Math.min(...field.fertility)).toBe(0);
+  });
+
   it('maps positions to cells, clamping the far edge', () => {
     const field = createPlantField(config, new Rng('f'));
     expect(cellIndexAt(field, 0, 0)).toBe(0);

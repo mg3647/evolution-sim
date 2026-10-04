@@ -33,11 +33,20 @@ export class SpatialHash {
     return cy * this.cols + cx;
   }
 
-  /** Index the first `count` points. Positions must lie inside the world. */
+  /**
+   * Index the first `count` points. Positions must lie inside the world. They
+   * are copied, so queries see them as they were at build time even if the
+   * caller moves points, or reallocates its arrays, afterwards.
+   */
   build(xs: Float32Array, ys: Float32Array, count: number): void {
-    this.xs = xs;
-    this.ys = ys;
-    if (this.items.length < count) this.items = new Uint32Array(Math.max(count, this.items.length * 2));
+    if (this.items.length < count) {
+      const size = Math.max(count, this.items.length * 2);
+      this.items = new Uint32Array(size);
+      this.xs = new Float32Array(size);
+      this.ys = new Float32Array(size);
+    }
+    this.xs.set(xs.subarray(0, count));
+    this.ys.set(ys.subarray(0, count));
 
     // Counting sort: count per cell, prefix-sum into end offsets, then fill backwards.
     const start = this.cellStart;

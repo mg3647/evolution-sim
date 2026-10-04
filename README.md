@@ -41,4 +41,7 @@ Then open the address Vite prints (usually http://localhost:5173).
 
 - All randomness goes through `Rng` in `src/sim/rng.ts`. No `Math.random`, no
   clock reads. The same seed and config always produce the same world.
+  (Math functions like `exp` and `tanh` can differ in the last bit between
+  browser engines, so a seed is only guaranteed to replay the same run in the
+  same browser.)
 - Every constant lives in `src/sim/config.ts`.
