@@ -290,7 +290,7 @@ export const defaultConfig: SimConfig = {
   maxAge: 5000,
   bodyEnergy: 20,
 
-  attackDamage: 0.25,
+  attackDamage: 0.45,
   herbivoreAttack: 0.05,
   attackCost: 0.05,
   attackReach: 6,

@@ -139,7 +139,7 @@ export const PRESETS: Preset[] = [
     id: 'hunters',
     label: 'Hunting grounds',
     description: 'Strong bites and meat-rich bodies, so hunters take hold quickly.',
-    overrides: { attackDamage: 0.4, bodyEnergy: 30, meatDecayRate: 0.0003, plantCapacity: 30 },
+    overrides: { attackDamage: 0.6, bodyEnergy: 30, meatDecayRate: 0.0003, plantCapacity: 30 },
   },
   {
     id: 'harsh',
