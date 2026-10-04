@@ -1,9 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import type uPlot from 'uplot';
   import { WorldRenderer } from '../render/renderer';
   import { defaultConfig } from '../sim/config';
   import { SimClient } from '../worker/client';
-  import type { Snapshot, Speed } from '../worker/protocol';
+  import type { HistoryData, Snapshot, Speed } from '../worker/protocol';
+  import Chart, { type ChartSeries } from './Chart.svelte';
 
   const SPEEDS: { label: string; value: Speed }[] = [
     { label: '1x', value: 1 },
@@ -13,11 +15,28 @@
     { label: 'Max', value: 'max' },
   ];
 
+  const POPULATION_SERIES: ChartSeries[] = [
+    { label: 'Creatures', color: '#e8c468' },
+    { label: 'Plants %', color: '#4caf50', axis: 'right' },
+  ];
+  const TRAIT_SERIES: ChartSeries[] = [
+    { label: 'Mean size', color: '#6cb6ff' },
+    { label: 'Mean speed', color: '#ff8f6b' },
+  ];
+
   let host: HTMLDivElement;
   let client: SimClient | undefined;
   let renderer: WorldRenderer | undefined;
   let snapshot = $state.raw<Snapshot | null>(null);
+  let history = $state.raw<HistoryData | null>(null);
   let seed = $state(defaultConfig.seed);
+
+  const populationData = $derived<uPlot.AlignedData | null>(
+    history && [history.tick, history.population, history.plantPercent],
+  );
+  const traitData = $derived<uPlot.AlignedData | null>(
+    history && [history.tick, history.meanSize, history.meanSpeed],
+  );
 
   onMount(() => {
     let disposed = false;
@@ -28,9 +47,12 @@
         return;
       }
       renderer = r;
-      client = new SimClient((s) => {
-        snapshot = s;
-        r.update(s);
+      client = new SimClient({
+        onSnapshot: (s) => {
+          snapshot = s;
+          r.update(s);
+        },
+        onHistory: (h) => (history = h),
       });
       client.init({ ...defaultConfig, seed });
     });
@@ -49,6 +71,14 @@
   function restart(event: SubmitEvent) {
     event.preventDefault();
     client?.init({ ...defaultConfig, seed });
+  }
+
+  function count(value: number | undefined): string {
+    return value === undefined ? '-' : value.toLocaleString();
+  }
+
+  function decimal(value: number | undefined): string {
+    return value === undefined ? '-' : value.toFixed(2);
   }
 </script>
 
@@ -84,21 +114,38 @@
     </form>
 
     <div class="stats">
-      <span>Creatures <b>{snapshot ? snapshot.population.toLocaleString() : '-'}</b></span>
-      <span>Plants <b>{snapshot ? Math.round(snapshot.plantFill * 100) : '-'}%</b></span>
-      <span
-        title="Deaths so far: {snapshot?.deaths.starved ?? 0} starved, {snapshot?.deaths.oldAge ?? 0} of old age"
-      >
-        Deaths <b>{snapshot ? (snapshot.deaths.starved + snapshot.deaths.oldAge).toLocaleString() : '-'}</b>
-      </span>
-      <span>Tick <b>{snapshot ? snapshot.tick.toLocaleString() : '-'}</b></span>
-      <span><b>{snapshot ? Math.round(snapshot.measuredTps).toLocaleString() : '-'}</b> ticks/s</span>
+      <span>Tick <b>{count(snapshot?.tick)}</b></span>
+      <span><b>{count(snapshot ? Math.round(snapshot.measuredTps) : undefined)}</b> ticks/s</span>
     </div>
 
     <button onclick={() => renderer?.fitToView()} disabled={!snapshot}>Fit view</button>
   </header>
 
-  <div class="world" bind:this={host}></div>
+  <div class="main">
+    <div class="world" bind:this={host}></div>
+
+    <aside>
+      <dl>
+        <div><dt>Creatures</dt><dd>{count(snapshot?.population)}</dd></div>
+        <div><dt>Plants</dt><dd>{snapshot ? Math.round(snapshot.plantFill * 100) : '-'}%</dd></div>
+        <div><dt>Mean size</dt><dd>{decimal(snapshot?.meanSize)}</dd></div>
+        <div><dt>Mean speed</dt><dd>{decimal(snapshot?.meanSpeed)}</dd></div>
+        <div><dt>Generation</dt><dd>{count(snapshot?.maxGeneration)}</dd></div>
+        <div><dt>Births</dt><dd>{count(snapshot?.births)}</dd></div>
+        <div><dt>Starved</dt><dd>{count(snapshot?.deaths.starved)}</dd></div>
+        <div><dt>Died of old age</dt><dd>{count(snapshot?.deaths.oldAge)}</dd></div>
+        <div
+          title="Parentless creatures added because the population fell below the minimum"
+        >
+          <dt>Reseeded</dt>
+          <dd>{count(snapshot?.reseeded)}</dd>
+        </div>
+      </dl>
+
+      <Chart title="Population" series={POPULATION_SERIES} data={populationData} />
+      <Chart title="Traits" series={TRAIT_SERIES} data={traitData} />
+    </aside>
+  </div>
 </div>
 
 <style>
@@ -147,8 +194,15 @@
     color: var(--text);
   }
 
+  .main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+  }
+
   .world {
     flex: 1;
+    min-width: 0;
     min-height: 0;
     overflow: hidden;
     cursor: grab;
@@ -156,5 +210,53 @@
 
   .world:active {
     cursor: grabbing;
+  }
+
+  aside {
+    width: 340px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 12px;
+    overflow-y: auto;
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+  }
+
+  dl {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 16px;
+    margin: 0;
+  }
+
+  dl div {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  dt {
+    color: var(--muted);
+  }
+
+  dd {
+    margin: 0;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  @media (max-width: 800px) {
+    .main {
+      flex-direction: column;
+    }
+
+    aside {
+      width: auto;
+      max-height: 45%;
+      border-left: none;
+      border-top: 1px solid var(--border);
+    }
   }
 </style>

@@ -52,13 +52,28 @@ export function cellIndexAt(field: PlantField, x: number, y: number): number {
   return cy * field.cols + cx;
 }
 
-/** Regrow every cell toward its capacity, drawing the energy from sunlight. */
-export function growPlants(field: PlantField, growthRate: number, ledger: EnergyLedger): void {
+/**
+ * Regrow every cell toward its capacity, drawing the energy from sunlight.
+ *
+ * Growth is logistic: existing plants make more plants, so a half-eaten cell
+ * recovers fastest and a cell grazed bare recovers slowly, at `bareGrowth`
+ * times the full rate. Overgrazing therefore costs the grazers later.
+ */
+export function growPlants(
+  field: PlantField,
+  growthRate: number,
+  bareGrowth: number,
+  ledger: EnergyLedger,
+): void {
   const { energy, capacity } = field;
   let grown = 0;
   for (let i = 0; i < energy.length; i++) {
-    const growth = (capacity[i]! - energy[i]!) * growthRate;
-    energy[i]! += growth;
+    const cap = capacity[i]!;
+    if (cap === 0) continue;
+    const current = energy[i]!;
+    const cover = bareGrowth + (1 - bareGrowth) * (current / cap);
+    const growth = (cap - current) * growthRate * cover;
+    energy[i] = current + growth;
     grown += growth;
   }
   ledger.sunIn += grown;

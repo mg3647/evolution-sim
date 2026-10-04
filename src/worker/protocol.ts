@@ -11,7 +11,7 @@ export type ToWorker =
   | { type: 'setSpeed'; speed: Speed };
 
 /** Number of floats per creature in `Snapshot.creatures`. */
-export const CREATURE_STRIDE = 4;
+export const CREATURE_STRIDE = 6;
 
 /** What the page needs to draw one frame and update the controls. */
 export interface Snapshot {
@@ -23,8 +23,12 @@ export interface Snapshot {
   measuredTps: number;
 
   population: number;
-  /** Per creature: x, y, heading, energy as a fraction of the maximum. */
+  /** Per creature: x, y, heading, energy as a fraction of its maximum, radius, hue. */
   creatures: Float32Array;
+  meanSize: number;
+  meanSpeed: number;
+  /** Highest generation among living creatures. */
+  maxGeneration: number;
 
   plantCols: number;
   plantRows: number;
@@ -33,7 +37,21 @@ export interface Snapshot {
   /** Plant energy in the world as a fraction of what it holds when fully grown. */
   plantFill: number;
 
+  births: number;
+  reseeded: number;
   deaths: { starved: number; oldAge: number };
 }
 
-export type FromWorker = { type: 'snapshot'; snapshot: Snapshot };
+/** Statistics over the whole run so far, one entry per sample, for charts. */
+export interface HistoryData {
+  tick: Float64Array;
+  population: Float32Array;
+  /** Plant energy as a percentage of the fully grown world. */
+  plantPercent: Float32Array;
+  meanSize: Float32Array;
+  meanSpeed: Float32Array;
+}
+
+export type FromWorker =
+  | { type: 'snapshot'; snapshot: Snapshot }
+  | { type: 'history'; history: HistoryData };

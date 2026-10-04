@@ -60,12 +60,36 @@ describe('plant field', () => {
     field.energy.fill(0);
     const ledger = createLedger();
 
-    growPlants(field, 0.1, ledger);
+    // With bare growth at 1 the cover term drops out and growth is linear.
+    growPlants(field, 0.1, 1, ledger);
     expect(totalPlantEnergy(field)).toBeCloseTo(full * 0.1, 6);
     expect(ledger.sunIn).toBeCloseTo(full * 0.1, 6);
 
-    for (let i = 0; i < 500; i++) growPlants(field, 0.1, ledger);
+    for (let i = 0; i < 500; i++) growPlants(field, 0.1, 1, ledger);
     expect(totalPlantEnergy(field)).toBeCloseTo(full, 6);
     expect(ledger.sunIn).toBeCloseTo(full, 6);
+  });
+
+  it('grows a half-eaten cell faster than a bare one, and never past capacity', () => {
+    const field = createPlantField(config, new Rng('f'));
+    const full = totalPlantEnergy(field);
+
+    const growthFrom = (fill: number) => {
+      for (let i = 0; i < field.energy.length; i++) field.energy[i] = field.capacity[i]! * fill;
+      const ledger = createLedger();
+      growPlants(field, 0.1, 0.1, ledger);
+      return ledger.sunIn;
+    };
+    expect(growthFrom(0.5)).toBeGreaterThan(growthFrom(0));
+    expect(growthFrom(0)).toBeGreaterThan(0);
+    expect(growthFrom(1)).toBeCloseTo(0, 9);
+
+    field.energy.fill(0);
+    const ledger = createLedger();
+    for (let i = 0; i < 5000; i++) growPlants(field, 0.1, 0.1, ledger);
+    expect(totalPlantEnergy(field)).toBeCloseTo(full, 6);
+    for (let i = 0; i < field.energy.length; i++) {
+      expect(field.energy[i]).toBeLessThanOrEqual(field.capacity[i]! + 1e-9);
+    }
   });
 });

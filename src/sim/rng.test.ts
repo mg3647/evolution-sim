@@ -42,6 +42,21 @@ describe('Rng', () => {
     expect([...seen].sort()).toEqual([2, 3, 4, 5]);
   });
 
+  it('draws gaussians with mean 0 and standard deviation 1', () => {
+    const rng = new Rng('gauss');
+    const n = 20000;
+    let sum = 0;
+    let sumSquares = 0;
+    for (let i = 0; i < n; i++) {
+      const v = rng.gaussian();
+      expect(Number.isFinite(v)).toBe(true);
+      sum += v;
+      sumSquares += v * v;
+    }
+    expect(sum / n).toBeCloseTo(0, 1);
+    expect(Math.sqrt(sumSquares / n)).toBeCloseTo(1, 1);
+  });
+
   it('picks only from the given items and rejects an empty array', () => {
     const rng = new Rng('pick');
     const items = ['a', 'b', 'c'];

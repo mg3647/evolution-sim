@@ -1,49 +1,76 @@
 import type { SimConfig } from './config';
 import {
   createCreatures,
+  genesOf,
   removeCreature,
   spawnCreature,
   totalCreatureEnergy,
   type Creatures,
 } from './creatures';
+import { biteFor, founderGenes, maxEnergyFor, mutateGenes, strideFor, tickCostFor } from './genome';
 import { wrap } from './geometry';
 import { createLedger, type EnergyLedger } from './ledger';
 import { cellIndexAt, createPlantField, growPlants, totalPlantEnergy, type PlantField } from './plants';
 import { Rng } from './rng';
+import { createHistory, meanOf, recordSample, type History } from './stats';
 
 export interface World {
   config: SimConfig;
   tick: number;
   rng: Rng;
   plants: PlantField;
+  /** Plant energy the field holds when fully grown. */
+  plantCapacityTotal: number;
   creatures: Creatures;
   ledger: EnergyLedger;
-  /** Cumulative deaths by cause. */
+  history: History;
+  /** Cumulative counts since the world was created. */
+  births: number;
+  reseeded: number;
   deaths: { starved: number; oldAge: number };
+}
+
+/** Add a creature with no parent at a random position. Returns its energy. */
+function spawnFounder(world: World, age: number): number {
+  const { config, rng, creatures } = world;
+  const genes = founderGenes(rng, config);
+  const energy = Math.min(config.creatureStartEnergy, maxEnergyFor(genes.size, config));
+  spawnCreature(creatures, {
+    x: rng.range(0, config.worldWidth),
+    y: rng.range(0, config.worldHeight),
+    heading: rng.range(0, Math.PI * 2),
+    energy,
+    genes,
+    age,
+  });
+  return energy;
 }
 
 export function createWorld(config: SimConfig): World {
   config = { ...config };
   const rng = new Rng(config.seed);
   const plants = createPlantField(config, rng);
-  const creatures = createCreatures(Math.max(16, config.initialCreatures));
+  const world: World = {
+    config,
+    tick: 0,
+    rng,
+    plants,
+    plantCapacityTotal: totalPlantEnergy(plants),
+    creatures: createCreatures(Math.max(16, config.initialCreatures)),
+    ledger: createLedger(),
+    history: createHistory(config.statsInterval, config.statsCapacity),
+    births: 0,
+    reseeded: 0,
+    deaths: { starved: 0, oldAge: 0 },
+  };
 
   for (let i = 0; i < config.initialCreatures; i++) {
-    spawnCreature(
-      creatures,
-      rng.range(0, config.worldWidth),
-      rng.range(0, config.worldHeight),
-      rng.range(0, Math.PI * 2),
-      config.creatureStartEnergy,
-      // Spread starting ages so the founders don't all die of old age at once.
-      rng.int(0, Math.floor(config.maxAge / 2)),
-    );
+    // Spread starting ages so the founders don't all die of old age at once.
+    spawnFounder(world, rng.int(0, Math.floor(config.maxAge / 2)));
   }
-
-  const ledger = createLedger();
-  ledger.initial = totalPlantEnergy(plants) + totalCreatureEnergy(creatures);
-
-  return { config, tick: 0, rng, plants, creatures, ledger, deaths: { starved: 0, oldAge: 0 } };
+  world.ledger.initial = totalEnergy(world);
+  sampleHistory(world);
+  return world;
 }
 
 /** Advance the world by one fixed timestep. */
@@ -51,30 +78,43 @@ export function step(world: World): void {
   const { config, rng, plants, creatures, ledger } = world;
   world.tick++;
 
-  growPlants(plants, config.plantGrowthRate, ledger);
+  growPlants(plants, config.plantGrowthRate, config.plantBareGrowth, ledger);
 
-  const cost = config.upkeepCost + config.moveCost * config.creatureSpeed;
-  for (let i = 0; i < creatures.count; i++) {
+  // Children born this tick are appended past `alive` and first act next tick.
+  const alive = creatures.count;
+  for (let i = 0; i < alive; i++) {
+    const size = creatures.size[i]!;
+    const speed = creatures.speed[i]!;
+
     // Wander: a small random turn, then a step forward.
     const heading = creatures.heading[i]! + rng.range(-config.wanderTurn, config.wanderTurn);
+    const distance = strideFor(size, speed, config);
     creatures.heading[i] = heading;
-    const x = wrap(creatures.x[i]! + Math.cos(heading) * config.creatureSpeed, config.worldWidth);
-    const y = wrap(creatures.y[i]! + Math.sin(heading) * config.creatureSpeed, config.worldHeight);
-    creatures.x[i] = x;
-    creatures.y[i] = y;
+    creatures.x[i] = wrap(creatures.x[i]! + Math.cos(heading) * distance, config.worldWidth);
+    creatures.y[i] = wrap(creatures.y[i]! + Math.sin(heading) * distance, config.worldHeight);
 
     // Eat from the cell underfoot, limited by bite size and stomach room.
     const cell = cellIndexAt(plants, creatures.x[i]!, creatures.y[i]!);
+    const maxEnergy = maxEnergyFor(size, config);
     let energy = creatures.energy[i]!;
-    const bite = Math.min(config.biteSize, plants.energy[cell]!, config.creatureMaxEnergy - energy);
+    const bite = Math.max(0, Math.min(biteFor(size, config), plants.energy[cell]!, maxEnergy - energy));
     plants.energy[cell]! -= bite;
     energy += bite;
 
     // Pay for living and moving; whatever is spent leaves the world as heat.
-    const paid = Math.min(cost, energy);
-    creatures.energy[i] = energy - paid;
+    const paid = Math.min(tickCostFor(size, speed, config), energy);
+    energy -= paid;
     ledger.heatOut += paid;
-    creatures.age[i]!++;
+    const age = ++creatures.age[i]!;
+
+    if (
+      energy >= config.reproduceThreshold * maxEnergy &&
+      age >= config.minReproduceAge &&
+      creatures.count < config.maxCreatures
+    ) {
+      energy -= giveBirth(world, i, energy);
+    }
+    creatures.energy[i] = energy;
   }
 
   // Deaths. Backwards, so a removal only moves an already-checked creature.
@@ -87,6 +127,51 @@ export function step(world: World): void {
     ledger.heatOut += creatures.energy[i]!;
     removeCreature(creatures, i);
   }
+
+  // Keep a dying world going with fresh parentless creatures.
+  while (creatures.count < config.minPopulation) {
+    ledger.seedIn += spawnFounder(world, 0);
+    world.reseeded++;
+  }
+
+  if (world.tick % world.history.interval === 0) sampleHistory(world);
+}
+
+/**
+ * Split off a mutated child from the creature at `parent`, which currently
+ * holds `energy`. Returns the energy the parent gives up.
+ */
+function giveBirth(world: World, parent: number, energy: number): number {
+  const { config, rng, creatures, ledger } = world;
+  const genes = mutateGenes(genesOf(creatures, parent), rng, config);
+  // A smaller child may not be able to hold a full share; the parent keeps the rest.
+  const childMax = maxEnergyFor(genes.size, config);
+  const given = Math.min(energy * config.offspringShare, childMax / (1 - config.birthCost));
+  const lost = given * config.birthCost;
+  ledger.heatOut += lost;
+
+  spawnCreature(creatures, {
+    x: creatures.x[parent]!,
+    y: creatures.y[parent]!,
+    heading: rng.range(0, Math.PI * 2),
+    energy: given - lost,
+    genes,
+    parentId: creatures.id[parent]!,
+    generation: creatures.generation[parent]! + 1,
+  });
+  world.births++;
+  return given;
+}
+
+function sampleHistory(world: World): void {
+  const { creatures } = world;
+  recordSample(world.history, {
+    tick: world.tick,
+    population: creatures.count,
+    plantFill: world.plantCapacityTotal > 0 ? totalPlantEnergy(world.plants) / world.plantCapacityTotal : 0,
+    meanSize: meanOf(creatures.size, creatures),
+    meanSpeed: meanOf(creatures.speed, creatures),
+  });
 }
 
 /** Energy currently held by everything in the world. */
@@ -116,11 +201,21 @@ export function hashWorld(world: World): number {
   let h = 2166136261;
   h = hashBytes(h, bytesOf(new Uint32Array([world.tick, s.a, s.b, s.c, s.d, c.count, c.nextId]), 7));
   h = hashBytes(h, bytesOf(plants.energy, plants.energy.length));
-  h = hashBytes(h, bytesOf(c.id, c.count));
-  h = hashBytes(h, bytesOf(c.x, c.count));
-  h = hashBytes(h, bytesOf(c.y, c.count));
-  h = hashBytes(h, bytesOf(c.heading, c.count));
-  h = hashBytes(h, bytesOf(c.energy, c.count));
-  h = hashBytes(h, bytesOf(c.age, c.count));
+  for (const field of [
+    c.id,
+    c.parentId,
+    c.generation,
+    c.x,
+    c.y,
+    c.heading,
+    c.energy,
+    c.age,
+    c.size,
+    c.speed,
+    c.hue,
+    c.mutationRate,
+  ]) {
+    h = hashBytes(h, bytesOf(field, c.count));
+  }
   return h >>> 0;
 }

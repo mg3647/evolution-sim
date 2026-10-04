@@ -18,28 +18,61 @@ export interface SimConfig {
   plantCellSize: number;
   /** Plant energy a cell holds when full, at fertility 1. */
   plantCapacity: number;
-  /** Fraction of a cell's missing plant energy that regrows per tick. */
+  /** Fraction of a cell's missing plant energy that regrows per tick, at best. */
   plantGrowthRate: number;
+  /** Growth speed of a cell grazed bare, as a fraction of the best speed. */
+  plantBareGrowth: number;
   /** Fertility below this is barren; raises contrast between rich and poor land. */
   fertilityFloor: number;
 
   initialCreatures: number;
   creatureStartEnergy: number;
-  /** A creature cannot store more than this. */
+  /** Most energy a creature of size 1 can store. Scales with size squared. */
   creatureMaxEnergy: number;
+  /** Radius of a creature of size 1. */
   creatureRadius: number;
-  /** Distance moved per tick. */
+  /** Distance moved per tick at speed 1. */
   creatureSpeed: number;
   /** Largest random heading change per tick, in radians. */
   wanderTurn: number;
-  /** Energy spent per tick just staying alive. */
+  /** Energy a creature of size 1 spends per tick just staying alive. */
   upkeepCost: number;
-  /** Energy spent per unit of distance moved. */
+  /** Share of upkeep that every body pays regardless of its size. */
+  upkeepFixedShare: number;
+  /** Energy a creature of size 1 and speed 1 spends per unit of distance moved. */
   moveCost: number;
-  /** Most plant energy a creature can eat per tick. */
+  /** Most plant energy a creature of size 1 can eat per tick. */
   biteSize: number;
   /** Creatures die of old age at this many ticks. */
   maxAge: number;
+
+  /** A creature reproduces when its energy reaches this fraction of its maximum. */
+  reproduceThreshold: number;
+  /** Fraction of the parent's energy handed to the child. */
+  offspringShare: number;
+  /** Fraction of the handed-over energy lost as heat. */
+  birthCost: number;
+  /** Creatures younger than this many ticks cannot reproduce. */
+  minReproduceAge: number;
+  /** No births happen while the population is at this size. */
+  maxCreatures: number;
+  /** Below this population, new parentless creatures are added. */
+  minPopulation: number;
+
+  /** Gene limits. Size and speed are multipliers on the base values above. */
+  minSize: number;
+  maxSize: number;
+  minSpeed: number;
+  maxSpeed: number;
+  /** Mutation rate of creatures with no parent. */
+  initialMutationRate: number;
+  minMutationRate: number;
+  maxMutationRate: number;
+
+  /** Ticks between history samples at the start of a run. */
+  statsInterval: number;
+  /** Number of history samples kept. */
+  statsCapacity: number;
 }
 
 export const defaultConfig: SimConfig = {
@@ -50,7 +83,8 @@ export const defaultConfig: SimConfig = {
 
   plantCellSize: 20,
   plantCapacity: 12,
-  plantGrowthRate: 0.001,
+  plantGrowthRate: 0.006,
+  plantBareGrowth: 0.1,
   fertilityFloor: 0.3,
 
   initialCreatures: 400,
@@ -59,8 +93,27 @@ export const defaultConfig: SimConfig = {
   creatureRadius: 5,
   creatureSpeed: 1.5,
   wanderTurn: 0.3,
-  upkeepCost: 0.05,
-  moveCost: 0.02,
+  upkeepCost: 0.12,
+  upkeepFixedShare: 0.5,
+  moveCost: 0.05,
   biteSize: 1,
   maxAge: 9000,
+
+  reproduceThreshold: 0.6,
+  offspringShare: 0.5,
+  birthCost: 0.1,
+  minReproduceAge: 150,
+  maxCreatures: 5000,
+  minPopulation: 20,
+
+  minSize: 0.4,
+  maxSize: 3,
+  minSpeed: 0.2,
+  maxSpeed: 4,
+  initialMutationRate: 0.08,
+  minMutationRate: 0.005,
+  maxMutationRate: 0.5,
+
+  statsInterval: 30,
+  statsCapacity: 1000,
 };

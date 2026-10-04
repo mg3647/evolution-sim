@@ -15,16 +15,20 @@ const FIT_MARGIN = 0.9;
 /** Ground colour with no plants and with a full cell, as [r, g, b]. */
 const SOIL_COLOR = [28, 24, 20] as const;
 const PLANT_COLOR = [64, 158, 60] as const;
-/** Creature tint when starving and when full. */
-const HUNGRY_COLOR = [150, 70, 60] as const;
-const FED_COLOR = [255, 214, 130] as const;
+const CREATURE_SATURATION = 0.7;
+/** Brightness of a starving creature; a well-fed one is at 1. */
+const DIMMEST = 0.45;
 const CREATURE_TEXTURE_SIZE = 64;
+/** Smallest radius a creature is drawn at, in screen pixels. */
+const MIN_SCREEN_RADIUS = 2.5;
 
-function lerpColor(from: readonly number[], to: readonly number[], t: number): number {
-  const r = from[0]! + (to[0]! - from[0]!) * t;
-  const g = from[1]! + (to[1]! - from[1]!) * t;
-  const b = from[2]! + (to[2]! - from[2]!) * t;
-  return (r << 16) | (g << 8) | b;
+/** Convert hue, saturation and value in [0, 1] to a 0xRRGGBB colour. */
+function hsvToRgb(h: number, s: number, v: number): number {
+  const channel = (offset: number) => {
+    const k = (offset + h * 6) % 6;
+    return Math.round(255 * (v - v * s * Math.max(0, Math.min(k, 4 - k, 1))));
+  };
+  return (channel(5) << 16) | (channel(3) << 8) | channel(1);
 }
 
 /** A white disc with a dark spot at the front, tinted per creature. */
@@ -56,6 +60,7 @@ export class WorldRenderer {
   private plantCanvas = document.createElement('canvas');
   private plantImage: ImageData | null = null;
   private hostObserver: ResizeObserver | null = null;
+  private lastSnapshot: Snapshot | null = null;
   private worldWidth = 0;
   private worldHeight = 0;
   private dragging = false;
@@ -86,9 +91,15 @@ export class WorldRenderer {
 
   /** Draw the world as of this snapshot. */
   update(snapshot: Snapshot): void {
+    this.lastSnapshot = snapshot;
     this.setWorldSize(snapshot.config.worldWidth, snapshot.config.worldHeight);
     this.drawPlants(snapshot);
     this.drawCreatures(snapshot);
+  }
+
+  /** Creature draw size depends on zoom, so redraw them when it changes. */
+  private onZoomChanged(): void {
+    if (this.lastSnapshot) this.drawCreatures(this.lastSnapshot);
   }
 
   fitToView(): void {
@@ -120,6 +131,7 @@ export class WorldRenderer {
       (width - this.worldWidth * zoom) / 2,
       (height - this.worldHeight * zoom) / 2,
     );
+    this.onZoomChanged();
   }
 
   private drawOverlay(): void {
@@ -165,7 +177,8 @@ export class WorldRenderer {
   private drawCreatures(snapshot: Snapshot): void {
     const { creatures, population } = snapshot;
     const sprites = this.creatureSprites;
-    const scale = (snapshot.config.creatureRadius * 2) / CREATURE_TEXTURE_SIZE;
+    // Zoomed out, true-size creatures would be under a pixel; keep them visible.
+    const minRadius = MIN_SCREEN_RADIUS / this.camera.scale.x;
 
     while (sprites.length < population) {
       const sprite = new Sprite(this.creatureTexture);
@@ -181,8 +194,10 @@ export class WorldRenderer {
       const o = i * CREATURE_STRIDE;
       sprite.position.set(creatures[o]!, creatures[o + 1]!);
       sprite.rotation = creatures[o + 2]!;
-      sprite.scale.set(scale);
-      sprite.tint = lerpColor(HUNGRY_COLOR, FED_COLOR, Math.min(1, creatures[o + 3]! * 2));
+      sprite.scale.set((Math.max(creatures[o + 4]!, minRadius) * 2) / CREATURE_TEXTURE_SIZE);
+      // Hue is inherited, so relatives share a colour; hungry creatures are dimmer.
+      const fed = Math.min(1, creatures[o + 3]! * 2);
+      sprite.tint = hsvToRgb(creatures[o + 5]!, CREATURE_SATURATION, DIMMEST + (1 - DIMMEST) * fed);
     }
   }
 
@@ -222,6 +237,7 @@ export class WorldRenderer {
         const worldY = (py - this.camera.position.y) / oldZoom;
         this.camera.scale.set(zoom);
         this.camera.position.set(px - worldX * zoom, py - worldY * zoom);
+        this.onZoomChanged();
       },
       { passive: false },
     );

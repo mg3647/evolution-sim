@@ -1,0 +1,66 @@
+import type { Creatures } from './creatures';
+
+/**
+ * Samples of world statistics over time, for charts. Holds a fixed number of
+ * samples: when full, it keeps every other one and samples half as often, so
+ * it always spans the whole run.
+ */
+export interface History {
+  /** Ticks between samples. Doubles each time the history fills up. */
+  interval: number;
+  count: number;
+  /** Increases whenever the contents change. */
+  version: number;
+  tick: Float64Array;
+  population: Float32Array;
+  /** Plant energy as a fraction of the fully grown world. */
+  plantFill: Float32Array;
+  meanSize: Float32Array;
+  meanSpeed: Float32Array;
+}
+
+const SERIES = ['tick', 'population', 'plantFill', 'meanSize', 'meanSpeed'] as const;
+
+export interface Sample {
+  tick: number;
+  population: number;
+  plantFill: number;
+  meanSize: number;
+  meanSpeed: number;
+}
+
+export function createHistory(interval: number, capacity: number): History {
+  return {
+    interval,
+    count: 0,
+    version: 0,
+    tick: new Float64Array(capacity),
+    population: new Float32Array(capacity),
+    plantFill: new Float32Array(capacity),
+    meanSize: new Float32Array(capacity),
+    meanSpeed: new Float32Array(capacity),
+  };
+}
+
+export function recordSample(history: History, sample: Sample): void {
+  if (history.count === history.tick.length) {
+    const kept = Math.ceil(history.count / 2);
+    for (const name of SERIES) {
+      const series = history[name];
+      for (let i = 0; i < kept; i++) series[i] = series[i * 2]!;
+    }
+    history.count = kept;
+    history.interval *= 2;
+  }
+  const i = history.count++;
+  for (const name of SERIES) history[name][i] = sample[name];
+  history.version++;
+}
+
+/** Mean of a gene across living creatures, or 0 when there are none. */
+export function meanOf(values: Float32Array, creatures: Creatures): number {
+  if (creatures.count === 0) return 0;
+  let total = 0;
+  for (let i = 0; i < creatures.count; i++) total += values[i]!;
+  return total / creatures.count;
+}

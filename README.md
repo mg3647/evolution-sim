@@ -3,8 +3,9 @@
 A 2D world of creatures whose bodies and brains evolve under natural selection
 alone: no fitness score, just a closed energy economy. Runs in the browser.
 
-Status: milestone 2 of 8. Plants regrow on a fertility map and creatures
-wander, eat, pay energy costs and die. Nothing reproduces or evolves yet.
+Status: milestone 3 of 8. Plants regrow on a fertility map; creatures wander,
+eat, pay energy costs, reproduce with mutation and die. Body size and speed
+evolve. Creatures have no senses or brains yet.
 
 ## Run it
 

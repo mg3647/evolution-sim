@@ -1,14 +1,21 @@
 import type { SimConfig } from '../sim/config';
-import type { FromWorker, Snapshot, Speed, ToWorker } from './protocol';
+import type { FromWorker, HistoryData, Snapshot, Speed, ToWorker } from './protocol';
+
+export interface SimClientHandlers {
+  onSnapshot: (snapshot: Snapshot) => void;
+  onHistory: (history: HistoryData) => void;
+}
 
 /** Page-side handle on the simulation worker. */
 export class SimClient {
   private worker: Worker;
 
-  constructor(onSnapshot: (snapshot: Snapshot) => void) {
+  constructor(handlers: SimClientHandlers) {
     this.worker = new Worker(new URL('./sim.worker.ts', import.meta.url), { type: 'module' });
     this.worker.onmessage = (event: MessageEvent<FromWorker>) => {
-      if (event.data.type === 'snapshot') onSnapshot(event.data.snapshot);
+      const message = event.data;
+      if (message.type === 'snapshot') handlers.onSnapshot(message.snapshot);
+      else handlers.onHistory(message.history);
     };
   }
 

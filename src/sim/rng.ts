@@ -67,6 +67,13 @@ export class Rng {
     return min + Math.floor(this.float() * (max - min));
   }
 
+  /** Normally distributed float with mean 0 and standard deviation 1. */
+  gaussian(): number {
+    // Box-Muller. 1 - float() keeps the log argument above zero.
+    const radius = Math.sqrt(-2 * Math.log(1 - this.float()));
+    return radius * Math.cos(2 * Math.PI * this.float());
+  }
+
   /** True with probability p. */
   chance(p: number): boolean {
     return this.float() < p;
