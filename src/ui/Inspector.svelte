@@ -41,6 +41,10 @@
       <div><dt>Size</dt><dd>{creature.size.toFixed(2)}</dd></div>
       <div><dt>Speed</dt><dd>{creature.speed.toFixed(2)}</dd></div>
       <div><dt>Health</dt><dd>{Math.round(creature.health * 100)}%</dd></div>
+      <div title="Water in its body. It drinks in or beside water, and dies of thirst at 0%">
+        <dt>Water</dt>
+        <dd>{Math.round(creature.hydration * 100)}%</dd>
+      </div>
       <div title="Sick creatures move slower, burn more energy and may die; survivors are immune for a while">
         <dt>Plague</dt>
         <dd>{creature.sick > 0 ? 'sick' : creature.sick < 0 ? 'immune' : 'healthy'}</dd>

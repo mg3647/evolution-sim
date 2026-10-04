@@ -13,6 +13,9 @@ export const RESTART_KEYS: ReadonlySet<keyof SimConfig> = new Set<keyof SimConfi
   'worldHeight',
   'plantCellSize',
   'fertilityFloor',
+  'waterShare',
+  'riverWidth',
+  'moistureReach',
   'initialCreatures',
   'founderDietMax',
   'founderLinks',
@@ -46,6 +49,16 @@ export const SETTING_GROUPS: SettingGroup[] = [
       { key: 'seasonStrength', label: 'Season strength', hint: '0 is no seasons; 0.9 swings from near-dark winters to bright summers', min: 0, max: 0.9, step: 0.05 },
       { key: 'seasonLength', label: 'Year length (ticks)', hint: 'Ticks in one full cycle of seasons', min: 1000, max: 30000, step: 500 },
       { key: 'fertilityDriftPeriod', label: 'Land drift (ticks)', hint: 'Ticks for rich and barren land to move to entirely new places; 0 keeps it fixed', min: 0, max: 300000, step: 10000 },
+    ],
+  },
+  {
+    title: 'Water and thirst',
+    settings: [
+      { key: 'thirstRate', label: 'Thirst', hint: 'Share of its water a creature loses each tick; at 0.0004 it lasts about 2,500 ticks without a drink', min: 0, max: 0.005, step: 0.0001 },
+      { key: 'drinkRate', label: 'Drinking speed', hint: 'Share of its water a creature regains each tick in or beside water', min: 0.001, max: 0.1, step: 0.001 },
+      { key: 'swimSpeed', label: 'Swimming speed', hint: 'How fast creatures move in water, compared with on land', min: 0.1, max: 1, step: 0.05 },
+      { key: 'swimCost', label: 'Swimming cost', hint: 'How much more energy living costs while in water', min: 1, max: 4, step: 0.1 },
+      { key: 'moistureBoost', label: 'Richer land by water', hint: 'Extra fertility at the water’s edge, fading with distance', min: 0, max: 1, step: 0.05 },
     ],
   },
   {
@@ -95,6 +108,7 @@ export const SETTING_GROUPS: SettingGroup[] = [
       { key: 'worldWidth', label: 'World width', hint: 'Width of the world', min: 600, max: 6000, step: 200 },
       { key: 'worldHeight', label: 'World height', hint: 'Height of the world', min: 600, max: 6000, step: 200 },
       { key: 'fertilityFloor', label: 'Barren land', hint: 'Higher leaves more of the map barren', min: 0, max: 0.7, step: 0.05 },
+      { key: 'waterShare', label: 'Water', hint: 'Share of the map that is lake or river; 0 means no water and no thirst', min: 0, max: 0.4, step: 0.01 },
     ],
   },
 ];

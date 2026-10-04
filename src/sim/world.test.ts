@@ -173,7 +173,8 @@ describe('reproduction', () => {
   });
 
   it('introduces variation in size and speed', () => {
-    const { creatures } = runWorld({}, 3000);
+    // A larger world than the other tests use: the small one can dip to a handful of creatures.
+    const { creatures } = runWorld({ worldWidth: 1200, worldHeight: 1200 }, 3000);
     const sizes = new Set(creatures.size.subarray(0, creatures.count));
     const speeds = new Set(creatures.speed.subarray(0, creatures.count));
     expect(sizes.size).toBeGreaterThan(5);

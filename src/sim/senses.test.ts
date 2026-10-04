@@ -7,7 +7,8 @@ import { Rng } from './rng';
 import { Senses } from './senses';
 import { SpatialHash } from './spatialHash';
 
-const config: SimConfig = { ...defaultConfig, worldWidth: 400, worldHeight: 400 };
+// A dry world, so each test places only the water it means to.
+const config: SimConfig = { ...defaultConfig, worldWidth: 400, worldHeight: 400, waterShare: 0 };
 const LEFT = 0;
 const AHEAD = 1;
 const RIGHT = 2;
@@ -15,10 +16,11 @@ const RIGHT = 2;
 const MEAT = 1;
 const SCENT = 2;
 const WALL = 3;
-const NEAR = 4;
-const KIN = 5;
-const BIGGER = 6;
-const SICK = 7;
+const WATER = 4;
+const NEAR = 5;
+const KIN = 6;
+const BIGGER = 7;
+const SICK = 8;
 const ray = (index: number) => Input.Rays + index * INPUTS_PER_RAY;
 
 function setup() {
@@ -103,6 +105,23 @@ describe('Senses', () => {
     const inputs = sense(creatures, i);
     expect(inputs[ray(AHEAD) + WALL]).toBe(1);
     expect(inputs[ray(LEFT) + WALL]).toBe(0);
+  });
+
+  it('sees water on the ray that crosses it, feels it underfoot, and feels thirst', () => {
+    const { plants, creatures, add, sense } = setup();
+    const i = add(210, 210, 0);
+    plants.water[cellIndexAt(plants, 210 + config.senseRange, 210)] = 1;
+    let inputs = sense(creatures, i);
+    expect(inputs[ray(AHEAD) + WATER]).toBeCloseTo(0.5, 6);
+    expect(inputs[ray(LEFT) + WATER]).toBe(0);
+    expect(inputs[Input.InWater]).toBe(0);
+    expect(inputs[Input.Thirst]).toBe(0);
+
+    plants.water[cellIndexAt(plants, 210, 210)] = 1;
+    creatures.hydration[i] = 0.25;
+    inputs = sense(creatures, i);
+    expect(inputs[Input.InWater]).toBe(1);
+    expect(inputs[Input.Thirst]).toBeCloseTo(0.75, 6);
   });
 
   it('knows when it is sick and sees when another creature is', () => {

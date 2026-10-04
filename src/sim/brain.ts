@@ -9,10 +9,10 @@ import type { Rng } from './rng';
 
 export const RAY_COUNT = 3;
 /**
- * Per vision ray: plant cover, meat, scent, wall, then for the nearest
+ * Per vision ray: plant cover, meat, scent, wall, water, then for the nearest
  * creature its nearness, colour match, relative size and whether it is sick.
  */
-export const INPUTS_PER_RAY = 8;
+export const INPUTS_PER_RAY = 9;
 
 export const Input = {
   /** First of RAY_COUNT * INPUTS_PER_RAY ray inputs, ordered left, ahead, right. */
@@ -20,17 +20,21 @@ export const Input = {
   Underfoot: RAY_COUNT * INPUTS_PER_RAY,
   MeatUnderfoot: RAY_COUNT * INPUTS_PER_RAY + 1,
   ScentUnderfoot: RAY_COUNT * INPUTS_PER_RAY + 2,
-  Energy: RAY_COUNT * INPUTS_PER_RAY + 3,
-  Health: RAY_COUNT * INPUTS_PER_RAY + 4,
-  Age: RAY_COUNT * INPUTS_PER_RAY + 5,
-  Clock: RAY_COUNT * INPUTS_PER_RAY + 6,
+  /** 1 while the creature is in water. */
+  InWater: RAY_COUNT * INPUTS_PER_RAY + 3,
+  Energy: RAY_COUNT * INPUTS_PER_RAY + 4,
+  Health: RAY_COUNT * INPUTS_PER_RAY + 5,
+  /** 0 when full of water, 1 when about to die of thirst. */
+  Thirst: RAY_COUNT * INPUTS_PER_RAY + 6,
+  Age: RAY_COUNT * INPUTS_PER_RAY + 7,
+  Clock: RAY_COUNT * INPUTS_PER_RAY + 8,
   /** Sunlight relative to average: above zero in summer, below in winter. */
-  Season: RAY_COUNT * INPUTS_PER_RAY + 7,
+  Season: RAY_COUNT * INPUTS_PER_RAY + 9,
   /** 1 while the creature itself is infected. */
-  Sick: RAY_COUNT * INPUTS_PER_RAY + 8,
-  Bias: RAY_COUNT * INPUTS_PER_RAY + 9,
+  Sick: RAY_COUNT * INPUTS_PER_RAY + 10,
+  Bias: RAY_COUNT * INPUTS_PER_RAY + 11,
 } as const;
-export const INPUT_COUNT = RAY_COUNT * INPUTS_PER_RAY + 10;
+export const INPUT_COUNT = RAY_COUNT * INPUTS_PER_RAY + 12;
 
 export const Output = { Turn: 0, Thrust: 1, Reproduce: 2, Attack: 3, Emit: 4 } as const;
 export const OUTPUT_COUNT = 5;
@@ -45,6 +49,7 @@ export const INPUT_LABELS: string[] = [
     `Meat ${ray}`,
     `Scent ${ray}`,
     `Wall ${ray}`,
+    `Water ${ray}`,
     `Creature ${ray}`,
     `Kin ${ray}`,
     `Bigger ${ray}`,
@@ -53,8 +58,10 @@ export const INPUT_LABELS: string[] = [
   'Plants underfoot',
   'Meat underfoot',
   'Scent underfoot',
+  'In water',
   'Energy',
   'Health',
+  'Thirst',
   'Age',
   'Clock',
   'Season',

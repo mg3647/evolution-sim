@@ -2,6 +2,7 @@ import type { SimConfig } from './config';
 import type { EnergyLedger } from './ledger';
 import { tileableNoise } from './noise';
 import type { Rng } from './rng';
+import { distanceToWater, generateWater } from './water';
 
 /** Noise features across the world, coarse to fine. */
 const FERTILITY_PERIODS = [3, 6, 12];
@@ -27,6 +28,14 @@ export interface PlantField {
   scent: Float32Array;
   /** 1 where a wall blocks movement into the cell. */
   walls: Uint8Array;
+  /** 1 where the cell is water: a lake or the river. Fixed for the life of the world. */
+  water: Uint8Array;
+  /** Whether the world has any water. Without it, nothing gets thirsty. */
+  hasWater: boolean;
+  /** 1 where a creature can drink: in water or in a cell next to it. */
+  shore: Uint8Array;
+  /** How much nearby water enriches the soil: 1 at the water's edge, fading to 0. */
+  moisture: Float32Array;
 }
 
 /**
@@ -54,26 +63,56 @@ export function generateFertility(config: SimConfig, rng: Rng, cols: number, row
   return fertility;
 }
 
+/**
+ * Fill in everything about the water that follows from where it is: whether
+ * there is any, which cells are close enough to drink from, and how much
+ * the nearby water enriches each cell's soil.
+ */
+export function waterDerived(
+  water: Uint8Array,
+  cols: number,
+  rows: number,
+  config: SimConfig,
+): Pick<PlantField, 'water' | 'hasWater' | 'shore' | 'moisture'> {
+  const distance = distanceToWater(water, cols, rows);
+  const shore = new Uint8Array(water.length);
+  const moisture = new Float32Array(water.length);
+  for (let i = 0; i < water.length; i++) {
+    shore[i] = distance[i]! <= 1 ? 1 : 0;
+    moisture[i] =
+      config.moistureReach > 0 ? Math.min(1, Math.max(0, 1 - (distance[i]! - 1) / config.moistureReach)) : 0;
+  }
+  return { water, hasWater: water.includes(1), shore, moisture };
+}
+
+/** Most plant energy a cell can hold: none under water, more on moist ground near it. */
+export function cellCapacity(field: PlantField, cell: number, config: SimConfig): number {
+  if (field.water[cell] === 1) return 0;
+  const richness = Math.min(1, field.fertility[cell]! + field.moisture[cell]! * config.moistureBoost);
+  return richness * config.plantCapacity;
+}
+
 /** Create a field with every cell grown to capacity. */
 export function createPlantField(config: SimConfig, rng: Rng): PlantField {
   const cols = Math.max(1, Math.round(config.worldWidth / config.plantCellSize));
   const rows = Math.max(1, Math.round(config.worldHeight / config.plantCellSize));
   const fertility = generateFertility(config, rng, cols, rows);
-  const capacity = new Float64Array(cols * rows);
-  for (let i = 0; i < fertility.length; i++) capacity[i] = fertility[i]! * config.plantCapacity;
-
-  return {
+  const field: PlantField = {
     cols,
     rows,
     cellWidth: config.worldWidth / cols,
     cellHeight: config.worldHeight / rows,
     fertility,
-    capacity,
-    energy: capacity.slice(),
+    capacity: new Float64Array(cols * rows),
+    energy: new Float64Array(cols * rows),
     meat: new Float64Array(cols * rows),
     scent: new Float32Array(cols * rows),
     walls: new Uint8Array(cols * rows),
+    ...waterDerived(generateWater(config, rng, cols, rows), cols, rows, config),
   };
+  for (let i = 0; i < fertility.length; i++) field.capacity[i] = cellCapacity(field, i, config);
+  field.energy.set(field.capacity);
+  return field;
 }
 
 /** Index of the cell containing a world position inside [0, world size). */

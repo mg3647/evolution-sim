@@ -363,6 +363,7 @@
           <div><dt>Generation</dt><dd>{count(snapshot?.maxGeneration)}</dd></div>
           <div><dt>Starved</dt><dd>{count(snapshot?.deaths.starved)}</dd></div>
           <div><dt>Killed</dt><dd>{count(snapshot?.deaths.killed)}</dd></div>
+          <div><dt>Died of thirst</dt><dd>{count(snapshot?.deaths.thirst)}</dd></div>
           <div title="Deaths from plague and meteors">
             <dt>Died in disasters</dt>
             <dd>{count(snapshot?.deaths.disaster)}</dd>

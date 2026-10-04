@@ -46,6 +46,8 @@ export interface Inspection {
   diet: number;
   // 1 is unhurt; it dies at 0.
   health: number;
+  // Water in the body: 1 is full; it dies of thirst at 0.
+  hydration: number;
   // Above zero: ticks of infection left. Below zero: ticks of immunity left.
   sick: number;
   hue: number;
@@ -134,11 +136,13 @@ export interface Snapshot {
   scent: Uint8Array;
   // Per cell: 1 where there is a wall.
   walls: Uint8Array;
+  // Per cell: 1 where there is water.
+  water: Uint8Array;
   environment: EnvironmentView;
 
   births: number;
   reseeded: number;
-  deaths: { starved: number; oldAge: number; killed: number; disaster: number };
+  deaths: { starved: number; oldAge: number; killed: number; disaster: number; thirst: number };
 
   /** The selected creature, or null if none is selected or it has died. */
   selected: Inspection | null;

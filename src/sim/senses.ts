@@ -15,10 +15,11 @@ const RAY_PLANTS = 0;
 const RAY_MEAT = 1;
 const RAY_SCENT = 2;
 const RAY_WALL = 3;
-const RAY_NEARNESS = 4;
-const RAY_KIN = 5;
-const RAY_BIGGER = 6;
-const RAY_SICK = 7;
+const RAY_WATER = 4;
+const RAY_NEARNESS = 5;
+const RAY_KIN = 6;
+const RAY_BIGGER = 7;
+const RAY_SICK = 8;
 
 /**
  * Fills a brain's inputs with what a creature perceives. Vision is three
@@ -91,6 +92,7 @@ export class Senses {
       let meat = 0;
       let scent = 0;
       let wall = 0;
+      let water = 0;
       for (const t of GROUND_SAMPLES) {
         let px = turn === 0 ? x + cosHeading * range * t : x + dx * t;
         let py = turn === 0 ? y + sinHeading * range * t : y + dy * t;
@@ -102,12 +104,14 @@ export class Senses {
         scent += field.scent[cell]!;
         // A nearer wall reads stronger.
         if (field.walls[cell]) wall = Math.max(wall, 1.5 - t);
+        if (field.water[cell]) water = Math.max(water, 1.5 - t);
       }
       const o = Input.Rays + ray * INPUTS_PER_RAY;
       inputs[o + RAY_PLANTS] = (plants / GROUND_SAMPLES.length) * plantScale;
       inputs[o + RAY_MEAT] = Math.min(1, (meat / GROUND_SAMPLES.length) * meatScale);
       inputs[o + RAY_SCENT] = Math.min(1, scent / GROUND_SAMPLES.length);
       inputs[o + RAY_WALL] = Math.min(1, wall);
+      inputs[o + RAY_WATER] = Math.min(1, water);
       inputs[o + RAY_SICK] = 0;
       inputs[o + RAY_NEARNESS] = 0;
       inputs[o + RAY_KIN] = 0;
@@ -132,6 +136,8 @@ export class Senses {
     inputs[Input.Underfoot] = field.energy[cell]! * plantScale;
     inputs[Input.MeatUnderfoot] = Math.min(1, field.meat[cell]! * meatScale);
     inputs[Input.ScentUnderfoot] = Math.min(1, field.scent[cell]!);
+    inputs[Input.InWater] = field.water[cell]!;
+    inputs[Input.Thirst] = 1 - creatures.hydration[i]!;
     inputs[Input.Energy] = creatures.energy[i]! / maxEnergyFor(creatures.size[i]!, config);
     inputs[Input.Health] = creatures.health[i]!;
     inputs[Input.Age] = creatures.age[i]! / config.maxAge;

@@ -1,7 +1,7 @@
 import type { SimConfig } from './config';
 import { wrap, wrappedDelta } from './geometry';
 import type { EnergyLedger } from './ledger';
-import { cellIndexAt, generateFertility, type PlantField } from './plants';
+import { cellCapacity, cellIndexAt, generateFertility, type PlantField } from './plants';
 import type { Rng } from './rng';
 
 /**
@@ -169,7 +169,7 @@ export function applyFertility(field: PlantField, config: SimConfig, ledger: Ene
   let total = 0;
   let died = 0;
   for (let i = 0; i < field.capacity.length; i++) {
-    const capacity = field.fertility[i]! * config.plantCapacity;
+    const capacity = cellCapacity(field, i, config);
     field.capacity[i] = capacity;
     total += capacity;
     if (field.energy[i]! > capacity) {

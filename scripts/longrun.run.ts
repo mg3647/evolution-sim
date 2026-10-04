@@ -35,6 +35,9 @@ interface Summary {
   hunters: number;
   /** Share of all deaths that were kills. */
   killShare: number;
+  /** Share of all deaths that were from thirst, and from old age. */
+  thirstShare: number;
+  oldAgeShare: number;
   species: { mean: number; max: number };
   meanSize: number;
   meanDiet: number;
@@ -86,7 +89,8 @@ function run(seed: string): Summary {
     }
   }
 
-  const deaths = world.deaths.starved + world.deaths.oldAge + world.deaths.killed + world.deaths.disaster;
+  const d = world.deaths;
+  const deaths = d.starved + d.oldAge + d.killed + d.disaster + d.thirst;
   return {
     seed,
     population: { min: popMin, mean: popSum / samples, max: popMax },
@@ -94,7 +98,9 @@ function run(seed: string): Summary {
     atCap: capped / samples,
     hunterTime: hunterSamples / samples,
     hunters: hunterSum / samples,
-    killShare: deaths > 0 ? world.deaths.killed / deaths : 0,
+    killShare: deaths > 0 ? d.killed / deaths : 0,
+    thirstShare: deaths > 0 ? d.thirst / deaths : 0,
+    oldAgeShare: deaths > 0 ? d.oldAge / deaths : 0,
     species: { mean: speciesSum / samples, max: speciesMax },
     meanSize: sizeSum / samples,
     meanDiet: dietSum / samples,
@@ -117,6 +123,8 @@ it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
         `hunterTime=${percent(s.hunterTime)}`,
         `hunters=${s.hunters.toFixed(1)}`,
         `killShare=${percent(s.killShare)}`,
+        `thirstShare=${percent(s.thirstShare)}`,
+        `oldAgeShare=${percent(s.oldAgeShare)}`,
         `species=${s.species.mean.toFixed(1)}/${s.species.max}`,
         `size=${s.meanSize.toFixed(2)}`,
         `diet=${s.meanDiet.toFixed(2)}`,

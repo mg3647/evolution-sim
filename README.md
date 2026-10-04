@@ -8,7 +8,9 @@ three vision rays, decide with a small neural net whose wiring is inherited
 and mutated, eat, pay energy costs, reproduce and die. Bodies and brains
 evolve. Creatures can bite each other, the dead leave meat, and a diet gene
 trades plant digestion against meat digestion, so foraging, scavenging and
-hunting all emerge. The world has seasons and slowly drifting fertility. You
+hunting all emerge. The world has lakes and a river: land beside water is
+richer, and creatures must drink and can swim. It has seasons and slowly
+drifting fertility. You
 can trigger droughts, ice ages and food booms, and use hand tools to place
 meteors and plague, draw walls, and make land fertile or barren. Creatures can
 leave and smell scent. You can inspect any creature's brain wiring, see the

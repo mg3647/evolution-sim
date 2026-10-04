@@ -25,6 +25,21 @@ export interface SimConfig {
   /** Fertility below this is barren; raises contrast between rich and poor land. */
   fertilityFloor: number;
 
+  /** Share of the map covered by water: lakes and one river. 0 means no water and no thirst. */
+  waterShare: number;
+  /** Width of the river, in cells. */
+  riverWidth: number;
+  /** Extra fertility right at the water's edge, fading to nothing `moistureReach` cells away. */
+  moistureBoost: number;
+  moistureReach: number;
+  /** Share of its water a creature loses per tick; it dies of thirst at none. */
+  thirstRate: number;
+  /** Share of its water a creature regains per tick while in or beside water. */
+  drinkRate: number;
+  /** While in water: multiplier on distance moved, and on the cost of living. */
+  swimSpeed: number;
+  swimCost: number;
+
   initialCreatures: number;
   creatureStartEnergy: number;
   /** Most energy a creature of size 1 can store. Scales with size squared. */
@@ -209,6 +224,15 @@ export const defaultConfig: SimConfig = {
   plantBareGrowth: 0.1,
   fertilityFloor: 0.3,
 
+  waterShare: 0.17,
+  riverWidth: 2,
+  moistureBoost: 0.5,
+  moistureReach: 6,
+  thirstRate: 0.0004,
+  drinkRate: 0.02,
+  swimSpeed: 0.5,
+  swimCost: 1.5,
+
   initialCreatures: 400,
   creatureStartEnergy: 40,
   creatureMaxEnergy: 100,
@@ -237,7 +261,7 @@ export const defaultConfig: SimConfig = {
   upkeepFixedShare: 0.5,
   moveCost: 0.05,
   biteSize: 1,
-  maxAge: 3000,
+  maxAge: 5000,
   bodyEnergy: 20,
 
   attackDamage: 0.25,

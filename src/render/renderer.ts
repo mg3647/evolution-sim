@@ -42,6 +42,7 @@ function seasonColors(yearFraction: number): { soil: number[]; plant: number[] }
 /** Ground colour where meat lies thick. */
 const MEAT_COLOR = [190, 60, 70] as const;
 const WALL_COLOR = [120, 126, 134] as const;
+const WATER_COLOR = [34, 78, 128] as const;
 const SCENT_COLOR = [170, 120, 255] as const;
 /** How strongly full scent covers the ground when the scent overlay is on. */
 const SCENT_OPACITY = 0.7;
@@ -258,7 +259,7 @@ export class WorldRenderer {
 
   /** One pixel per plant cell, stretched over the world. */
   private drawPlants(snapshot: Snapshot): void {
-    const { plantCols: cols, plantRows: rows, plants, meat, scent, walls } = snapshot;
+    const { plantCols: cols, plantRows: rows, plants, meat, scent, walls, water } = snapshot;
     const scentOpacity = this.showScent ? SCENT_OPACITY / 255 : 0;
     const canvas = this.plantCanvas;
     const ctx = canvas.getContext('2d')!;
@@ -287,6 +288,12 @@ export class WorldRenderer {
       for (let c = 0; c < 3; c++) {
         if (walls[i]) {
           pixels[o + c] = WALL_COLOR[c]!;
+          continue;
+        }
+        if (water[i]) {
+          // Meat and scent still show on water, so a floating body can be seen.
+          const withMeat = WATER_COLOR[c]! + (MEAT_COLOR[c]! - WATER_COLOR[c]!) * m;
+          pixels[o + c] = withMeat + (SCENT_COLOR[c]! - withMeat) * s;
           continue;
         }
         const ground = soil[c]! + (plant[c]! - soil[c]!) * t;

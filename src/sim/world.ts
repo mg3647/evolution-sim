@@ -85,7 +85,7 @@ export interface World {
   births: number;
   reseeded: number;
   /** Killed counts bites; disaster counts plagues and meteors. */
-  deaths: { starved: number; oldAge: number; killed: number; disaster: number };
+  deaths: { starved: number; oldAge: number; killed: number; disaster: number; thirst: number };
   environment: Environment;
   /** Family tree of the living population. */
   lineage: Lineage;
@@ -105,9 +105,16 @@ function spawnFounder(world: World, age: number): number {
   const { config, rng, creatures } = world;
   const genes = founderGenes(rng, config);
   const energy = Math.min(config.creatureStartEnergy, maxEnergyFor(genes.size, config));
+  // Founders start on dry land where there is any; a few tries is plenty.
+  let x = rng.range(0, config.worldWidth);
+  let y = rng.range(0, config.worldHeight);
+  for (let tries = 0; tries < 20 && world.plants.water[cellIndexAt(world.plants, x, y)] === 1; tries++) {
+    x = rng.range(0, config.worldWidth);
+    y = rng.range(0, config.worldHeight);
+  }
   const index = spawnCreature(creatures, {
-    x: rng.range(0, config.worldWidth),
-    y: rng.range(0, config.worldHeight),
+    x,
+    y,
     heading: rng.range(0, Math.PI * 2),
     energy,
     genes,
@@ -137,7 +144,7 @@ export function createWorld(config: SimConfig): World {
     history: createHistory(config.statsInterval, config.statsCapacity),
     births: 0,
     reseeded: 0,
-    deaths: { starved: 0, oldAge: 0, killed: 0, disaster: 0 },
+    deaths: { starved: 0, oldAge: 0, killed: 0, disaster: 0, thirst: 0 },
     environment: createEnvironment(config, rng, plants),
     lineage: new Lineage(),
     species: createSpeciesState(),
@@ -208,10 +215,11 @@ export function step(world: World): void {
     if (sick) thrust *= config.plagueSlow;
     thrust *= 1 - config.woundSlow * (1 - Math.max(0, creatures.health[i]!));
 
-    // Act: turn, then move forward.
+    // Act: turn, then move forward. Swimming is slow going.
     const speed = creatures.speed[i]!;
     const heading = creatures.heading[i]! + turn;
-    const distance = strideFor(size, speed, config) * thrust;
+    const swimming = plants.water[cellIndexAt(plants, creatures.x[i]!, creatures.y[i]!)] === 1;
+    const distance = strideFor(size, speed, config) * thrust * (swimming ? config.swimSpeed : 1);
     creatures.heading[i] = heading;
     // Rounded to stored precision first, so the cell checked is the cell it lands in.
     const toX = Math.fround(wrap(creatures.x[i]! + Math.cos(heading) * distance, config.worldWidth));
@@ -246,11 +254,18 @@ export function step(world: World): void {
     energy += bite;
     if (emitting) plants.scent[cell]! += config.scentEmit;
 
+    // Water drains away with time and is topped up in or beside water.
+    if (plants.hasWater) {
+      const hydration = creatures.hydration[i]! - config.thirstRate;
+      creatures.hydration[i] = plants.shore[cell] === 1 ? Math.min(1, hydration + config.drinkRate) : hydration;
+    }
+
     // Pay for body, movement, senses, brain, fighting and signalling; what is
     // spent leaves as heat. Cold weather makes everything cost more.
     const cost =
       climate.cost *
       (sick ? config.plagueCost : 1) *
+      (swimming ? config.swimCost : 1) *
       (tickCostFor(size, speed, thrust, config) +
         (attacking ? config.attackCost * size * size : 0) +
         (emitting ? config.scentCost : 0) +
@@ -279,12 +294,14 @@ export function step(world: World): void {
     const struck = creatures.health[i]! <= STRUCK;
     const killed = creatures.health[i]! <= 0;
     const starved = creatures.energy[i]! <= 0;
-    if (!killed && !starved && creatures.age[i]! < config.maxAge) continue;
+    const parched = creatures.hydration[i]! <= 0;
+    if (!killed && !starved && !parched && creatures.age[i]! < config.maxAge) continue;
     if (struck) {
       world.deaths.disaster++;
       if (creatures.sick[i]! > 0) world.plagueDeaths++;
     }
     else if (killed) world.deaths.killed++;
+    else if (parched) world.deaths.thirst++;
     else if (starved) world.deaths.starved++;
     else world.deaths.oldAge++;
     // The body and whatever it had stored stay behind as meat.
@@ -452,6 +469,8 @@ function giveBirth(world: World, parent: number, energy: number): number {
     parentId: creatures.id[parent]!,
     generation: creatures.generation[parent]! + 1,
     species: creatures.species[parent]!,
+    // A child is born as well watered as its parent.
+    hydration: creatures.hydration[parent]!,
   });
   world.lineage.born(creatures.id[child]!, creatures.id[parent]!, world.tick, genes.hue);
   world.births++;
@@ -538,6 +557,7 @@ export function hashWorld(world: World): number {
     c.energy,
     c.age,
     c.health,
+    c.hydration,
     c.sick,
     c.size,
     c.speed,

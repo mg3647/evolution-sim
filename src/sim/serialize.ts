@@ -4,6 +4,7 @@ import { createCreatures, type Creatures } from './creatures';
 import type { ActiveEvent, LogEntry } from './environment';
 import type { EnergyLedger } from './ledger';
 import { Lineage, type LineageNode } from './lineage';
+import { waterDerived } from './plants';
 import { Rng, type RngState } from './rng';
 import { Senses } from './senses';
 import { SpatialHash } from './spatialHash';
@@ -17,7 +18,7 @@ import type { World } from './world';
  */
 
 /** Bumped whenever the saved layout changes; older files are refused. */
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 /** Per-creature number arrays, saved up to the live count. */
 const CREATURE_FIELDS = [
@@ -31,6 +32,7 @@ const CREATURE_FIELDS = [
   'energy',
   'age',
   'health',
+  'hydration',
   'sick',
   'size',
   'speed',
@@ -40,7 +42,7 @@ const CREATURE_FIELDS = [
   'mutationRate',
 ] as const;
 
-const FIELD_ARRAYS = ['fertility', 'capacity', 'energy', 'meat', 'scent', 'walls'] as const;
+const FIELD_ARRAYS = ['fertility', 'capacity', 'energy', 'meat', 'scent', 'walls', 'water'] as const;
 
 interface SavedBrain {
   links: LinkGene[];
@@ -154,6 +156,8 @@ export function loadWorld(saved: SavedWorld): World {
     meat: new Float64Array(saved.field.meat),
     scent: new Float32Array(saved.field.scent),
     walls: new Uint8Array(saved.field.walls),
+    // Shore and moisture follow from where the water is, so they are rebuilt, not saved.
+    ...waterDerived(new Uint8Array(saved.field.water), cols, rows, config),
   };
 
   const count = saved.creatures.count;

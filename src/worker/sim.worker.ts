@@ -84,6 +84,7 @@ function inspect(world: World, i: number): Inspection {
     sensorRange: c.sensorRange[i]!,
     diet: c.diet[i]!,
     health: c.health[i]!,
+    hydration: c.hydration[i]!,
     sick: c.sick[i]!,
     hue: c.hue[i]!,
     mutationRate: c.mutationRate[i]!,
@@ -202,6 +203,7 @@ function sendSnapshot(now: number): void {
     meat,
     scent,
     walls: rendering ? p.walls.slice() : new Uint8Array(0),
+    water: rendering ? p.water.slice() : new Uint8Array(0),
     environment: {
       season: world.climate.season,
       yearFraction: config.seasonLength > 0 ? (world.tick % config.seasonLength) / config.seasonLength : 0,
