@@ -1,10 +1,14 @@
 import type { SimConfig } from '../sim/config';
 import type { EventKind } from '../sim/environment';
-import type { FromWorker, HistoryData, Snapshot, Speed, ToWorker } from './protocol';
+import type { FromWorker, HistoryData, Snapshot, Speed, ToWorker, TreeData } from './protocol';
 
 export interface SimClientHandlers {
   onSnapshot: (snapshot: Snapshot) => void;
   onHistory: (history: HistoryData) => void;
+  onTree: (tree: TreeData) => void;
+  /** A save is ready: the world as JSON text, with the tick and seed it was taken at. */
+  onSaved: (json: string, tick: number, seed: string) => void;
+  onError: (message: string) => void;
 }
 
 /** Page-side handle on the simulation worker. */
@@ -16,7 +20,10 @@ export class SimClient {
     this.worker.onmessage = (event: MessageEvent<FromWorker>) => {
       const message = event.data;
       if (message.type === 'snapshot') handlers.onSnapshot(message.snapshot);
-      else handlers.onHistory(message.history);
+      else if (message.type === 'history') handlers.onHistory(message.history);
+      else if (message.type === 'tree') handlers.onTree(message.tree);
+      else if (message.type === 'saved') handlers.onSaved(message.json, message.tick, message.seed);
+      else handlers.onError(message.message);
     };
   }
 
@@ -59,6 +66,21 @@ export class SimClient {
 
   setRandomEvents(enabled: boolean): void {
     this.send({ type: 'setRandomEvents', enabled });
+  }
+
+  /** Turn drawing data on or off. Off spares the page the work of drawing. */
+  setRendering(enabled: boolean): void {
+    this.send({ type: 'setRendering', enabled });
+  }
+
+  /** Ask for the world as save data; it arrives through `onSaved`. */
+  save(): void {
+    this.send({ type: 'save' });
+  }
+
+  /** Replace the world with one from save data. A bad file reports through `onError`. */
+  load(json: string): void {
+    this.send({ type: 'load', json });
   }
 
   destroy(): void {

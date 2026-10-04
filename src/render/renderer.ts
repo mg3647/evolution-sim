@@ -37,6 +37,14 @@ const SICK_COLOR = 0xb6ff3c;
 /** Smallest radius a creature is drawn at, in screen pixels. */
 const MIN_SCREEN_RADIUS = 2.5;
 
+/**
+ * A hue for a species id. Successive ids land far apart on the colour wheel
+ * (steps of the golden ratio), so neighbouring species are easy to tell apart.
+ */
+export function speciesHue(id: number): number {
+  return (id * 0.618034) % 1;
+}
+
 /** Convert hue, saturation and value in [0, 1] to a 0xRRGGBB colour. */
 function hsvToRgb(h: number, s: number, v: number): number {
   const channel = (offset: number) => {
@@ -80,6 +88,10 @@ export class WorldRenderer {
   onPick: ((x: number, y: number, radius: number) => void) | null = null;
   /** Whether to tint the ground with the scent creatures have left. */
   showScent = false;
+  /** Colour creatures by their inherited hue, or by the species they are grouped into. */
+  colorBy: 'family' | 'species' = 'family';
+  /** Keep the selected creature in the middle of the view. */
+  follow = false;
 
   private app = new Application();
   private camera = new Container();
@@ -126,8 +138,19 @@ export class WorldRenderer {
 
   /** Draw the world as of this snapshot. */
   update(snapshot: Snapshot): void {
+    // With drawing off the snapshot has no map; the last frame stays on screen.
+    if (!snapshot.rendered) return;
     this.lastSnapshot = snapshot;
     this.setWorldSize(snapshot.config.worldWidth, snapshot.config.worldHeight);
+    if (this.follow && snapshot.selected) {
+      const o = snapshot.selected.index * CREATURE_STRIDE;
+      const zoom = this.camera.scale.x;
+      this.camera.position.set(
+        this.app.screen.width / 2 - snapshot.creatures[o]! * zoom,
+        this.app.screen.height / 2 - snapshot.creatures[o + 1]! * zoom,
+      );
+      this.cameraMoved = true;
+    }
     this.drawPlants(snapshot);
     this.drawCreatures(snapshot);
   }
@@ -248,7 +271,8 @@ export class WorldRenderer {
       sprite.scale.set((Math.max(creatures[o + 4]!, minRadius) * 2) / CREATURE_TEXTURE_SIZE);
       // Hue is inherited, so relatives share a colour; hungry creatures are dimmer.
       const fed = Math.min(1, creatures[o + 3]! * 2);
-      sprite.tint = hsvToRgb(creatures[o + 5]!, CREATURE_SATURATION, DIMMEST + (1 - DIMMEST) * fed);
+      const hue = this.colorBy === 'species' ? speciesHue(creatures[o + 8]!) : creatures[o + 5]!;
+      sprite.tint = hsvToRgb(hue, CREATURE_SATURATION, DIMMEST + (1 - DIMMEST) * fed);
     }
 
     const ring = this.selectionRing;

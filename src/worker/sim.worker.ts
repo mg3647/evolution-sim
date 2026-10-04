@@ -1,6 +1,7 @@
 import { enabledLinks, INPUT_COUNT, OUTPUT_COUNT } from '../sim/brain';
 import { maxEnergyFor } from '../sim/genome';
 import { wrappedDelta } from '../sim/geometry';
+import { loadWorld, saveWorld, type SavedWorld } from '../sim/serialize';
 import { clearWorldWalls, triggerWorldEvent, type World } from '../sim/world';
 import {
   CREATURE_STRIDE,
@@ -8,29 +9,42 @@ import {
   type HistoryData,
   type Inspection,
   type Snapshot,
+  type SpeciesView,
   type ToWorker,
+  type TreeData,
 } from './protocol';
 import { SimRunner } from './runner';
 
 /** Wall time per loop iteration spent ticking, leaving room for messages. */
 const TICK_BUDGET_MS = 12;
+/** The same, with drawing off: fewer, longer bursts of ticking. */
+const TICK_BUDGET_UNDRAWN_MS = 40;
 const SNAPSHOT_INTERVAL_MS = 1000 / 60;
+const SNAPSHOT_INTERVAL_UNDRAWN_MS = 250;
 const HISTORY_INTERVAL_MS = 250;
+const TREE_INTERVAL_MS = 1000;
 const TPS_WINDOW_MS = 500;
+/** Species listed in a snapshot. */
+const SPECIES_SHOWN = 8;
 
 let runner: SimRunner | null = null;
 let loopTimer: ReturnType<typeof setTimeout> | null = null;
 /** Id of the creature being inspected, or 0 for none. */
 let selectedId = 0;
+/** Whether snapshots carry the map and creatures for drawing. */
+let rendering = true;
 let lastSnapshotTime = 0;
 let lastHistoryTime = 0;
+let lastTreeTime = 0;
 /** History version last sent, or -1 to force a send. */
 let sentHistoryVersion = -1;
+/** Tick of the tree last sent, or -1 to force a send. */
+let sentTreeTick = -1;
 let windowStart = 0;
 let windowTicks = 0;
 let measuredTps = 0;
 
-function post(message: FromWorker, transfer: Transferable[]): void {
+function post(message: FromWorker, transfer: Transferable[] = []): void {
   self.postMessage(message, { transfer });
 }
 
@@ -73,7 +87,44 @@ function inspect(world: World, i: number): Inspection {
     links: enabledLinks(brain),
     inputs: Array.from(brain.activation.subarray(0, INPUT_COUNT)),
     outputs: Array.from(brain.activation.subarray(INPUT_COUNT, INPUT_COUNT + OUTPUT_COUNT)),
+    species: c.species[i]!,
+    brain: {
+      hiddenCount: brain.hiddenIds.length,
+      activation: Array.from(brain.activation),
+      linkFrom: Array.from(brain.linkFrom),
+      linkTo: Array.from(brain.linkTo),
+      linkWeight: Array.from(brain.linkWeight),
+    },
   };
+}
+
+/** Tally the living members of each species, largest first. */
+function speciesViews(world: World): SpeciesView[] {
+  const { creatures: c } = world;
+  const tallies = new Map<number, { count: number; size: number; speed: number; diet: number }>();
+  for (let i = 0; i < c.count; i++) {
+    let tally = tallies.get(c.species[i]!);
+    if (!tally) {
+      tally = { count: 0, size: 0, speed: 0, diet: 0 };
+      tallies.set(c.species[i]!, tally);
+    }
+    tally.count++;
+    tally.size += c.size[i]!;
+    tally.speed += c.speed[i]!;
+    tally.diet += c.diet[i]!;
+  }
+  const bornTicks = new Map(world.species.species.map((record) => [record.id, record.bornTick]));
+  return [...tallies]
+    .map(([id, tally]) => ({
+      id,
+      count: tally.count,
+      bornTick: bornTicks.get(id) ?? world.tick,
+      meanSize: tally.size / tally.count,
+      meanSpeed: tally.speed / tally.count,
+      meanDiet: tally.diet / tally.count,
+    }))
+    .sort((a, b) => b.count - a.count || a.id - b.id)
+    .slice(0, SPECIES_SHOWN);
 }
 
 function sendSnapshot(now: number): void {
@@ -81,7 +132,7 @@ function sendSnapshot(now: number): void {
   const { world } = runner;
   const { config, creatures: c, plants: p } = world;
 
-  const creatures = new Float32Array(c.count * CREATURE_STRIDE);
+  const creatures = new Float32Array(rendering ? c.count * CREATURE_STRIDE : 0);
   let sizeTotal = 0;
   let speedTotal = 0;
   let senseTotal = 0;
@@ -92,15 +143,18 @@ function sendSnapshot(now: number): void {
   let selected: Inspection | null = null;
   for (let i = 0; i < c.count; i++) {
     const size = c.size[i]!;
-    const o = i * CREATURE_STRIDE;
-    creatures[o] = c.x[i]!;
-    creatures[o + 1] = c.y[i]!;
-    creatures[o + 2] = c.heading[i]!;
-    creatures[o + 3] = c.energy[i]! / maxEnergyFor(size, config);
-    creatures[o + 4] = config.creatureRadius * size;
-    creatures[o + 5] = c.hue[i]!;
-    creatures[o + 6] = c.diet[i]!;
-    creatures[o + 7] = Math.sign(c.sick[i]!);
+    if (rendering) {
+      const o = i * CREATURE_STRIDE;
+      creatures[o] = c.x[i]!;
+      creatures[o + 1] = c.y[i]!;
+      creatures[o + 2] = c.heading[i]!;
+      creatures[o + 3] = c.energy[i]! / maxEnergyFor(size, config);
+      creatures[o + 4] = config.creatureRadius * size;
+      creatures[o + 5] = c.hue[i]!;
+      creatures[o + 6] = c.diet[i]!;
+      creatures[o + 7] = Math.sign(c.sick[i]!);
+      creatures[o + 8] = c.species[i]!;
+    }
     if (c.sick[i]! > 0) infected++;
     dietTotal += c.diet[i]!;
     if (c.diet[i]! > 0.5) meatEaters++;
@@ -111,16 +165,17 @@ function sendSnapshot(now: number): void {
     if (c.generation[i]! > maxGeneration) maxGeneration = c.generation[i]!;
   }
 
-  const plants = new Uint8Array(p.energy.length);
-  const meat = new Uint8Array(p.meat.length);
-  const scent = new Uint8Array(p.scent.length);
-  let plantEnergy = 0;
-  for (let i = 0; i < plants.length; i++) {
+  const cells = rendering ? p.energy.length : 0;
+  const plants = new Uint8Array(cells);
+  const meat = new Uint8Array(cells);
+  const scent = new Uint8Array(cells);
+  for (let i = 0; i < cells; i++) {
     plants[i] = (p.energy[i]! / config.plantCapacity) * 255;
     meat[i] = Math.min(1, p.meat[i]! / config.meatScale) * 255;
     scent[i] = Math.min(1, p.scent[i]!) * 255;
-    plantEnergy += p.energy[i]!;
   }
+  let plantEnergy = 0;
+  for (let i = 0; i < p.energy.length; i++) plantEnergy += p.energy[i]!;
 
   const snapshot: Snapshot = {
     config,
@@ -142,7 +197,7 @@ function sendSnapshot(now: number): void {
     plantFill: world.plantCapacityTotal > 0 ? plantEnergy / world.plantCapacityTotal : 0,
     meat,
     scent,
-    walls: p.walls.slice(),
+    walls: rendering ? p.walls.slice() : new Uint8Array(0),
     environment: {
       season: world.climate.season,
       yearFraction: config.seasonLength > 0 ? (world.tick % config.seasonLength) / config.seasonLength : 0,
@@ -160,6 +215,8 @@ function sendSnapshot(now: number): void {
     reseeded: world.reseeded,
     deaths: { ...world.deaths },
     selected,
+    rendered: rendering,
+    species: speciesViews(world),
   };
   post({ type: 'snapshot', snapshot }, [creatures.buffer, plants.buffer, meat.buffer, scent.buffer]);
   lastSnapshotTime = now;
@@ -179,23 +236,41 @@ function sendHistory(now: number): void {
     meanSensorRange: h.meanSensorRange.slice(0, h.count),
     meanDiet: h.meanDiet.slice(0, h.count),
     meatEaters: h.meatEaters.slice(0, h.count),
+    speciesCount: h.speciesCount.slice(0, h.count),
     meanLinks: h.meanLinks.slice(0, h.count),
     meanNeurons: h.meanNeurons.slice(0, h.count),
   };
-  post({ type: 'history', history }, [
-    history.tick.buffer,
-    history.population.buffer,
-    history.plantPercent.buffer,
-    history.meanSize.buffer,
-    history.meanSpeed.buffer,
-    history.meanSensorRange.buffer,
-    history.meanDiet.buffer,
-    history.meatEaters.buffer,
-    history.meanLinks.buffer,
-    history.meanNeurons.buffer,
-  ]);
+  post(
+    { type: 'history', history },
+    Object.values(history).map((series) => series.buffer),
+  );
   sentHistoryVersion = h.version;
   lastHistoryTime = now;
+}
+
+/** Send the family tree if the world has moved on since it was last sent. */
+function sendTree(now: number): void {
+  if (!runner) return;
+  const { world } = runner;
+  if (world.tick === sentTreeTick) return;
+  const nodes = [...world.lineage.all()];
+  const indexOf = new Map(nodes.map((node, k) => [node.id, k]));
+  const tree: TreeData = {
+    tick: world.tick,
+    parent: new Int32Array(nodes.length),
+    birthTick: new Float64Array(nodes.length),
+    deathTick: new Float64Array(nodes.length),
+    hue: new Float32Array(nodes.length),
+  };
+  nodes.forEach((node, k) => {
+    tree.parent[k] = indexOf.get(node.parentId) ?? -1;
+    tree.birthTick[k] = node.birthTick;
+    tree.deathTick[k] = node.deathTick;
+    tree.hue[k] = node.hue;
+  });
+  post({ type: 'tree', tree }, [tree.parent.buffer, tree.birthTick.buffer, tree.deathTick.buffer, tree.hue.buffer]);
+  sentTreeTick = world.tick;
+  lastTreeTime = now;
 }
 
 function loop(): void {
@@ -203,7 +278,8 @@ function loop(): void {
   if (!runner || !runner.running) return;
 
   const now = performance.now();
-  windowTicks += runner.advance(now, () => performance.now(), TICK_BUDGET_MS);
+  const budget = rendering ? TICK_BUDGET_MS : TICK_BUDGET_UNDRAWN_MS;
+  windowTicks += runner.advance(now, () => performance.now(), budget);
 
   const after = performance.now();
   if (after - windowStart >= TPS_WINDOW_MS) {
@@ -211,8 +287,10 @@ function loop(): void {
     windowStart = after;
     windowTicks = 0;
   }
-  if (after - lastSnapshotTime >= SNAPSHOT_INTERVAL_MS) sendSnapshot(after);
+  const snapshotInterval = rendering ? SNAPSHOT_INTERVAL_MS : SNAPSHOT_INTERVAL_UNDRAWN_MS;
+  if (after - lastSnapshotTime >= snapshotInterval) sendSnapshot(after);
   if (after - lastHistoryTime >= HISTORY_INTERVAL_MS) sendHistory(after);
+  if (after - lastTreeTime >= TREE_INTERVAL_MS) sendTree(after);
 
   loopTimer = setTimeout(loop, 0);
 }
@@ -221,6 +299,13 @@ function startLoop(): void {
   windowStart = performance.now();
   windowTicks = 0;
   if (loopTimer === null) loopTimer = setTimeout(loop, 0);
+}
+
+/** Forget everything tied to the previous world. */
+function worldReplaced(): void {
+  sentHistoryVersion = -1;
+  sentTreeTick = -1;
+  selectedId = 0;
 }
 
 self.onmessage = (event: MessageEvent<ToWorker>) => {
@@ -233,8 +318,7 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
     runner = new SimRunner(message.config);
     runner.world.environment.randomEvents = randomEvents;
     runner.setSpeed(speed);
-    sentHistoryVersion = -1;
-    selectedId = 0;
+    worldReplaced();
     if (wasRunning) {
       runner.play();
       startLoop();
@@ -260,8 +344,24 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
     clearWorldWalls(runner.world);
   } else if (message.type === 'setRandomEvents') {
     runner.world.environment.randomEvents = message.enabled;
+  } else if (message.type === 'setRendering') {
+    rendering = message.enabled;
+  } else if (message.type === 'save') {
+    const { world } = runner;
+    post({ type: 'saved', json: JSON.stringify(saveWorld(world)), tick: world.tick, seed: world.config.seed });
+    return;
+  } else if (message.type === 'load') {
+    try {
+      runner.setWorld(loadWorld(JSON.parse(message.json) as SavedWorld));
+      worldReplaced();
+    } catch (error) {
+      const reason = error instanceof SyntaxError ? 'This file is not a saved world.' : (error as Error).message;
+      post({ type: 'error', message: `Could not load: ${reason}` });
+      return;
+    }
   }
   const now = performance.now();
   sendSnapshot(now);
   sendHistory(now);
+  sendTree(now);
 };

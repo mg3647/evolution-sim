@@ -1,6 +1,8 @@
 <script lang="ts">
   import { INPUT_LABELS, OUTPUT_LABELS } from '../sim/brain';
+  import { speciesHue } from '../render/renderer';
   import type { Inspection } from '../worker/protocol';
+  import BrainGraph from './BrainGraph.svelte';
 
   let { creature }: { creature: Inspection | null } = $props();
 
@@ -24,6 +26,13 @@
     <dl>
       <div><dt>Id</dt><dd>{creature.id}</dd></div>
       <div><dt>Generation</dt><dd>{creature.generation}</dd></div>
+      <div title="The group of alike creatures it belongs to; see the Evolution tab">
+        <dt>Species</dt>
+        <dd>
+          <span class="swatch" style="background: hsl({speciesHue(creature.species) * 360}, 70%, 60%)"></span>
+          {creature.species}
+        </dd>
+      </div>
       <div><dt>Age</dt><dd>{creature.age.toLocaleString()}</dd></div>
       <div>
         <dt>Energy</dt>
@@ -53,6 +62,7 @@
       hidden {creature.hiddenNeurons === 1 ? 'neuron' : 'neurons'}: junctions that let it combine senses
       before acting. Children inherit the wiring with small random changes.
     </p>
+    <BrainGraph brain={creature.brain} />
 
     <h3>Brain outputs: what it is doing now</h3>
     <p class="note">
@@ -118,6 +128,14 @@
     margin-bottom: 6px;
     font-size: 12px;
     line-height: 1.45;
+  }
+
+  .swatch {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    margin-right: 4px;
+    border-radius: 50%;
   }
 
   .note b {

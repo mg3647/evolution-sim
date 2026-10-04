@@ -3,14 +3,16 @@
 A 2D world of creatures whose bodies and brains evolve under natural selection
 alone: no fitness score, just a closed energy economy. Runs in the browser.
 
-Status: milestone 6 of 8. Plants regrow on a fertility map. Creatures see with
+Status: milestone 7 of 8. Plants regrow on a fertility map. Creatures see with
 three vision rays, decide with a small neural net whose wiring is inherited
 and mutated, eat, pay energy costs, reproduce and die. Bodies and brains
 evolve. Creatures can bite each other, the dead leave meat, and a diet gene
 trades plant digestion against meat digestion, so foraging, scavenging and
 hunting all emerge. The world has seasons and slowly drifting fertility, and
 you can trigger droughts, ice ages, food booms, plagues, meteors and walls.
-Creatures can leave and smell scent.
+Creatures can leave and smell scent. You can inspect any creature's brain
+wiring, see the family tree and species of the living population, and save
+and load a world.
 
 ## Run it
 

@@ -14,10 +14,14 @@ export type ToWorker =
   | { type: 'pick'; x: number; y: number; radius: number }
   | { type: 'event'; kind: EventKind }
   | { type: 'clearWalls' }
-  | { type: 'setRandomEvents'; enabled: boolean };
+  | { type: 'setRandomEvents'; enabled: boolean }
+  /** With drawing off, snapshots carry numbers only, sent less often. */
+  | { type: 'setRendering'; enabled: boolean }
+  | { type: 'save' }
+  | { type: 'load'; json: string };
 
 /** Number of floats per creature in `Snapshot.creatures`. */
-export const CREATURE_STRIDE = 8;
+export const CREATURE_STRIDE = 9;
 
 /** Everything shown about the selected creature. */
 export interface Inspection {
@@ -45,6 +49,31 @@ export interface Inspection {
   /** Brain inputs and outputs this tick, in the order of INPUT_LABELS and OUTPUT_LABELS. */
   inputs: number[];
   outputs: number[];
+  species: number;
+  brain: BrainView;
+}
+
+/**
+ * A brain's wiring, for drawing. Neurons are numbered inputs first, then
+ * outputs, then hidden; links refer to them by that number.
+ */
+export interface BrainView {
+  hiddenCount: number;
+  /** Current output of every neuron. */
+  activation: number[];
+  linkFrom: number[];
+  linkTo: number[];
+  linkWeight: number[];
+}
+
+/** One species as shown in the species list. */
+export interface SpeciesView {
+  id: number;
+  count: number;
+  bornTick: number;
+  meanSize: number;
+  meanSpeed: number;
+  meanDiet: number;
 }
 
 /** The state of the seasons and events. */
@@ -76,7 +105,7 @@ export interface Snapshot {
 
   population: number;
   /** Per creature: x, y, heading, energy as a fraction of its maximum, radius, hue, diet,
-   * and 1 if sick, -1 if immune, 0 otherwise. */
+   * 1 if sick, -1 if immune, 0 otherwise, and species id. Empty when drawing is off. */
   creatures: Float32Array;
   meanSize: number;
   meanSpeed: number;
@@ -107,6 +136,11 @@ export interface Snapshot {
 
   /** The selected creature, or null if none is selected or it has died. */
   selected: Inspection | null;
+
+  /** False when drawing is off: the map arrays are then empty. */
+  rendered: boolean;
+  /** Living species, largest first. */
+  species: SpeciesView[];
 }
 
 /** Statistics over the whole run so far, one entry per sample, for charts. */
@@ -120,10 +154,29 @@ export interface HistoryData {
   meanSensorRange: Float32Array;
   meanDiet: Float32Array;
   meatEaters: Float32Array;
+  speciesCount: Float32Array;
   meanLinks: Float32Array;
   meanNeurons: Float32Array;
 }
 
+/**
+ * The family tree of the living population. Entry k describes one creature:
+ * living ones, plus the dead ancestors where the tree branches.
+ */
+export interface TreeData {
+  /** Tick the tree was taken at. */
+  tick: number;
+  /** Index of the nearest kept ancestor, or -1 for none. */
+  parent: Int32Array;
+  birthTick: Float64Array;
+  /** Tick of death, or -1 if alive. */
+  deathTick: Float64Array;
+  hue: Float32Array;
+}
+
 export type FromWorker =
   | { type: 'snapshot'; snapshot: Snapshot }
-  | { type: 'history'; history: HistoryData };
+  | { type: 'history'; history: HistoryData }
+  | { type: 'tree'; tree: TreeData }
+  | { type: 'saved'; json: string; tick: number; seed: string }
+  | { type: 'error'; message: string };

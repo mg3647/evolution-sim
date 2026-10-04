@@ -28,6 +28,13 @@ export class SimRunner {
     this.lastTime = null;
   }
 
+  /** Swap in another world, such as one loaded from a file. Play state and speed are kept. */
+  setWorld(world: World): void {
+    this.world = world;
+    this.owedTicks = 0;
+    this.lastTime = null;
+  }
+
   play(): void {
     this.running = true;
     this.lastTime = null;

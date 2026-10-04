@@ -5,10 +5,19 @@
   import { defaultConfig } from '../sim/config';
   import { EVENT_KINDS, EVENT_LABELS, type EventKind } from '../sim/environment';
   import { SimClient } from '../worker/client';
-  import type { HistoryData, Snapshot, Speed } from '../worker/protocol';
+  import type { HistoryData, Snapshot, Speed, TreeData } from '../worker/protocol';
   import Chart, { type ChartSeries } from './Chart.svelte';
   import EnvironmentPanel from './EnvironmentPanel.svelte';
   import Inspector from './Inspector.svelte';
+  import LineageTree from './LineageTree.svelte';
+  import SpeciesList from './SpeciesList.svelte';
+
+  type Tab = 'world' | 'creature' | 'evolution';
+  const TABS: { id: Tab; label: string }[] = [
+    { id: 'world', label: 'World' },
+    { id: 'creature', label: 'Creature' },
+    { id: 'evolution', label: 'Evolution' },
+  ];
 
   const SPEEDS: { label: string; value: Speed }[] = [
     { label: '1x', value: 1 },
@@ -44,14 +53,24 @@
     { label: 'Mean links', color: '#e8c468' },
     { label: 'Mean hidden neurons', color: '#6cb6ff', axis: 'right' },
   ];
+  const SPECIES_SERIES: ChartSeries[] = [{ label: 'Species', color: '#7fd6c2' }];
 
   let host: HTMLDivElement;
+  let fileInput: HTMLInputElement;
   let client: SimClient | undefined;
   let renderer: WorldRenderer | undefined;
   let snapshot = $state.raw<Snapshot | null>(null);
   let history = $state.raw<HistoryData | null>(null);
+  let tree = $state.raw<TreeData | null>(null);
   let seed = $state(defaultConfig.seed);
+  let tab = $state<Tab>('world');
   let showScent = $state(false);
+  let colorBySpecies = $state(false);
+  let drawWorld = $state(true);
+  let follow = $state(false);
+  let errorMessage = $state('');
+  /** Id of the creature the panel last switched to, so a new pick opens the Creature tab once. */
+  let shownCreature = 0;
 
   const populationData = $derived<uPlot.AlignedData | null>(
     history && [history.tick, history.population, history.plantPercent],
@@ -65,6 +84,7 @@
   const brainData = $derived<uPlot.AlignedData | null>(
     history && [history.tick, history.meanLinks, history.meanNeurons],
   );
+  const speciesData = $derived<uPlot.AlignedData | null>(history && [history.tick, history.speciesCount]);
 
   onMount(() => {
     let disposed = false;
@@ -79,8 +99,14 @@
         onSnapshot: (s) => {
           snapshot = s;
           r.update(s);
+          const picked = s.selected?.id ?? 0;
+          if (picked !== 0 && picked !== shownCreature) tab = 'creature';
+          shownCreature = picked;
         },
         onHistory: (h) => (history = h),
+        onTree: (t) => (tree = t),
+        onSaved: download,
+        onError: (message) => (errorMessage = message),
       });
       client.init({ ...defaultConfig, seed });
       r.onPick = (x, y, radius) => client?.pick(x, y, radius);
@@ -102,10 +128,34 @@
     client?.init({ ...defaultConfig, seed });
   }
 
-  function toggleScent() {
+  function applyViewOptions() {
     if (!renderer) return;
     renderer.showScent = showScent;
+    renderer.colorBy = colorBySpecies ? 'species' : 'family';
+    renderer.follow = follow;
     renderer.redraw();
+  }
+
+  function toggleDrawing() {
+    client?.setRendering(drawWorld);
+  }
+
+  /** Hand the saved world to the browser as a file download. */
+  function download(json: string, tick: number, savedSeed: string) {
+    const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `evolution-sim-${savedSeed.replace(/[^\w-]+/g, '_')}-tick${tick}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function loadFile() {
+    const file = fileInput.files?.[0];
+    fileInput.value = '';
+    if (!file) return;
+    errorMessage = '';
+    client?.load(await file.text());
   }
 
   function count(value: number | undefined): string {
@@ -148,6 +198,20 @@
       <button type="submit" disabled={!snapshot}>Restart</button>
     </form>
 
+    <div class="group">
+      <button
+        title="Download this world as a file you can load later"
+        onclick={() => client?.save()}
+        disabled={!snapshot}
+      >
+        Save
+      </button>
+      <button title="Replace this world with one from a saved file" onclick={() => fileInput.click()} disabled={!snapshot}>
+        Load
+      </button>
+      <input class="file" type="file" accept=".json,application/json" bind:this={fileInput} onchange={loadFile} />
+    </div>
+
     <div class="stats">
       <span>Tick <b>{count(snapshot?.tick)}</b></span>
       <span><b>{count(snapshot ? Math.round(snapshot.measuredTps) : undefined)}</b> ticks/s</span>
@@ -164,11 +228,7 @@
           {EVENT_LABELS[kind]}
         </button>
       {/each}
-      <button
-        title="Remove every wall"
-        onclick={() => client?.clearWalls()}
-        disabled={!snapshot || !snapshot.walls.includes(1)}
-      >
+      <button title="Remove every wall" onclick={() => client?.clearWalls()} disabled={!snapshot}>
         Clear walls
       </button>
     </div>
@@ -181,71 +241,116 @@
       />
       Random events
     </label>
+
+    <span class="label view">View</span>
     <label title="Tint the ground purple where creatures have left scent">
-      <input type="checkbox" bind:checked={showScent} onchange={toggleScent} />
+      <input type="checkbox" bind:checked={showScent} onchange={applyViewOptions} />
       Show scent
+    </label>
+    <label title="Colour creatures by the species they are grouped into, instead of by family colour">
+      <input type="checkbox" bind:checked={colorBySpecies} onchange={applyViewOptions} />
+      Colour by species
+    </label>
+    <label title="Untick to stop drawing the world while it runs. The charts and numbers keep updating.">
+      <input type="checkbox" bind:checked={drawWorld} onchange={toggleDrawing} />
+      Draw world
     </label>
   </div>
 
+  {#if errorMessage}
+    <div class="error" role="alert">
+      <span>{errorMessage}</span>
+      <button onclick={() => (errorMessage = '')}>Dismiss</button>
+    </div>
+  {/if}
+
   <div class="main">
-    <div class="world" bind:this={host}></div>
+    <div class="world" class:paused-drawing={!drawWorld} bind:this={host}>
+      {#if !drawWorld}
+        <div class="notice">Drawing is off. The world is still running; tick "Draw world" to see it.</div>
+      {/if}
+    </div>
 
     <aside>
-      <dl>
-        <div><dt>Creatures</dt><dd>{count(snapshot?.population)}</dd></div>
-        <div><dt>Plants</dt><dd>{snapshot ? Math.round(snapshot.plantFill * 100) : '-'}%</dd></div>
-        <div><dt>Mean size</dt><dd>{decimal(snapshot?.meanSize)}</dd></div>
-        <div><dt>Mean speed</dt><dd>{decimal(snapshot?.meanSpeed)}</dd></div>
-        <div><dt>Mean sensor range</dt><dd>{decimal(snapshot?.meanSensorRange)}</dd></div>
-        <div title="Creatures whose diet gene is above 0.5; drawn as pointed shapes">
-          <dt>Meat-eaters</dt>
-          <dd>{count(snapshot?.meatEaters)}</dd>
-        </div>
-        <div title="0 eats only plants, 1 eats only meat">
-          <dt>Mean diet</dt>
-          <dd>{decimal(snapshot?.meanDiet)}</dd>
-        </div>
-        <div><dt>Generation</dt><dd>{count(snapshot?.maxGeneration)}</dd></div>
-        <div><dt>Births</dt><dd>{count(snapshot?.births)}</dd></div>
-        <div><dt>Starved</dt><dd>{count(snapshot?.deaths.starved)}</dd></div>
-        <div><dt>Killed</dt><dd>{count(snapshot?.deaths.killed)}</dd></div>
-        <div title="Deaths from plague and meteors">
-          <dt>Died in disasters</dt>
-          <dd>{count(snapshot?.deaths.disaster)}</dd>
-        </div>
-        <div><dt>Died of old age</dt><dd>{count(snapshot?.deaths.oldAge)}</dd></div>
-        <div
-          title="Parentless creatures added because the population fell below the minimum"
-        >
-          <dt>Reseeded</dt>
-          <dd>{count(snapshot?.reseeded)}</dd>
-        </div>
-      </dl>
+      <div class="tabs" role="tablist">
+        {#each TABS as t (t.id)}
+          <button role="tab" aria-selected={tab === t.id} class:active={tab === t.id} onclick={() => (tab = t.id)}>
+            {t.label}
+          </button>
+        {/each}
+      </div>
 
-      <EnvironmentPanel environment={snapshot?.environment ?? null} />
+      {#if tab === 'world'}
+        <dl>
+          <div><dt>Creatures</dt><dd>{count(snapshot?.population)}</dd></div>
+          <div><dt>Plants</dt><dd>{snapshot ? Math.round(snapshot.plantFill * 100) : '-'}%</dd></div>
+          <div title="Creatures whose diet gene is above 0.5; drawn as pointed shapes">
+            <dt>Meat-eaters</dt>
+            <dd>{count(snapshot?.meatEaters)}</dd>
+          </div>
+          <div><dt>Species</dt><dd>{count(history?.speciesCount.at(-1))}</dd></div>
+          <div><dt>Births</dt><dd>{count(snapshot?.births)}</dd></div>
+          <div><dt>Generation</dt><dd>{count(snapshot?.maxGeneration)}</dd></div>
+          <div><dt>Starved</dt><dd>{count(snapshot?.deaths.starved)}</dd></div>
+          <div><dt>Killed</dt><dd>{count(snapshot?.deaths.killed)}</dd></div>
+          <div title="Deaths from plague and meteors">
+            <dt>Died in disasters</dt>
+            <dd>{count(snapshot?.deaths.disaster)}</dd>
+          </div>
+          <div><dt>Died of old age</dt><dd>{count(snapshot?.deaths.oldAge)}</dd></div>
+          <div title="Parentless creatures added because the population fell below the minimum">
+            <dt>Reseeded</dt>
+            <dd>{count(snapshot?.reseeded)}</dd>
+          </div>
+        </dl>
 
-      <Chart title="Population" series={POPULATION_SERIES} data={populationData} />
-      <Chart
-        title="Diet"
-        note="Meat-eaters are creatures that digest meat better than plants; they are drawn as pointed shapes. Mean diet runs from 0 (only plants) to 1 (only meat). Red ground is meat left by the dead."
-        series={DIET_SERIES}
-        data={dietData}
-      />
+        <EnvironmentPanel environment={snapshot?.environment ?? null} />
 
-      <Inspector creature={snapshot?.selected ?? null} />
+        <Chart title="Population" series={POPULATION_SERIES} data={populationData} />
+        <Chart
+          title="Diet"
+          note="Meat-eaters are creatures that digest meat better than plants; they are drawn as pointed shapes. Mean diet runs from 0 (only plants) to 1 (only meat). Red ground is meat left by the dead."
+          series={DIET_SERIES}
+          data={dietData}
+        />
+      {:else if tab === 'creature'}
+        <label class="follow" title="Keep the selected creature in the middle of the view">
+          <input type="checkbox" bind:checked={follow} onchange={applyViewOptions} />
+          Follow the selected creature
+        </label>
+        <Inspector creature={snapshot?.selected ?? null} />
+      {:else}
+        <dl>
+          <div><dt>Mean size</dt><dd>{decimal(snapshot?.meanSize)}</dd></div>
+          <div><dt>Mean speed</dt><dd>{decimal(snapshot?.meanSpeed)}</dd></div>
+          <div><dt>Mean sensor range</dt><dd>{decimal(snapshot?.meanSensorRange)}</dd></div>
+          <div title="0 eats only plants, 1 eats only meat">
+            <dt>Mean diet</dt>
+            <dd>{decimal(snapshot?.meanDiet)}</dd>
+          </div>
+        </dl>
 
-      <Chart
-        title="Traits"
-        note="Average body genes. 1 is what the first generation starts with."
-        series={TRAIT_SERIES}
-        data={traitData}
-      />
-      <Chart
-        title="Brains"
-        note="Average brain wiring. Links are rules connecting a sense to an action; hidden neurons combine senses. Both cost energy, so brains grow only when the extra wiring pays for itself."
-        series={BRAIN_SERIES}
-        data={brainData}
-      />
+        <LineageTree {tree} />
+        <SpeciesList species={snapshot?.species ?? []} tick={snapshot?.tick ?? 0} />
+        <Chart
+          title="Number of species"
+          note="Rises when families drift apart, falls when a species dies out."
+          series={SPECIES_SERIES}
+          data={speciesData}
+        />
+        <Chart
+          title="Traits"
+          note="Average body genes. 1 is what the first generation starts with."
+          series={TRAIT_SERIES}
+          data={traitData}
+        />
+        <Chart
+          title="Brains"
+          note="Average brain wiring. Links are rules connecting a sense to an action; hidden neurons combine senses. Both cost energy, so brains grow only when the extra wiring pays for itself."
+          series={BRAIN_SERIES}
+          data={brainData}
+        />
+      {/if}
     </aside>
   </div>
 </div>
@@ -277,7 +382,7 @@
     border-bottom: 1px solid var(--border);
   }
 
-  .events .label {
+  .label {
     color: var(--muted);
     font-size: 12px;
     font-weight: 600;
@@ -285,7 +390,12 @@
     letter-spacing: 0.05em;
   }
 
-  .events input {
+  .label.view {
+    margin-left: 12px;
+  }
+
+  .events input,
+  .follow input {
     width: auto;
     padding: 0;
   }
@@ -307,6 +417,10 @@
     width: 9em;
   }
 
+  .file {
+    display: none;
+  }
+
   .stats {
     display: flex;
     gap: 16px;
@@ -319,6 +433,17 @@
     color: var(--text);
   }
 
+  .error {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 14px;
+    background: #3a1d22;
+    border-bottom: 1px solid #7a3340;
+    color: #ffd7dc;
+  }
+
   .main {
     flex: 1;
     min-height: 0;
@@ -326,6 +451,7 @@
   }
 
   .world {
+    position: relative;
     flex: 1;
     min-width: 0;
     min-height: 0;
@@ -335,6 +461,24 @@
 
   .world:active {
     cursor: grabbing;
+  }
+
+  .world.paused-drawing :global(canvas) {
+    opacity: 0.35;
+  }
+
+  .notice {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1;
+    padding: 6px 12px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    pointer-events: none;
   }
 
   aside {
@@ -347,6 +491,15 @@
     overflow-y: auto;
     background: var(--panel);
     border-left: 1px solid var(--border);
+  }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+  }
+
+  .tabs button {
+    flex: 1;
   }
 
   dl {
