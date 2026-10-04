@@ -10,6 +10,8 @@
   let canvas: HTMLCanvasElement;
   let living = $state(0);
   let founders = $state(0);
+  /** The most recent ancestor shared by the largest family, or null in an empty world. */
+  let ancestor = $state<{ bornTick: number; ago: number; share: number; alive: boolean } | null>(null);
 
   /** Give every creature a row: the living get their own, a dead ancestor sits amid its children. */
   function layoutRows(data: TreeData): { row: Float32Array; rows: number; children: number[][] } {
@@ -45,7 +47,7 @@
     return { row, rows: next, children };
   }
 
-  function draw(data: TreeData, colorBySpecies: boolean): void {
+  function draw(data: TreeData, colorBySpecies: boolean, ancestorIndex: number): void {
     const width = canvas.clientWidth;
     const scale = window.devicePixelRatio || 1;
     canvas.width = width * scale;
@@ -62,6 +64,18 @@
     const span = Math.max(1, data.tick - first);
     const x = (tick: number) => PAD + ((tick - first) / span) * (width - PAD * 2);
     const y = (k: number) => PAD + ((row[k]! + 0.5) / Math.max(1, rows)) * (HEIGHT - PAD * 2);
+
+    // A dashed line marks when the largest family's common ancestor was born.
+    if (ancestorIndex >= 0) {
+      const at = x(data.birthTick[ancestorIndex]!);
+      ctx.strokeStyle = 'rgba(219, 228, 236, 0.5)';
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(at, 0);
+      ctx.lineTo(at, HEIGHT);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
 
     ctx.lineWidth = 1;
     ctx.globalAlpha = 0.85;
@@ -84,6 +98,26 @@
     }
   }
 
+  /**
+   * The family holding the most living creatures. The tree keeps a dead
+   * creature only where lines branch, so the top of a family is the most
+   * recent ancestor that all its living members share.
+   */
+  function largestFamily(data: TreeData): { root: number; members: number } | null {
+    const members = new Map<number, number>();
+    for (let k = 0; k < data.parent.length; k++) {
+      if (data.deathTick[k]! >= 0) continue;
+      let root = k;
+      while (data.parent[root]! >= 0) root = data.parent[root]!;
+      members.set(root, (members.get(root) ?? 0) + 1);
+    }
+    let best: { root: number; members: number } | null = null;
+    for (const [root, count] of members) {
+      if (!best || count > best.members) best = { root, members: count };
+    }
+    return best;
+  }
+
   $effect(() => {
     if (!tree) return;
     let alive = 0;
@@ -94,7 +128,14 @@
     }
     living = alive;
     founders = roots;
-    draw(tree, bySpecies);
+    const family = largestFamily(tree);
+    ancestor = family && {
+      bornTick: tree.birthTick[family.root]!,
+      ago: tree.tick - tree.birthTick[family.root]!,
+      share: alive > 0 ? family.members / alive : 0,
+      alive: tree.deathTick[family.root]! < 0,
+    };
+    draw(tree, bySpecies, family?.root ?? -1);
   });
 </script>
 
@@ -106,10 +147,18 @@
     ago. Colour is the inherited body colour, or the species when "Colour by species" is ticked.
   </p>
   <canvas bind:this={canvas} style="height: {HEIGHT}px"></canvas>
-  {#if tree}
+  {#if tree && ancestor}
     <p class="caption">
-      {living.toLocaleString()} living creatures descend from {founders.toLocaleString()}
-      {founders === 1 ? 'ancestor that had no parent' : 'separate ancestors that had no parent'}.
+      {#if founders === 1}
+        All <b>{living.toLocaleString()}</b> living creatures share one ancestor
+      {:else}
+        There are <b>{founders.toLocaleString()}</b> unrelated families. The largest holds
+        <b>{Math.round(ancestor.share * 100)}%</b> of the {living.toLocaleString()} living creatures and shares
+        one ancestor
+      {/if}
+      born <b>{ancestor.ago.toLocaleString()}</b> ticks ago, at tick {ancestor.bornTick.toLocaleString()}{ancestor.alive
+        ? ', and it is still alive'
+        : ''}. The dashed line marks that moment.
     </p>
   {/if}
 </section>
@@ -133,6 +182,10 @@
 
   .caption {
     margin: 6px 0 0;
+  }
+
+  .caption b {
+    color: var(--text);
   }
 
   canvas {

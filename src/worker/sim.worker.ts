@@ -2,6 +2,7 @@ import { enabledLinks, INPUT_COUNT, OUTPUT_COUNT } from '../sim/brain';
 import type { SimConfig } from '../sim/config';
 import { maxEnergyFor } from '../sim/genome';
 import { RESTART_KEYS } from '../sim/presets';
+import { brainProfile } from '../sim/profile';
 import { wrappedDelta } from '../sim/geometry';
 import { loadWorld, saveWorld, type SavedWorld } from '../sim/serialize';
 import { applyTool, clearWorldWalls, triggerWorldEvent, type World } from '../sim/world';
@@ -10,6 +11,7 @@ import {
   type FromWorker,
   type HistoryData,
   type Inspection,
+  type ProfileGroup,
   type Snapshot,
   type SpeciesView,
   type ToWorker,
@@ -281,6 +283,34 @@ function sendTree(now: number): void {
   ]);
   sentTreeTick = world.tick;
   lastTreeTime = now;
+  // Profiles change as slowly as the tree does, so they go out together.
+  sendProfiles();
+}
+
+/** Send brain profiles for plant-eaters, meat-eaters and the largest species. */
+function sendProfiles(): void {
+  if (!runner) return;
+  const { creatures: c } = runner.world;
+  const plants: number[] = [];
+  const meat: number[] = [];
+  const bySpecies = new Map<number, number[]>();
+  for (let i = 0; i < c.count; i++) {
+    (c.diet[i]! > 0.5 ? meat : plants).push(i);
+    const members = bySpecies.get(c.species[i]!);
+    if (members) members.push(i);
+    else bySpecies.set(c.species[i]!, [i]);
+  }
+  const largest = [...bySpecies].sort((a, b) => b[1].length - a[1].length || a[0] - b[0]).slice(0, SPECIES_SHOWN);
+  const groups: ProfileGroup[] = [
+    { id: 'plants', speciesId: 0, profile: brainProfile(c, plants) },
+    { id: 'meat', speciesId: 0, profile: brainProfile(c, meat) },
+    ...largest.map(([speciesId, members]) => ({
+      id: `species-${speciesId}`,
+      speciesId,
+      profile: brainProfile(c, members),
+    })),
+  ];
+  post({ type: 'profiles', groups });
 }
 
 function loop(): void {

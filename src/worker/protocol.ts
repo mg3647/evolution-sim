@@ -1,5 +1,6 @@
 import type { SimConfig } from '../sim/config';
 import type { EventKind, LogEntry, TimedEventKind } from '../sim/environment';
+import type { BrainProfile } from '../sim/profile';
 import type { ToolKind } from '../sim/world';
 
 /** Speed multiplier over the configured tick rate, or 'max' for unthrottled. */
@@ -181,7 +182,17 @@ export interface TreeData {
   species: Uint32Array;
 }
 
+/** How the brains of one group of creatures are wired, for comparing groups. */
+export interface ProfileGroup {
+  /** Stable key: 'plants', 'meat', or 'species-<id>'. */
+  id: string;
+  /** Species id, or 0 for the two diet groups. */
+  speciesId: number;
+  profile: BrainProfile;
+}
+
 export type FromWorker =
+  | { type: 'profiles'; groups: ProfileGroup[] }
   | { type: 'snapshot'; snapshot: Snapshot }
   | { type: 'history'; history: HistoryData }
   | { type: 'tree'; tree: TreeData }

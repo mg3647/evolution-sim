@@ -7,7 +7,8 @@
   import { EVENT_LABELS, type TimedEventKind } from '../sim/environment';
   import type { ToolKind } from '../sim/world';
   import { SimClient } from '../worker/client';
-  import type { HistoryData, Snapshot, Speed, TreeData } from '../worker/protocol';
+  import type { HistoryData, ProfileGroup, Snapshot, Speed, TreeData } from '../worker/protocol';
+  import BrainCompare from './BrainCompare.svelte';
   import Chart, { type ChartSeries } from './Chart.svelte';
   import EnvironmentPanel from './EnvironmentPanel.svelte';
   import Inspector from './Inspector.svelte';
@@ -58,8 +59,8 @@
     { label: 'Mean sensor range', color: '#b08cff' },
   ];
   const DIET_SERIES: ChartSeries[] = [
+    { label: 'Plant-eaters', color: '#4caf50' },
     { label: 'Meat-eaters', color: '#e0566a' },
-    { label: 'Mean diet', color: '#b08cff', axis: 'right' },
   ];
   const BRAIN_SERIES: ChartSeries[] = [
     { label: 'Mean links', color: '#e8c468' },
@@ -74,6 +75,7 @@
   let snapshot = $state.raw<Snapshot | null>(null);
   let history = $state.raw<HistoryData | null>(null);
   let tree = $state.raw<TreeData | null>(null);
+  let profiles = $state.raw<ProfileGroup[]>([]);
   let seed = $state(defaultConfig.seed);
   /** The settings in force. Restart-only ones take effect at the next restart. */
   let settings = $state<SimConfig>({ ...defaultConfig });
@@ -96,9 +98,11 @@
   const traitData = $derived<uPlot.AlignedData | null>(
     history && [history.tick, history.meanSize, history.meanSpeed, history.meanSensorRange],
   );
-  const dietData = $derived<uPlot.AlignedData | null>(
-    history && [history.tick, history.meatEaters, history.meanDiet],
-  );
+  const dietData = $derived.by<uPlot.AlignedData | null>(() => {
+    if (!history) return null;
+    const { population, meatEaters } = history;
+    return [history.tick, population.map((count, k) => count - meatEaters[k]!), meatEaters];
+  });
   const brainData = $derived<uPlot.AlignedData | null>(
     history && [history.tick, history.meanLinks, history.meanNeurons],
   );
@@ -128,6 +132,7 @@
         },
         onHistory: (h) => (history = h),
         onTree: (t) => (tree = t),
+        onProfiles: (groups) => (profiles = groups),
         onSaved: download,
         onError: (message) => {
           adoptLoadedSettings = false;
@@ -374,7 +379,7 @@
         <Chart title="Population" series={POPULATION_SERIES} data={populationData} />
         <Chart
           title="Diet"
-          note="Meat-eaters are creatures that digest meat better than plants; they are drawn as pointed shapes. Mean diet runs from 0 (only plants) to 1 (only meat). Red ground is meat left by the dead."
+          note="How many creatures digest plants better (drawn as discs) and how many digest meat better (drawn as pointed shapes). Red ground is meat left by the dead."
           series={DIET_SERIES}
           data={dietData}
         />
@@ -391,14 +396,15 @@
           <div><dt>Mean size</dt><dd>{decimal(snapshot?.meanSize)}</dd></div>
           <div><dt>Mean speed</dt><dd>{decimal(snapshot?.meanSpeed)}</dd></div>
           <div><dt>Mean sensor range</dt><dd>{decimal(snapshot?.meanSensorRange)}</dd></div>
-          <div title="0 eats only plants, 1 eats only meat">
-            <dt>Mean diet</dt>
-            <dd>{decimal(snapshot?.meanDiet)}</dd>
+          <div title="Creatures that digest plants better than meat">
+            <dt>Plant-eaters</dt>
+            <dd>{count(snapshot ? snapshot.population - snapshot.meatEaters : undefined)}</dd>
           </div>
         </dl>
 
         <LineageTree {tree} bySpecies={colorBySpecies} />
         <SpeciesList species={snapshot?.species ?? []} tick={snapshot?.tick ?? 0} />
+        <BrainCompare groups={profiles} />
         <Chart
           title="Number of species"
           note="Rises when families drift apart, falls when a species dies out."
@@ -566,9 +572,17 @@
     border-left: 1px solid var(--border);
   }
 
+  /* The tabs stay at the top of the panel while its contents scroll beneath. */
   .tabs {
+    position: sticky;
+    top: -12px;
+    z-index: 2;
     display: flex;
     gap: 4px;
+    margin: -12px -12px -8px;
+    padding: 12px 12px 8px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
   }
 
   .tabs button {

@@ -11,7 +11,17 @@
   const POSITIVE = '108, 182, 255';
   const NEGATIVE = '255, 143, 107';
 
-  let { brain }: { brain: BrainView } = $props();
+  let {
+    brain,
+    strength,
+    note,
+  }: {
+    brain: BrainView;
+    /** How solid to draw each link, from 0 to 1. Defaults to how active its source neuron is. */
+    strength?: number[];
+    /** Text under the diagram, in place of the default explanation. */
+    note?: string;
+  } = $props();
 
   interface Node {
     index: number;
@@ -49,7 +59,7 @@
     brain.linkWeight.map((weight, k) => {
       const from = layout.nodes.get(brain.linkFrom[k]!)!;
       const to = layout.nodes.get(brain.linkTo[k]!)!;
-      const signal = Math.abs(brain.activation[from.index] ?? 0);
+      const signal = strength ? (strength[k] ?? 0) : Math.abs(brain.activation[from.index] ?? 0);
       let path: string;
       if (from === to) {
         // A link from a neuron to itself: a small loop above it.
@@ -91,9 +101,13 @@
   {/each}
 </svg>
 <p>
-  Senses on the left, actions on the right, hidden neurons between. Blue links excite, orange links
-  suppress, and thicker means stronger. A link lights up when its source is active. Senses with no link
-  are left out.
+  {#if note}
+    {note}
+  {:else}
+    Senses on the left, actions on the right, hidden neurons between. Blue links excite, orange links
+    suppress, and thicker means stronger. A link lights up when its source is active. Senses with no
+    link are left out.
+  {/if}
 </p>
 
 <style>

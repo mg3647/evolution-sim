@@ -16,6 +16,29 @@ const FIT_MARGIN = 0.9;
 /** Ground colour with no plants and with a full cell, as [r, g, b]. */
 const SOIL_COLOR = [28, 24, 20] as const;
 const PLANT_COLOR = [64, 158, 60] as const;
+
+type Rgb = readonly [number, number, number];
+/**
+ * Soil and plant colours at the four points of the year, starting in spring.
+ * The ground is drawn in a blend of the two nearest, so the map shows the
+ * season: fresh green, deep green, gold, then frost.
+ */
+const SEASON_PALETTE: readonly { soil: Rgb; plant: Rgb }[] = [
+  { soil: [30, 26, 20], plant: [104, 184, 72] },
+  { soil: [28, 24, 20], plant: [52, 148, 58] },
+  { soil: [36, 27, 18], plant: [184, 146, 54] },
+  { soil: [44, 47, 54], plant: [132, 150, 142] },
+];
+
+/** The ground colours for a point in the year, where 0 and 1 are both the start of spring. */
+function seasonColors(yearFraction: number): { soil: number[]; plant: number[] } {
+  const at = (((yearFraction % 1) + 1) % 1) * SEASON_PALETTE.length;
+  const from = SEASON_PALETTE[Math.floor(at) % SEASON_PALETTE.length]!;
+  const to = SEASON_PALETTE[(Math.floor(at) + 1) % SEASON_PALETTE.length]!;
+  const t = at - Math.floor(at);
+  const blend = (a: Rgb, b: Rgb) => a.map((value, c) => value + (b[c]! - value) * t);
+  return { soil: blend(from.soil, to.soil), plant: blend(from.plant, to.plant) };
+}
 /** Ground colour where meat lies thick. */
 const MEAT_COLOR = [190, 60, 70] as const;
 const WALL_COLOR = [120, 126, 134] as const;
@@ -247,6 +270,13 @@ export class WorldRenderer {
       this.plantSprite.texture.source.scaleMode = 'linear';
     }
 
+    // With seasons off the ground keeps its plain colours.
+    const { config, environment } = snapshot;
+    const seasonal = config.seasonLength > 0 && config.seasonStrength > 0;
+    const { soil, plant } = seasonal
+      ? seasonColors(environment.yearFraction)
+      : { soil: SOIL_COLOR, plant: PLANT_COLOR };
+
     const pixels = this.plantImage.data;
     for (let i = 0; i < plants.length; i++) {
       const t = plants[i]! / 255;
@@ -259,7 +289,7 @@ export class WorldRenderer {
           pixels[o + c] = WALL_COLOR[c]!;
           continue;
         }
-        const ground = SOIL_COLOR[c]! + (PLANT_COLOR[c]! - SOIL_COLOR[c]!) * t;
+        const ground = soil[c]! + (plant[c]! - soil[c]!) * t;
         const withMeat = ground + (MEAT_COLOR[c]! - ground) * m;
         pixels[o + c] = withMeat + (SCENT_COLOR[c]! - withMeat) * s;
       }
