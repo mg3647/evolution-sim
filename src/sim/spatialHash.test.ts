@@ -68,4 +68,14 @@ describe('SpatialHash', () => {
     hash.build(xs, ys, 0);
     expect(queryAll(hash, 0, 0, 2000)).toEqual([]);
   });
+
+  it('keeps the positions it was built from when the caller moves points', () => {
+    const xs = new Float32Array([100, 300]);
+    const ys = new Float32Array([100, 100]);
+    const hash = new SpatialHash(WIDTH, HEIGHT, 20);
+    hash.build(xs, ys, 2);
+    xs[0] = 300;
+    expect(queryAll(hash, 100, 100, 5)).toEqual([0]);
+    expect(queryAll(hash, 300, 100, 5)).toEqual([1]);
+  });
 });

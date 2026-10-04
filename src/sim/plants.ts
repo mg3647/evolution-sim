@@ -33,8 +33,19 @@ export function createPlantField(config: SimConfig, rng: Rng): PlantField {
   const capacity = new Float64Array(cols * rows);
   const floor = config.fertilityFloor;
 
+  // Summed octaves bunch up around the middle; stretch them to fill [0, 1] so
+  // the richest land is fully fertile and the floor actually leaves some barren.
+  let low = Infinity;
+  let high = -Infinity;
+  for (const value of fertility) {
+    low = Math.min(low, value);
+    high = Math.max(high, value);
+  }
+  const spread = high > low ? high - low : 1;
+
   for (let i = 0; i < fertility.length; i++) {
-    const f = Math.min(1, Math.max(0, (fertility[i]! - floor) / (1 - floor)));
+    const stretched = (fertility[i]! - low) / spread;
+    const f = Math.min(1, Math.max(0, (stretched - floor) / (1 - floor)));
     fertility[i] = f;
     capacity[i] = f * config.plantCapacity;
   }

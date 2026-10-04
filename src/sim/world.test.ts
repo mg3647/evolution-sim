@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { defaultConfig, type SimConfig } from './config';
 import { maxEnergyFor } from './genome';
+import { wrappedDelta } from './geometry';
 import { expectedEnergy } from './ledger';
 import { totalMeatEnergy } from './plants';
 import { createWorld, hashWorld, step, totalEnergy } from './world';
@@ -145,6 +146,19 @@ describe('reproduction', () => {
     expect(children).toBeGreaterThan(0);
   });
 
+  it('places a child just behind its parent, not on top of it', () => {
+    const world = createWorld(smallConfig);
+    const { creatures, config } = world;
+    while (world.births === 0) step(world);
+    const child = creatures.count - 1;
+    const parent = creatures.id.subarray(0, creatures.count).indexOf(creatures.parentId[child]!);
+    expect(parent).toBeGreaterThanOrEqual(0);
+    const dx = wrappedDelta(creatures.x[parent]!, creatures.x[child]!, config.worldWidth);
+    const dy = wrappedDelta(creatures.y[parent]!, creatures.y[child]!, config.worldHeight);
+    const gap = config.creatureRadius * (creatures.size[parent]! + creatures.size[child]!);
+    expect(Math.hypot(dx, dy)).toBeCloseTo(gap, 3);
+  });
+
   it('does not happen when the threshold is out of reach', () => {
     expect(runWorld(noBirths, 1500).births).toBe(0);
   });
@@ -170,7 +184,7 @@ describe('reproduction', () => {
 describe('fighting', () => {
   it('kills, and leaves the body and its store behind as meat', () => {
     // Nothing to eat but each other, and no rot, so every death can be accounted for.
-    const world = createWorld({ ...smallConfig, plantCapacity: 0, meatDecayRate: 0, ...noReseed });
+    const world = createWorld({ ...smallConfig, plantCapacity: 0, meatDecayRate: 0, attackDamage: 1, ...noReseed });
     let killed = 0;
     for (let i = 0; i < 400 && killed === 0; i++) {
       step(world);

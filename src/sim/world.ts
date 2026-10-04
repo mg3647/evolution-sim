@@ -125,6 +125,8 @@ export function step(world: World): void {
   // Children born this tick are appended past `alive` and first act next tick.
   const alive = creatures.count;
   for (let i = 0; i < alive; i++) {
+    // Killed earlier this tick: it no longer acts, and leaves its body in the death pass.
+    if (creatures.health[i]! <= 0) continue;
     const size = creatures.size[i]!;
     const brain = creatures.brain[i]!;
 
@@ -138,12 +140,13 @@ export function step(world: World): void {
     const diet = creatures.diet[i]!;
 
     // Bite the closest creature in view if it is within reach. Teeth made for
-    // meat do more harm, and a bigger attacker hurts a smaller victim more.
+    // meat do more harm, and a bigger attacker hurts a smaller victim more, in
+    // proportion to their sizes.
     if (attacking && world.senses.targetIndex >= 0 && world.senses.targetGap <= config.attackReach) {
       const victim = world.senses.targetIndex;
       const ratio = size / creatures.size[victim]!;
       const teeth = config.herbivoreAttack + (1 - config.herbivoreAttack) * diet;
-      creatures.health[victim]! -= config.attackDamage * teeth * ratio * ratio;
+      creatures.health[victim]! -= config.attackDamage * teeth * ratio;
     }
 
     // Act: turn, then move forward.
@@ -154,16 +157,19 @@ export function step(world: World): void {
     creatures.x[i] = wrap(creatures.x[i]! + Math.cos(heading) * distance, config.worldWidth);
     creatures.y[i] = wrap(creatures.y[i]! + Math.sin(heading) * distance, config.worldHeight);
 
-    // Eat from the cell underfoot: meat first, then plants, each as far as the
-    // diet allows. Moving fast makes for a poor bite.
+    // Eat from the cell underfoot: one mouthful a tick, spent on meat first and
+    // any left over on plants, each as far as the diet allows. Moving fast
+    // makes for a poor mouthful.
     const cell = cellIndexAt(plants, creatures.x[i]!, creatures.y[i]!);
     const maxEnergy = maxEnergyFor(size, config);
     let energy = creatures.energy[i]!;
-    const reach = biteFor(size, config) * (1 - config.eatSlowdown * thrust);
-    const meatBite = Math.max(0, Math.min(reach * config.meatBiteScale * meatDigestion(diet), plants.meat[cell]!, maxEnergy - energy));
+    let mouthful = biteFor(size, config) * (1 - config.eatSlowdown * thrust);
+    const meatRate = config.meatBiteScale * meatDigestion(diet);
+    const meatBite = Math.max(0, Math.min(mouthful * meatRate, plants.meat[cell]!, maxEnergy - energy));
     plants.meat[cell]! -= meatBite;
     energy += meatBite;
-    const bite = Math.max(0, Math.min(reach * plantDigestion(diet), plants.energy[cell]!, maxEnergy - energy));
+    if (meatRate > 0) mouthful = Math.max(0, mouthful - meatBite / meatRate);
+    const bite = Math.max(0, Math.min(mouthful * plantDigestion(diet), plants.energy[cell]!, maxEnergy - energy));
     plants.energy[cell]! -= bite;
     energy += bite;
 
@@ -240,9 +246,12 @@ function giveBirth(world: World, parent: number, energy: number): number {
   if (given - lost <= body) return 0;
   ledger.heatOut += lost;
 
+  // The child appears just behind the parent rather than on top of it.
+  const behind = creatures.heading[parent]! + Math.PI;
+  const gap = config.creatureRadius * (creatures.size[parent]! + genes.size);
   spawnCreature(creatures, {
-    x: creatures.x[parent]!,
-    y: creatures.y[parent]!,
+    x: wrap(creatures.x[parent]! + Math.cos(behind) * gap, config.worldWidth),
+    y: wrap(creatures.y[parent]! + Math.sin(behind) * gap, config.worldHeight),
     heading: rng.range(0, Math.PI * 2),
     energy: given - lost - body,
     genes,

@@ -77,7 +77,10 @@ export interface SimConfig {
   /** Energy built into a body of size 1; paid at birth and left as meat at death. Scales with size squared. */
   bodyEnergy: number;
 
-  /** Health lost per tick of being bitten by a same-size full carnivore. Health runs from 0 to 1. */
+  /**
+   * Health lost per tick of being bitten by a same-size full carnivore. Health runs from 0 to 1.
+   * Kept low enough that a bitten creature lives long enough to react and flee.
+   */
   attackDamage: number;
   /** Share of full attack damage that a full plant-eater deals. */
   herbivoreAttack: number;
@@ -88,7 +91,7 @@ export interface SimConfig {
   /** Health regained per tick. */
   healRate: number;
 
-  /** Meat is dense food: a bite of it is this many times a bite of plants. */
+  /** Meat is dense food: a mouthful of it is this many times a mouthful of plants. */
   meatBiteScale: number;
   /** Fraction of the meat in a cell that rots away per tick. */
   meatDecayRate: number;
@@ -143,7 +146,7 @@ export const defaultConfig: SimConfig = {
   plantBareGrowth: 0.1,
   fertilityFloor: 0.3,
 
-  initialCreatures: 800,
+  initialCreatures: 400,
   creatureStartEnergy: 40,
   creatureMaxEnergy: 100,
   creatureRadius: 5,
@@ -171,10 +174,10 @@ export const defaultConfig: SimConfig = {
   upkeepFixedShare: 0.5,
   moveCost: 0.05,
   biteSize: 1,
-  maxAge: 9000,
+  maxAge: 3000,
   bodyEnergy: 20,
 
-  attackDamage: 0.5,
+  attackDamage: 0.15,
   herbivoreAttack: 0.05,
   attackCost: 0.05,
   attackReach: 3,
