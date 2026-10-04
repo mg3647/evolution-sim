@@ -14,6 +14,8 @@ export interface Creatures {
   parentId: Uint32Array;
   /** 0 for a creature with no parent, otherwise the parent's generation plus one. */
   generation: Uint32Array;
+  /** Id of the species it was last grouped into; see species.ts. */
+  species: Uint32Array;
   x: Float32Array;
   y: Float32Array;
   /** Direction of travel in radians. */
@@ -41,6 +43,7 @@ const FIELDS = [
   'id',
   'parentId',
   'generation',
+  'species',
   'x',
   'y',
   'heading',
@@ -66,6 +69,7 @@ export interface SpawnOptions {
   age?: number;
   parentId?: number;
   generation?: number;
+  species?: number;
 }
 
 export function createCreatures(capacity: number): Creatures {
@@ -76,6 +80,7 @@ export function createCreatures(capacity: number): Creatures {
     id: new Uint32Array(capacity),
     parentId: new Uint32Array(capacity),
     generation: new Uint32Array(capacity),
+    species: new Uint32Array(capacity),
     x: new Float32Array(capacity),
     y: new Float32Array(capacity),
     heading: new Float32Array(capacity),
@@ -112,6 +117,7 @@ export function spawnCreature(c: Creatures, options: SpawnOptions): number {
   c.id[i] = c.nextId++;
   c.parentId[i] = options.parentId ?? 0;
   c.generation[i] = options.generation ?? 0;
+  c.species[i] = options.species ?? 0;
   c.x[i] = options.x;
   c.y[i] = options.y;
   c.heading[i] = options.heading;

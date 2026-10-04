@@ -120,9 +120,42 @@ export class Innovations {
   counts(): [number, number] {
     return [this.nextLink, this.nextNode];
   }
+
+  /** Everything needed to rebuild this registry, as plain data. */
+  save(): InnovationsData {
+    return {
+      links: [...this.links],
+      splits: [...this.splits],
+      nextLink: this.nextLink,
+      nextNode: this.nextNode,
+    };
+  }
+
+  static load(data: InnovationsData): Innovations {
+    const innovations = new Innovations();
+    innovations.links = new Map(data.links);
+    innovations.splits = new Map(data.splits);
+    innovations.nextLink = data.nextLink;
+    innovations.nextNode = data.nextNode;
+    return innovations;
+  }
 }
 
-/** Build the fast arrays from the genes. Call after any change to links or neurons. */
+export interface InnovationsData {
+  links: [string, number][];
+  splits: [number, number][];
+  nextLink: number;
+  nextNode: number;
+}
+
+/**
+ * Build a brain from its genes, with activations at zero. The fast arrays are
+ * derived from the genes, so call this after any change to links or neurons.
+ */
+export function compileBrain(links: LinkGene[], hiddenIds: number[]): Brain {
+  return compile(links, hiddenIds);
+}
+
 function compile(links: LinkGene[], hiddenIds: number[]): Brain {
   const indexOf = (id: number) => (id < FIXED_NODES ? id : FIXED_NODES + hiddenIds.indexOf(id));
   const enabled = links.filter((link) => link.enabled);

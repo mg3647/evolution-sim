@@ -46,6 +46,7 @@ import {
 } from './environment';
 import { wrap } from './geometry';
 import { createLedger, type EnergyLedger } from './ledger';
+import { Lineage } from './lineage';
 import {
   cellIndexAt,
   createPlantField,
@@ -58,6 +59,7 @@ import {
 import { Rng } from './rng';
 import { Senses } from './senses';
 import { SpatialHash } from './spatialHash';
+import { classifySpecies, createSpeciesState, type SpeciesState } from './species';
 import { createHistory, meanOf, recordSample, type History } from './stats';
 
 export interface World {
@@ -80,6 +82,9 @@ export interface World {
   /** Killed counts bites; disaster counts plagues and meteors. */
   deaths: { starved: number; oldAge: number; killed: number; disaster: number };
   environment: Environment;
+  /** Family tree of the living population. */
+  lineage: Lineage;
+  species: SpeciesState;
   /** Creatures infected right now, and deaths in the current outbreak. */
   infected: number;
   plagueDeaths: number;
@@ -95,7 +100,7 @@ function spawnFounder(world: World, age: number): number {
   const { config, rng, creatures } = world;
   const genes = founderGenes(rng, config);
   const energy = Math.min(config.creatureStartEnergy, maxEnergyFor(genes.size, config));
-  spawnCreature(creatures, {
+  const index = spawnCreature(creatures, {
     x: rng.range(0, config.worldWidth),
     y: rng.range(0, config.worldHeight),
     heading: rng.range(0, Math.PI * 2),
@@ -104,6 +109,7 @@ function spawnFounder(world: World, age: number): number {
     brain: founderBrain(rng, world.innovations, config),
     age,
   });
+  world.lineage.born(creatures.id[index]!, 0, world.tick, genes.hue);
   return energy + bodyEnergyFor(genes.size, config);
 }
 
@@ -128,6 +134,8 @@ export function createWorld(config: SimConfig): World {
     reseeded: 0,
     deaths: { starved: 0, oldAge: 0, killed: 0, disaster: 0 },
     environment: createEnvironment(config, rng, plants),
+    lineage: new Lineage(),
+    species: createSpeciesState(),
     infected: 0,
     plagueDeaths: 0,
     climate: { season: 1, growth: 1, cost: 1 },
@@ -138,6 +146,7 @@ export function createWorld(config: SimConfig): World {
     spawnFounder(world, rng.int(0, Math.floor(config.maxAge / 2)));
   }
   world.ledger.initial = totalEnergy(world);
+  classifySpecies(world.species, world.creatures, 0, config);
   sampleHistory(world);
   return world;
 }
@@ -275,6 +284,7 @@ export function step(world: World): void {
     // The body and whatever it had stored stay behind as meat.
     const cell = cellIndexAt(plants, creatures.x[i]!, creatures.y[i]!);
     plants.meat[cell]! += creatures.energy[i]! + bodyEnergyFor(creatures.size[i]!, config);
+    world.lineage.died(creatures.id[i]!, world.tick);
     removeCreature(creatures, i);
   }
 
@@ -294,6 +304,9 @@ export function step(world: World): void {
     world.reseeded++;
   }
 
+  if (world.tick % config.speciesInterval === 0) {
+    classifySpecies(world.species, creatures, world.tick, config);
+  }
   if (world.tick % world.history.interval === 0) sampleHistory(world);
 }
 
@@ -385,7 +398,7 @@ function giveBirth(world: World, parent: number, energy: number): number {
   // The child appears just behind the parent rather than on top of it.
   const behind = creatures.heading[parent]! + Math.PI;
   const gap = config.creatureRadius * (creatures.size[parent]! + genes.size);
-  spawnCreature(creatures, {
+  const child = spawnCreature(creatures, {
     x: wrap(creatures.x[parent]! + Math.cos(behind) * gap, config.worldWidth),
     y: wrap(creatures.y[parent]! + Math.sin(behind) * gap, config.worldHeight),
     heading: rng.range(0, Math.PI * 2),
@@ -394,7 +407,9 @@ function giveBirth(world: World, parent: number, energy: number): number {
     brain,
     parentId: creatures.id[parent]!,
     generation: creatures.generation[parent]! + 1,
+    species: creatures.species[parent]!,
   });
+  world.lineage.born(creatures.id[child]!, creatures.id[parent]!, world.tick, genes.hue);
   world.births++;
   return given;
 }
@@ -419,6 +434,7 @@ function sampleHistory(world: World): void {
     meanSensorRange: meanOf(creatures.sensorRange, creatures),
     meanDiet: meanOf(creatures.diet, creatures),
     meatEaters,
+    speciesCount: world.species.species.length,
     meanLinks: links / count,
     meanNeurons: neurons / count,
   });
@@ -471,6 +487,7 @@ export function hashWorld(world: World): number {
     c.id,
     c.parentId,
     c.generation,
+    c.species,
     c.x,
     c.y,
     c.heading,

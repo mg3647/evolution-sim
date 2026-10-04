@@ -21,12 +21,14 @@ export interface History {
   meanDiet: Float32Array;
   /** Creatures whose diet gene is above one half. */
   meatEaters: Float32Array;
+  speciesCount: Float32Array;
   /** Mean number of enabled links and of hidden neurons per brain. */
   meanLinks: Float32Array;
   meanNeurons: Float32Array;
 }
 
-const SERIES = [
+/** Names of every series, in a fixed order. */
+export const HISTORY_SERIES = [
   'tick',
   'population',
   'plantFill',
@@ -35,6 +37,7 @@ const SERIES = [
   'meanSensorRange',
   'meanDiet',
   'meatEaters',
+  'speciesCount',
   'meanLinks',
   'meanNeurons',
 ] as const;
@@ -48,6 +51,7 @@ export interface Sample {
   meanSensorRange: number;
   meanDiet: number;
   meatEaters: number;
+  speciesCount: number;
   meanLinks: number;
   meanNeurons: number;
 }
@@ -65,6 +69,7 @@ export function createHistory(interval: number, capacity: number): History {
     meanSensorRange: new Float32Array(capacity),
     meanDiet: new Float32Array(capacity),
     meatEaters: new Float32Array(capacity),
+    speciesCount: new Float32Array(capacity),
     meanLinks: new Float32Array(capacity),
     meanNeurons: new Float32Array(capacity),
   };
@@ -73,7 +78,7 @@ export function createHistory(interval: number, capacity: number): History {
 export function recordSample(history: History, sample: Sample): void {
   if (history.count === history.tick.length) {
     const kept = Math.ceil(history.count / 2);
-    for (const name of SERIES) {
+    for (const name of HISTORY_SERIES) {
       const series = history[name];
       for (let i = 0; i < kept; i++) series[i] = series[i * 2]!;
     }
@@ -81,7 +86,7 @@ export function recordSample(history: History, sample: Sample): void {
     history.interval *= 2;
   }
   const i = history.count++;
-  for (const name of SERIES) history[name][i] = sample[name];
+  for (const name of HISTORY_SERIES) history[name][i] = sample[name];
   history.version++;
 }
 

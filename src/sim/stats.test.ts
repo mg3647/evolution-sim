@@ -11,6 +11,7 @@ function sample(tick: number): Sample {
     meanSensorRange: 1,
     meanDiet: 0.2,
     meatEaters: 0,
+    speciesCount: 1,
     meanLinks: 4,
     meanNeurons: 0,
   };

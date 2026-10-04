@@ -173,6 +173,11 @@ export interface SimConfig {
   scentDecay: number;
   scentSpread: number;
 
+  /** Ticks between regroupings of creatures into species. */
+  speciesInterval: number;
+  /** How different a creature may be from a species' representative and still belong to it. */
+  speciesThreshold: number;
+
   /** Ticks between history samples at the start of a run. */
   statsInterval: number;
   /** Number of history samples kept. */
@@ -278,6 +283,9 @@ export const defaultConfig: SimConfig = {
   scentCost: 0.01,
   scentDecay: 0.02,
   scentSpread: 0.2,
+
+  speciesInterval: 300,
+  speciesThreshold: 4,
 
   statsInterval: 30,
   statsCapacity: 1000,
