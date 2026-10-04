@@ -6,7 +6,10 @@ import type { Rng } from './rng';
 /** Noise features across the world, coarse to fine. */
 const FERTILITY_PERIODS = [3, 6, 12];
 
-/** Plants as a grid of cells, each holding plant energy up to a capacity. */
+/**
+ * Food on the ground as a grid of cells. Each holds plant energy up to a
+ * capacity, plus any meat left by creatures that died there.
+ */
 export interface PlantField {
   cols: number;
   rows: number;
@@ -18,6 +21,8 @@ export interface PlantField {
   capacity: Float64Array;
   /** Plant energy each cell holds now. */
   energy: Float64Array;
+  /** Energy of dead creatures lying in each cell. It rots away over time. */
+  meat: Float64Array;
 }
 
 /** Create a field with every cell grown to capacity. */
@@ -42,6 +47,7 @@ export function createPlantField(config: SimConfig, rng: Rng): PlantField {
     fertility,
     capacity,
     energy: capacity.slice(),
+    meat: new Float64Array(cols * rows),
   };
 }
 
@@ -77,6 +83,26 @@ export function growPlants(
     grown += growth;
   }
   ledger.sunIn += grown;
+}
+
+/** Rot a fraction of all meat away as heat. */
+export function decayMeat(field: PlantField, decayRate: number, ledger: EnergyLedger): void {
+  const { meat } = field;
+  let rotted = 0;
+  for (let i = 0; i < meat.length; i++) {
+    const current = meat[i]!;
+    if (current === 0) continue;
+    const loss = current * decayRate;
+    meat[i] = current - loss;
+    rotted += loss;
+  }
+  ledger.heatOut += rotted;
+}
+
+export function totalMeatEnergy(field: PlantField): number {
+  let total = 0;
+  for (let i = 0; i < field.meat.length; i++) total += field.meat[i]!;
+  return total;
 }
 
 export function totalPlantEnergy(field: PlantField): number {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { defaultConfig, type SimConfig } from './config';
 import { maxEnergyFor } from './genome';
 import { expectedEnergy } from './ledger';
+import { totalMeatEnergy } from './plants';
 import { createWorld, hashWorld, step, totalEnergy } from './world';
 
 /** A small world so tests run fast. */
@@ -17,6 +18,7 @@ const smallConfig: SimConfig = {
 /** Switches that isolate one mechanism at a time. */
 const noBirths = { reproduceThreshold: 2 };
 const noReseed = { minPopulation: 0 };
+const noFighting = { attackDamage: 0 };
 
 function runWorld(overrides: Partial<SimConfig>, ticks: number) {
   const world = createWorld({ ...smallConfig, ...overrides });
@@ -72,7 +74,7 @@ describe('energy economy', () => {
     expect(world.ledger.sunIn).toBeGreaterThan(0);
     expect(world.ledger.heatOut).toBeGreaterThan(0);
     expect(world.births).toBeGreaterThan(0);
-    expect(world.deaths.starved + world.deaths.oldAge).toBeGreaterThan(0);
+    expect(world.deaths.starved + world.deaths.oldAge + world.deaths.killed).toBeGreaterThan(0);
   });
 
   it('never lets energy go negative or exceed its caps', () => {
@@ -90,15 +92,17 @@ describe('energy economy', () => {
   });
 
   it('starves every creature when nothing grows', () => {
-    const world = runWorld({ plantCapacity: 0, ...noReseed }, 1500);
+    const world = runWorld({ plantCapacity: 0, ...noReseed, ...noFighting }, 3000);
     expect(world.creatures.count).toBe(0);
     // A small founder can hold enough to split once before it starves.
     expect(world.deaths.starved).toBe(smallConfig.initialCreatures + world.births);
-    expect(totalEnergy(world)).toBeCloseTo(0, 6);
+    // All that is left is the meat of their bodies, rotting away.
+    expect(totalEnergy(world)).toBeCloseTo(totalMeatEnergy(world.plants), 9);
+    expect(totalEnergy(world)).toBeCloseTo(expectedEnergy(world.ledger), 6);
   });
 
   it('kills creatures of old age', () => {
-    const world = runWorld({ maxAge: 200, upkeepCost: 0, moveCost: 0, ...noBirths, ...noReseed }, 200);
+    const world = runWorld({ maxAge: 200, upkeepCost: 0, moveCost: 0, ...noBirths, ...noReseed, ...noFighting }, 200);
     expect(world.creatures.count).toBe(0);
     expect(world.deaths.oldAge).toBe(smallConfig.initialCreatures);
   });
@@ -160,6 +164,42 @@ describe('reproduction', () => {
     const speeds = new Set(creatures.speed.subarray(0, creatures.count));
     expect(sizes.size).toBeGreaterThan(5);
     expect(speeds.size).toBeGreaterThan(5);
+  });
+});
+
+describe('fighting', () => {
+  it('kills, and leaves the body and its store behind as meat', () => {
+    // Nothing to eat but each other, and no rot, so every death can be accounted for.
+    const world = createWorld({ ...smallConfig, plantCapacity: 0, meatDecayRate: 0, ...noReseed });
+    let killed = 0;
+    for (let i = 0; i < 400 && killed === 0; i++) {
+      step(world);
+      killed = world.deaths.killed;
+    }
+    expect(killed).toBeGreaterThan(0);
+    expect(totalMeatEnergy(world.plants)).toBeGreaterThan(0);
+    expect(totalEnergy(world)).toBeCloseTo(expectedEnergy(world.ledger), 6);
+  });
+
+  it('never happens when bites do no damage', () => {
+    expect(runWorld(noFighting, 1500).deaths.killed).toBe(0);
+  });
+
+  it('keeps health between 0 and 1 and heals over time', () => {
+    const world = runWorld({}, 800);
+    const { creatures } = world;
+    for (let i = 0; i < creatures.count; i++) {
+      expect(creatures.health[i]).toBeGreaterThan(0);
+      expect(creatures.health[i]).toBeLessThanOrEqual(1);
+    }
+    const hurt = createWorld({ ...smallConfig, ...noFighting });
+    hurt.creatures.health[0] = 0.5;
+    const id = hurt.creatures.id[0];
+    for (let i = 0; i < 100; i++) step(hurt);
+    const index = hurt.creatures.id.indexOf(id!);
+    if (index >= 0 && index < hurt.creatures.count) {
+      expect(hurt.creatures.health[index]).toBeCloseTo(0.5 + 100 * smallConfig.healRate, 5);
+    }
   });
 });
 

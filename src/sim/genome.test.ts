@@ -1,10 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { defaultConfig } from './config';
-import { biteFor, founderGenes, maxEnergyFor, mutateGenes, tickCostFor, type Genes } from './genome';
+import {
+  biteFor,
+  bodyEnergyFor,
+  founderGenes,
+  maxEnergyFor,
+  meatDigestion,
+  mutateGenes,
+  plantDigestion,
+  tickCostFor,
+  type Genes,
+} from './genome';
 import { Rng } from './rng';
 
 const config = defaultConfig;
-const base: Genes = { size: 1, speed: 1, sensorRange: 1, hue: 0.5, mutationRate: 0.1 };
+const base: Genes = { size: 1, speed: 1, sensorRange: 1, diet: 0.5, hue: 0.5, mutationRate: 0.1 };
 
 describe('mutateGenes', () => {
   it('is repeatable for a seed and leaves the parent untouched', () => {
@@ -36,6 +46,8 @@ describe('mutateGenes', () => {
       expect(genes.speed).toBeLessThanOrEqual(config.maxSpeed);
       expect(genes.sensorRange).toBeGreaterThanOrEqual(config.minSensorRange);
       expect(genes.sensorRange).toBeLessThanOrEqual(config.maxSensorRange);
+      expect(genes.diet).toBeGreaterThanOrEqual(0);
+      expect(genes.diet).toBeLessThanOrEqual(1);
       expect(genes.hue).toBeGreaterThanOrEqual(0);
       expect(genes.hue).toBeLessThan(1);
       expect(genes.mutationRate).toBeGreaterThanOrEqual(config.minMutationRate);
@@ -56,7 +68,36 @@ describe('mutateGenes', () => {
   });
 });
 
+describe('diet', () => {
+  it('trades plant digestion against meat digestion', () => {
+    expect(plantDigestion(0)).toBe(1);
+    expect(meatDigestion(0)).toBe(0);
+    expect(plantDigestion(1)).toBe(0);
+    expect(meatDigestion(1)).toBe(1);
+    // An even mix keeps most of both, and each curve only ever trades one way.
+    expect(plantDigestion(0.5)).toBeCloseTo(0.75, 12);
+    expect(meatDigestion(0.5)).toBeCloseTo(0.75, 12);
+    expect(plantDigestion(0.3)).toBeGreaterThan(plantDigestion(0.6));
+    expect(meatDigestion(0.3)).toBeLessThan(meatDigestion(0.6));
+  });
+
+  it('gives founders a spread of diets up to the configured limit', () => {
+    const rng = new Rng('diet');
+    const diets = Array.from({ length: 200 }, () => founderGenes(rng, config).diet);
+    expect(Math.min(...diets)).toBeLessThan(0.2);
+    expect(Math.max(...diets)).toBeGreaterThan(0.8);
+
+    const plantEaters = { ...config, founderDietMax: 0.1 };
+    for (let i = 0; i < 50; i++) expect(founderGenes(rng, plantEaters).diet).toBeLessThan(0.5);
+  });
+});
+
 describe('trait costs', () => {
+  it('locks more energy into a bigger body', () => {
+    expect(bodyEnergyFor(1, config)).toBe(config.bodyEnergy);
+    expect(bodyEnergyFor(2, config)).toBe(config.bodyEnergy * 4);
+  });
+
   it('matches the base config values at size 1 and speed 1', () => {
     expect(maxEnergyFor(1, config)).toBe(config.creatureMaxEnergy);
     expect(biteFor(1, config)).toBe(config.biteSize);

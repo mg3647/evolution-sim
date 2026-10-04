@@ -74,11 +74,32 @@ export interface SimConfig {
   /** Creatures die of old age at this many ticks. */
   maxAge: number;
 
+  /** Energy built into a body of size 1; paid at birth and left as meat at death. Scales with size squared. */
+  bodyEnergy: number;
+
+  /** Health lost per tick of being bitten by a same-size full carnivore. Health runs from 0 to 1. */
+  attackDamage: number;
+  /** Share of full attack damage that a full plant-eater deals. */
+  herbivoreAttack: number;
+  /** Energy a creature of size 1 spends per tick while its attack output is on. */
+  attackCost: number;
+  /** Gap between two bodies within which an attack lands. */
+  attackReach: number;
+  /** Health regained per tick. */
+  healRate: number;
+
+  /** Meat is dense food: a bite of it is this many times a bite of plants. */
+  meatBiteScale: number;
+  /** Fraction of the meat in a cell that rots away per tick. */
+  meatDecayRate: number;
+  /** Meat in a cell that reads as 1 to the senses and draws at full colour. */
+  meatScale: number;
+
   /** A creature reproduces when its energy reaches this fraction of its maximum. */
   reproduceThreshold: number;
   /** Fraction of the parent's energy handed to the child. */
   offspringShare: number;
-  /** Fraction of the handed-over energy lost as heat. */
+  /** Fraction of the handed-over energy lost as heat, on top of building the child's body. */
   birthCost: number;
   /** Creatures younger than this many ticks cannot reproduce. */
   minReproduceAge: number;
@@ -94,6 +115,11 @@ export interface SimConfig {
   maxSpeed: number;
   minSensorRange: number;
   maxSensorRange: number;
+  /**
+   * Creatures with no parent get a random diet gene between 0 (only plants)
+   * and this value (1 is only meat), so meat-eaters exist from the start.
+   */
+  founderDietMax: number;
   /** Mutation rate of creatures with no parent. */
   initialMutationRate: number;
   minMutationRate: number;
@@ -112,12 +138,12 @@ export const defaultConfig: SimConfig = {
   ticksPerSecond: 30,
 
   plantCellSize: 20,
-  plantCapacity: 12,
+  plantCapacity: 24,
   plantGrowthRate: 0.006,
   plantBareGrowth: 0.1,
   fertilityFloor: 0.3,
 
-  initialCreatures: 400,
+  initialCreatures: 800,
   creatureStartEnergy: 40,
   creatureMaxEnergy: 100,
   creatureRadius: 5,
@@ -146,10 +172,21 @@ export const defaultConfig: SimConfig = {
   moveCost: 0.05,
   biteSize: 1,
   maxAge: 9000,
+  bodyEnergy: 20,
 
-  reproduceThreshold: 0.6,
+  attackDamage: 0.5,
+  herbivoreAttack: 0.05,
+  attackCost: 0.05,
+  attackReach: 3,
+  healRate: 0.001,
+
+  meatBiteScale: 3,
+  meatDecayRate: 0.0005,
+  meatScale: 20,
+
+  reproduceThreshold: 0.8,
   offspringShare: 0.5,
-  birthCost: 0.1,
+  birthCost: 0,
   minReproduceAge: 150,
   maxCreatures: 5000,
   minPopulation: 20,
@@ -160,6 +197,7 @@ export const defaultConfig: SimConfig = {
   maxSpeed: 4,
   minSensorRange: 0.3,
   maxSensorRange: 3,
+  founderDietMax: 1,
   initialMutationRate: 0.08,
   minMutationRate: 0.005,
   maxMutationRate: 0.5,

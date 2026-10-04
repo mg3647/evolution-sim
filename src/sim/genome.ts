@@ -10,6 +10,8 @@ export interface Genes {
   speed: number;
   /** Multiplier on the configured length of the vision rays. */
   sensorRange: number;
+  /** What it can digest: 0 eats only plants, 1 only meat, in between some of each. */
+  diet: number;
   /** Body colour as a hue in [0, 1). No effect on survival; it marks lineages. */
   hue: number;
   /** Standard deviation of the changes applied to each gene at birth. */
@@ -19,14 +21,26 @@ export interface Genes {
 /** Hue shifts by this fraction of the mutation rate, slowly enough that relatives look alike. */
 const HUE_MUTATION_SCALE = 0.5;
 
+/**
+ * Clamp a gene to its limits. The result is rounded to 32-bit precision, the
+ * precision genes are stored at, so energy sums computed from a fresh gene
+ * and from the stored one agree exactly.
+ */
 function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
+  return Math.fround(Math.min(max, Math.max(min, value)));
 }
 
-/** Genes for a creature with no parent: average traits and a random colour. */
+/** Genes for a creature with no parent: average traits, a random diet and a random colour. */
 export function founderGenes(rng: Rng, config: SimConfig): Genes {
   return mutateGenes(
-    { size: 1, speed: 1, sensorRange: 1, hue: rng.float(), mutationRate: config.initialMutationRate },
+    {
+      size: 1,
+      speed: 1,
+      sensorRange: 1,
+      diet: rng.float() * config.founderDietMax,
+      hue: rng.float(),
+      mutationRate: config.initialMutationRate,
+    },
     rng,
     config,
   );
@@ -47,13 +61,33 @@ export function mutateGenes(parent: Genes, rng: Rng, config: SimConfig): Genes {
       config.minSensorRange,
       config.maxSensorRange,
     ),
-    hue: hue - Math.floor(hue),
+    // Diet shifts by a fixed step rather than a factor, so it can reach and leave zero.
+    diet: clamp(parent.diet + rng.gaussian() * rate, 0, 1),
+    hue: Math.fround(hue - Math.floor(hue)) % 1,
     mutationRate: clamp(
       rate * Math.exp(rng.gaussian() * rate),
       config.minMutationRate,
       config.maxMutationRate,
     ),
   };
+}
+
+/** Energy locked up in a body of this size. It becomes meat when the creature dies. */
+export function bodyEnergyFor(size: number, config: SimConfig): number {
+  return config.bodyEnergy * size * size;
+}
+
+/**
+ * Share of a full bite this diet gets from plants and from meat. The curves
+ * bow outward: a creature loses little of its main food by taking up a bit of
+ * the other, so diets can shift in small steps instead of needing a leap.
+ */
+export function plantDigestion(diet: number): number {
+  return 1 - diet * diet;
+}
+
+export function meatDigestion(diet: number): number {
+  return 1 - (1 - diet) * (1 - diet);
 }
 
 /** Most energy a creature of this size can store. */

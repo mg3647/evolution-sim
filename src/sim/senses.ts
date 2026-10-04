@@ -6,17 +6,28 @@ import { wrap, wrappedDelta } from './geometry';
 import { cellIndexAt, type PlantField } from './plants';
 import type { SpatialHash } from './spatialHash';
 
-/** Points along each ray where plant cover is sampled, as fractions of its length. */
-const PLANT_SAMPLES = [0.5, 1];
+/** Points along each ray where ground cover is sampled, as fractions of its length. */
+const GROUND_SAMPLES = [0.5, 1];
 const TWO_PI = Math.PI * 2;
+
+/** Offsets of the per-ray inputs. */
+const RAY_PLANTS = 0;
+const RAY_MEAT = 1;
+const RAY_NEARNESS = 2;
+const RAY_KIN = 3;
+const RAY_BIGGER = 4;
 
 /**
  * Fills a brain's inputs with what a creature perceives. Vision is three
- * rays (left, ahead, right). Each reports the plant cover along it, how near
- * the closest creature in its direction is, and how alike that creature's
- * colour is to the viewer's.
+ * rays (left, ahead, right). Each reports the plants and meat along it, and,
+ * for the closest creature in its direction, how near it is, how alike its
+ * colour is to the viewer's, and whether it is bigger or smaller.
  */
 export class Senses {
+  /** After sense(): index of the closest creature in view, or -1, and the gap to its edge. */
+  targetIndex = -1;
+  targetGap = Infinity;
+
   // State for the neighbor visit, kept on the instance to avoid a closure per creature.
   private self = 0;
   private x = 0;
@@ -29,34 +40,40 @@ export class Senses {
 
   constructor(
     private readonly config: SimConfig,
-    private readonly plants: PlantField,
+    private readonly field: PlantField,
     private readonly hash: SpatialHash,
   ) {}
 
   /** Write creature i's inputs. The hash must have been built from `creatures`. */
   sense(creatures: Creatures, i: number, tick: number, inputs: Float32Array): void {
-    const { config, plants } = this;
+    const { config, field } = this;
     const x = creatures.x[i]!;
     const y = creatures.y[i]!;
     const heading = creatures.heading[i]!;
     const range = config.senseRange * creatures.sensorRange[i]!;
     // Plant cover is relative to the richest possible cell; a barren world reads as zero.
-    const coverScale = config.plantCapacity > 0 ? 1 / config.plantCapacity : 0;
+    const plantScale = config.plantCapacity > 0 ? 1 / config.plantCapacity : 0;
+    const meatScale = 1 / config.meatScale;
 
     for (let ray = 0; ray < RAY_COUNT; ray++) {
       const angle = heading + (ray - 1) * config.raySpread;
       const dx = Math.cos(angle) * range;
       const dy = Math.sin(angle) * range;
-      let cover = 0;
-      for (const t of PLANT_SAMPLES) {
+      let plants = 0;
+      let meat = 0;
+      for (const t of GROUND_SAMPLES) {
         const px = wrap(x + dx * t, config.worldWidth);
         const py = wrap(y + dy * t, config.worldHeight);
-        cover += plants.energy[cellIndexAt(plants, px, py)]!;
+        const cell = cellIndexAt(field, px, py);
+        plants += field.energy[cell]!;
+        meat += field.meat[cell]!;
       }
       const o = Input.Rays + ray * INPUTS_PER_RAY;
-      inputs[o] = (cover / PLANT_SAMPLES.length) * coverScale;
-      inputs[o + 1] = 0;
-      inputs[o + 2] = 0;
+      inputs[o + RAY_PLANTS] = (plants / GROUND_SAMPLES.length) * plantScale;
+      inputs[o + RAY_MEAT] = Math.min(1, (meat / GROUND_SAMPLES.length) * meatScale);
+      inputs[o + RAY_NEARNESS] = 0;
+      inputs[o + RAY_KIN] = 0;
+      inputs[o + RAY_BIGGER] = 0;
       this.nearest[ray] = Infinity;
     }
 
@@ -67,10 +84,15 @@ export class Senses {
     this.range = range;
     this.inputs = inputs;
     this.creatures = creatures;
+    this.targetIndex = -1;
+    this.targetGap = Infinity;
     this.hash.query(x, y, range, this.visit);
 
-    inputs[Input.Underfoot] = plants.energy[cellIndexAt(plants, x, y)]! * coverScale;
+    const cell = cellIndexAt(field, x, y);
+    inputs[Input.Underfoot] = field.energy[cell]! * plantScale;
+    inputs[Input.MeatUnderfoot] = Math.min(1, field.meat[cell]! * meatScale);
     inputs[Input.Energy] = creatures.energy[i]! / maxEnergyFor(creatures.size[i]!, config);
+    inputs[Input.Health] = creatures.health[i]!;
     inputs[Input.Age] = creatures.age[i]! / config.maxAge;
     inputs[Input.Clock] = Math.sin((TWO_PI * tick) / config.clockPeriod);
     inputs[Input.Bias] = 1;
@@ -89,11 +111,21 @@ export class Senses {
     if (bearing > Math.PI) bearing -= TWO_PI;
     else if (bearing < -Math.PI) bearing += TWO_PI;
     const ray = Math.round(bearing / config.raySpread) + 1;
-    if (ray < 0 || ray >= RAY_COUNT || distance >= this.nearest[ray]!) return;
+    if (ray < 0 || ray >= RAY_COUNT) return;
+
+    const mySize = creatures.size[this.self]!;
+    const theirSize = creatures.size[j]!;
+    const gap = distance - config.creatureRadius * (mySize + theirSize);
+    if (gap < this.targetGap) {
+      this.targetGap = gap;
+      this.targetIndex = j;
+    }
+    if (distance >= this.nearest[ray]!) return;
 
     this.nearest[ray] = distance;
     const o = Input.Rays + ray * INPUTS_PER_RAY;
-    this.inputs[o + 1] = 1 - distance / this.range;
-    this.inputs[o + 2] = Math.cos(TWO_PI * (creatures.hue[j]! - creatures.hue[this.self]!));
+    this.inputs[o + RAY_NEARNESS] = 1 - distance / this.range;
+    this.inputs[o + RAY_KIN] = Math.cos(TWO_PI * (creatures.hue[j]! - creatures.hue[this.self]!));
+    this.inputs[o + RAY_BIGGER] = (theirSize - mySize) / (theirSize + mySize);
   };
 }

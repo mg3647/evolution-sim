@@ -4,6 +4,12 @@
 
   let { creature }: { creature: Inspection | null } = $props();
 
+  function dietName(diet: number): string {
+    if (diet < 0.25) return 'plants';
+    if (diet > 0.75) return 'meat';
+    return 'both';
+  }
+
   /** Width and offset of a bar for a value in [-1, 1], drawn from a centre line. */
   function bar(value: number): string {
     const clamped = Math.max(-1, Math.min(1, value));
@@ -25,6 +31,11 @@
       </div>
       <div><dt>Size</dt><dd>{creature.size.toFixed(2)}</dd></div>
       <div><dt>Speed</dt><dd>{creature.speed.toFixed(2)}</dd></div>
+      <div><dt>Health</dt><dd>{Math.round(creature.health * 100)}%</dd></div>
+      <div title="0 eats only plants, 1 eats only meat">
+        <dt>Diet</dt>
+        <dd>{creature.diet.toFixed(2)} ({dietName(creature.diet)})</dd>
+      </div>
       <div><dt>Sensor range</dt><dd>{creature.sensorRange.toFixed(2)}</dd></div>
       <div><dt>Mutation rate</dt><dd>{creature.mutationRate.toFixed(3)}</dd></div>
     </dl>
@@ -42,7 +53,8 @@
     <h3>Brain outputs: what it is doing now</h3>
     <p class="note">
       Turn: left of centre is left, right is right. Thrust: far left is standing still, far right is full
-      speed. Reproduce: right of centre means it splits once it has enough energy.
+      speed. Reproduce: right of centre means it splits once it has enough energy. Attack: right of centre
+      means it bites the nearest creature in reach.
     </p>
     <ul>
       {#each OUTPUT_LABELS as label, k (label)}
@@ -56,7 +68,9 @@
 
     <h3>Brain inputs: what it senses now</h3>
     <p class="note">
-      &ldquo;Kin&rdquo; is how closely the nearest creature's colour matches its own, so relatives read high.
+      For the nearest creature on each ray: &ldquo;Creature&rdquo; is how close it is, &ldquo;Kin&rdquo; is how
+      closely its colour matches (relatives read high), and &ldquo;Bigger&rdquo; is right of centre if it is
+      larger.
     </p>
     <ul>
       {#each INPUT_LABELS as label, k (label)}

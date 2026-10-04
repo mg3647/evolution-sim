@@ -11,7 +11,7 @@ import {
 } from './creatures';
 import { Rng } from './rng';
 
-const genes = { size: 1, speed: 1, sensorRange: 1, hue: 0.25, mutationRate: 0.05 };
+const genes = { size: 1, speed: 1, sensorRange: 1, diet: 0.25, hue: 0.25, mutationRate: 0.05 };
 const brain = founderBrain(new Rng('brain'), new Innovations(), defaultConfig);
 
 function options(overrides: Partial<SpawnOptions> = {}): SpawnOptions {
@@ -36,6 +36,7 @@ describe('creatures', () => {
     expect(c.age[b]).toBe(7);
     expect(c.parentId[b]).toBe(1);
     expect(c.generation[b]).toBe(1);
+    expect(c.health[b]).toBe(1);
     expect(genesOf(c, b)).toEqual({ ...genes, size: 2, mutationRate: Math.fround(0.05) });
     expect(totalCreatureEnergy(c)).toBe(30);
   });

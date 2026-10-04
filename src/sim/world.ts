@@ -19,16 +19,27 @@ import {
 } from './creatures';
 import {
   biteFor,
+  bodyEnergyFor,
   founderGenes,
   maxEnergyFor,
+  meatDigestion,
   mutateGenes,
+  plantDigestion,
   senseCostFor,
   strideFor,
   tickCostFor,
 } from './genome';
 import { wrap } from './geometry';
 import { createLedger, type EnergyLedger } from './ledger';
-import { cellIndexAt, createPlantField, growPlants, totalPlantEnergy, type PlantField } from './plants';
+import {
+  cellIndexAt,
+  createPlantField,
+  decayMeat,
+  growPlants,
+  totalMeatEnergy,
+  totalPlantEnergy,
+  type PlantField,
+} from './plants';
 import { Rng } from './rng';
 import { Senses } from './senses';
 import { SpatialHash } from './spatialHash';
@@ -51,10 +62,10 @@ export interface World {
   /** Cumulative counts since the world was created. */
   births: number;
   reseeded: number;
-  deaths: { starved: number; oldAge: number };
+  deaths: { starved: number; oldAge: number; killed: number };
 }
 
-/** Add a creature with no parent at a random position. Returns its energy. */
+/** Add a creature with no parent at a random position. Returns the energy it embodies. */
 function spawnFounder(world: World, age: number): number {
   const { config, rng, creatures } = world;
   const genes = founderGenes(rng, config);
@@ -68,7 +79,7 @@ function spawnFounder(world: World, age: number): number {
     brain: founderBrain(rng, world.innovations, config),
     age,
   });
-  return energy;
+  return energy + bodyEnergyFor(genes.size, config);
 }
 
 export function createWorld(config: SimConfig): World {
@@ -90,7 +101,7 @@ export function createWorld(config: SimConfig): World {
     history: createHistory(config.statsInterval, config.statsCapacity),
     births: 0,
     reseeded: 0,
-    deaths: { starved: 0, oldAge: 0 },
+    deaths: { starved: 0, oldAge: 0, killed: 0 },
   };
 
   for (let i = 0; i < config.initialCreatures; i++) {
@@ -108,6 +119,7 @@ export function step(world: World): void {
   world.tick++;
 
   growPlants(plants, config.plantGrowthRate, config.plantBareGrowth, ledger);
+  decayMeat(plants, config.meatDecayRate, ledger);
   world.hash.build(creatures.x, creatures.y, creatures.count);
 
   // Children born this tick are appended past `alive` and first act next tick.
@@ -122,6 +134,17 @@ export function step(world: World): void {
     const turn = brain.activation[INPUT_COUNT + Output.Turn]! * config.maxTurn;
     const thrust = (brain.activation[INPUT_COUNT + Output.Thrust]! + 1) / 2;
     const wantsChild = brain.activation[INPUT_COUNT + Output.Reproduce]! >= 0;
+    const attacking = brain.activation[INPUT_COUNT + Output.Attack]! > 0;
+    const diet = creatures.diet[i]!;
+
+    // Bite the closest creature in view if it is within reach. Teeth made for
+    // meat do more harm, and a bigger attacker hurts a smaller victim more.
+    if (attacking && world.senses.targetIndex >= 0 && world.senses.targetGap <= config.attackReach) {
+      const victim = world.senses.targetIndex;
+      const ratio = size / creatures.size[victim]!;
+      const teeth = config.herbivoreAttack + (1 - config.herbivoreAttack) * diet;
+      creatures.health[victim]! -= config.attackDamage * teeth * ratio * ratio;
+    }
 
     // Act: turn, then move forward.
     const speed = creatures.speed[i]!;
@@ -131,18 +154,23 @@ export function step(world: World): void {
     creatures.x[i] = wrap(creatures.x[i]! + Math.cos(heading) * distance, config.worldWidth);
     creatures.y[i] = wrap(creatures.y[i]! + Math.sin(heading) * distance, config.worldHeight);
 
-    // Eat from the cell underfoot. Moving fast makes for a poor bite.
+    // Eat from the cell underfoot: meat first, then plants, each as far as the
+    // diet allows. Moving fast makes for a poor bite.
     const cell = cellIndexAt(plants, creatures.x[i]!, creatures.y[i]!);
     const maxEnergy = maxEnergyFor(size, config);
     let energy = creatures.energy[i]!;
     const reach = biteFor(size, config) * (1 - config.eatSlowdown * thrust);
-    const bite = Math.max(0, Math.min(reach, plants.energy[cell]!, maxEnergy - energy));
+    const meatBite = Math.max(0, Math.min(reach * config.meatBiteScale * meatDigestion(diet), plants.meat[cell]!, maxEnergy - energy));
+    plants.meat[cell]! -= meatBite;
+    energy += meatBite;
+    const bite = Math.max(0, Math.min(reach * plantDigestion(diet), plants.energy[cell]!, maxEnergy - energy));
     plants.energy[cell]! -= bite;
     energy += bite;
 
-    // Pay for body, movement, senses and brain; what is spent leaves as heat.
+    // Pay for body, movement, senses, brain and fighting; what is spent leaves as heat.
     const cost =
       tickCostFor(size, speed, thrust, config) +
+      (attacking ? config.attackCost * size * size : 0) +
       senseCostFor(creatures.sensorRange[i]!, config) +
       brainCost(brain, config);
     const paid = Math.min(cost, energy);
@@ -159,16 +187,21 @@ export function step(world: World): void {
       energy -= giveBirth(world, i, energy);
     }
     creatures.energy[i] = energy;
+    // Health is read here, after any bites taken earlier this tick, so healing never hides a kill.
+    if (creatures.health[i]! > 0) creatures.health[i] = Math.min(1, creatures.health[i]! + config.healRate);
   }
 
   // Deaths. Backwards, so a removal only moves an already-checked creature.
   for (let i = creatures.count - 1; i >= 0; i--) {
+    const killed = creatures.health[i]! <= 0;
     const starved = creatures.energy[i]! <= 0;
-    if (!starved && creatures.age[i]! < config.maxAge) continue;
-    if (starved) world.deaths.starved++;
+    if (!killed && !starved && creatures.age[i]! < config.maxAge) continue;
+    if (killed) world.deaths.killed++;
+    else if (starved) world.deaths.starved++;
     else world.deaths.oldAge++;
-    // Until corpses exist (milestone 5), leftover energy dissipates.
-    ledger.heatOut += creatures.energy[i]!;
+    // The body and whatever it had stored stay behind as meat.
+    const cell = cellIndexAt(plants, creatures.x[i]!, creatures.y[i]!);
+    plants.meat[cell]! += creatures.energy[i]! + bodyEnergyFor(creatures.size[i]!, config);
     removeCreature(creatures, i);
   }
 
@@ -196,17 +229,22 @@ function giveBirth(world: World, parent: number, energy: number): number {
     world.innovations,
     config,
   );
-  // A smaller child may not be able to hold a full share; the parent keeps the rest.
+  // The parent's share first builds the child's body; the rest is the child's
+  // starting store. A smaller child may not hold a full share, and the parent
+  // keeps what does not fit.
+  const body = bodyEnergyFor(genes.size, config);
   const childMax = maxEnergyFor(genes.size, config);
-  const given = Math.min(energy * config.offspringShare, childMax / (1 - config.birthCost));
+  const given = Math.min(energy * config.offspringShare, (childMax + body) / (1 - config.birthCost));
   const lost = given * config.birthCost;
+  // Too little to build a body: no birth this tick.
+  if (given - lost <= body) return 0;
   ledger.heatOut += lost;
 
   spawnCreature(creatures, {
     x: creatures.x[parent]!,
     y: creatures.y[parent]!,
     heading: rng.range(0, Math.PI * 2),
-    energy: given - lost,
+    energy: given - lost - body,
     genes,
     brain,
     parentId: creatures.id[parent]!,
@@ -220,7 +258,9 @@ function sampleHistory(world: World): void {
   const { creatures } = world;
   let links = 0;
   let neurons = 0;
+  let meatEaters = 0;
   for (let i = 0; i < creatures.count; i++) {
+    if (creatures.diet[i]! > 0.5) meatEaters++;
     links += enabledLinks(creatures.brain[i]!);
     neurons += creatures.brain[i]!.hiddenIds.length;
   }
@@ -232,14 +272,24 @@ function sampleHistory(world: World): void {
     meanSize: meanOf(creatures.size, creatures),
     meanSpeed: meanOf(creatures.speed, creatures),
     meanSensorRange: meanOf(creatures.sensorRange, creatures),
+    meanDiet: meanOf(creatures.diet, creatures),
+    meatEaters,
     meanLinks: links / count,
     meanNeurons: neurons / count,
   });
 }
 
-/** Energy currently held by everything in the world. */
+/** Energy currently held by everything in the world: plants, meat, and creatures' stores and bodies. */
 export function totalEnergy(world: World): number {
-  return totalPlantEnergy(world.plants) + totalCreatureEnergy(world.creatures);
+  const { creatures, config } = world;
+  let bodies = 0;
+  for (let i = 0; i < creatures.count; i++) bodies += bodyEnergyFor(creatures.size[i]!, config);
+  return (
+    totalPlantEnergy(world.plants) +
+    totalMeatEnergy(world.plants) +
+    totalCreatureEnergy(creatures) +
+    bodies
+  );
 }
 
 function hashBytes(h: number, bytes: Uint8Array): number {
@@ -268,6 +318,7 @@ export function hashWorld(world: World): number {
   let h = 2166136261;
   h = hashBytes(h, bytesOf(new Uint32Array(header)));
   h = hashBytes(h, bytesOf(plants.energy));
+  h = hashBytes(h, bytesOf(plants.meat));
   for (const field of [
     c.id,
     c.parentId,
@@ -277,9 +328,11 @@ export function hashWorld(world: World): number {
     c.heading,
     c.energy,
     c.age,
+    c.health,
     c.size,
     c.speed,
     c.sensorRange,
+    c.diet,
     c.hue,
     c.mutationRate,
   ]) {

@@ -64,6 +64,8 @@ function inspect(world: World, i: number): Inspection {
     size: c.size[i]!,
     speed: c.speed[i]!,
     sensorRange: c.sensorRange[i]!,
+    diet: c.diet[i]!,
+    health: c.health[i]!,
     hue: c.hue[i]!,
     mutationRate: c.mutationRate[i]!,
     hiddenNeurons: brain.hiddenIds.length,
@@ -82,6 +84,8 @@ function sendSnapshot(now: number): void {
   let sizeTotal = 0;
   let speedTotal = 0;
   let senseTotal = 0;
+  let dietTotal = 0;
+  let meatEaters = 0;
   let maxGeneration = 0;
   let selected: Inspection | null = null;
   for (let i = 0; i < c.count; i++) {
@@ -93,6 +97,9 @@ function sendSnapshot(now: number): void {
     creatures[o + 3] = c.energy[i]! / maxEnergyFor(size, config);
     creatures[o + 4] = config.creatureRadius * size;
     creatures[o + 5] = c.hue[i]!;
+    creatures[o + 6] = c.diet[i]!;
+    dietTotal += c.diet[i]!;
+    if (c.diet[i]! > 0.5) meatEaters++;
     sizeTotal += size;
     speedTotal += c.speed[i]!;
     senseTotal += c.sensorRange[i]!;
@@ -101,9 +108,11 @@ function sendSnapshot(now: number): void {
   }
 
   const plants = new Uint8Array(p.energy.length);
+  const meat = new Uint8Array(p.meat.length);
   let plantEnergy = 0;
   for (let i = 0; i < plants.length; i++) {
     plants[i] = (p.energy[i]! / config.plantCapacity) * 255;
+    meat[i] = Math.min(1, p.meat[i]! / config.meatScale) * 255;
     plantEnergy += p.energy[i]!;
   }
 
@@ -118,17 +127,20 @@ function sendSnapshot(now: number): void {
     meanSize: c.count > 0 ? sizeTotal / c.count : 0,
     meanSpeed: c.count > 0 ? speedTotal / c.count : 0,
     meanSensorRange: c.count > 0 ? senseTotal / c.count : 0,
+    meanDiet: c.count > 0 ? dietTotal / c.count : 0,
+    meatEaters,
     maxGeneration,
     plantCols: p.cols,
     plantRows: p.rows,
     plants,
     plantFill: world.plantCapacityTotal > 0 ? plantEnergy / world.plantCapacityTotal : 0,
+    meat,
     births: world.births,
     reseeded: world.reseeded,
     deaths: { ...world.deaths },
     selected,
   };
-  post({ type: 'snapshot', snapshot }, [creatures.buffer, plants.buffer]);
+  post({ type: 'snapshot', snapshot }, [creatures.buffer, plants.buffer, meat.buffer]);
   lastSnapshotTime = now;
 }
 
@@ -144,6 +156,8 @@ function sendHistory(now: number): void {
     meanSize: h.meanSize.slice(0, h.count),
     meanSpeed: h.meanSpeed.slice(0, h.count),
     meanSensorRange: h.meanSensorRange.slice(0, h.count),
+    meanDiet: h.meanDiet.slice(0, h.count),
+    meatEaters: h.meatEaters.slice(0, h.count),
     meanLinks: h.meanLinks.slice(0, h.count),
     meanNeurons: h.meanNeurons.slice(0, h.count),
   };
@@ -154,6 +168,8 @@ function sendHistory(now: number): void {
     history.meanSize.buffer,
     history.meanSpeed.buffer,
     history.meanSensorRange.buffer,
+    history.meanDiet.buffer,
+    history.meatEaters.buffer,
     history.meanLinks.buffer,
     history.meanNeurons.buffer,
   ]);

@@ -2,7 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { createHistory, recordSample, type Sample } from './stats';
 
 function sample(tick: number): Sample {
-  return { tick, population: tick * 2, plantFill: 0.5, meanSize: 1, meanSpeed: 1, meanSensorRange: 1, meanLinks: 4, meanNeurons: 0 };
+  return {
+    tick,
+    population: tick * 2,
+    plantFill: 0.5,
+    meanSize: 1,
+    meanSpeed: 1,
+    meanSensorRange: 1,
+    meanDiet: 0.2,
+    meatEaters: 0,
+    meanLinks: 4,
+    meanNeurons: 0,
+  };
 }
 
 describe('history', () => {

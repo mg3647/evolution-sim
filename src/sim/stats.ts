@@ -18,6 +18,9 @@ export interface History {
   meanSize: Float32Array;
   meanSpeed: Float32Array;
   meanSensorRange: Float32Array;
+  meanDiet: Float32Array;
+  /** Creatures whose diet gene is above one half. */
+  meatEaters: Float32Array;
   /** Mean number of enabled links and of hidden neurons per brain. */
   meanLinks: Float32Array;
   meanNeurons: Float32Array;
@@ -30,6 +33,8 @@ const SERIES = [
   'meanSize',
   'meanSpeed',
   'meanSensorRange',
+  'meanDiet',
+  'meatEaters',
   'meanLinks',
   'meanNeurons',
 ] as const;
@@ -41,6 +46,8 @@ export interface Sample {
   meanSize: number;
   meanSpeed: number;
   meanSensorRange: number;
+  meanDiet: number;
+  meatEaters: number;
   meanLinks: number;
   meanNeurons: number;
 }
@@ -56,6 +63,8 @@ export function createHistory(interval: number, capacity: number): History {
     meanSize: new Float32Array(capacity),
     meanSpeed: new Float32Array(capacity),
     meanSensorRange: new Float32Array(capacity),
+    meanDiet: new Float32Array(capacity),
+    meatEaters: new Float32Array(capacity),
     meanLinks: new Float32Array(capacity),
     meanNeurons: new Float32Array(capacity),
   };

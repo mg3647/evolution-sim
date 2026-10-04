@@ -13,7 +13,7 @@ export type ToWorker =
   | { type: 'pick'; x: number; y: number; radius: number };
 
 /** Number of floats per creature in `Snapshot.creatures`. */
-export const CREATURE_STRIDE = 6;
+export const CREATURE_STRIDE = 7;
 
 /** Everything shown about the selected creature. */
 export interface Inspection {
@@ -28,6 +28,10 @@ export interface Inspection {
   size: number;
   speed: number;
   sensorRange: number;
+  // 0 eats only plants, 1 only meat.
+  diet: number;
+  // 1 is unhurt; it dies at 0.
+  health: number;
   hue: number;
   mutationRate: number;
   hiddenNeurons: number;
@@ -47,11 +51,14 @@ export interface Snapshot {
   measuredTps: number;
 
   population: number;
-  /** Per creature: x, y, heading, energy as a fraction of its maximum, radius, hue. */
+  /** Per creature: x, y, heading, energy as a fraction of its maximum, radius, hue, diet. */
   creatures: Float32Array;
   meanSize: number;
   meanSpeed: number;
   meanSensorRange: number;
+  meanDiet: number;
+  // Creatures whose diet gene is above one half.
+  meatEaters: number;
   /** Highest generation among living creatures. */
   maxGeneration: number;
 
@@ -61,10 +68,12 @@ export interface Snapshot {
   plants: Uint8Array;
   /** Plant energy in the world as a fraction of what it holds when fully grown. */
   plantFill: number;
+  // Per cell: meat as 0..255 of the configured meat scale.
+  meat: Uint8Array;
 
   births: number;
   reseeded: number;
-  deaths: { starved: number; oldAge: number };
+  deaths: { starved: number; oldAge: number; killed: number };
 
   /** The selected creature, or null if none is selected or it has died. */
   selected: Inspection | null;
@@ -79,6 +88,8 @@ export interface HistoryData {
   meanSize: Float32Array;
   meanSpeed: Float32Array;
   meanSensorRange: Float32Array;
+  meanDiet: Float32Array;
+  meatEaters: Float32Array;
   meanLinks: Float32Array;
   meanNeurons: Float32Array;
 }

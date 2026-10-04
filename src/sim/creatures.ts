@@ -21,10 +21,13 @@ export interface Creatures {
   energy: Float64Array;
   /** Ticks lived. */
   age: Uint32Array;
+  /** 1 is unhurt; the creature dies at 0. */
+  health: Float32Array;
   // Genes; see Genes in genome.ts.
   size: Float32Array;
   speed: Float32Array;
   sensorRange: Float32Array;
+  diet: Float32Array;
   hue: Float32Array;
   mutationRate: Float32Array;
   /** One brain per creature, parallel to the arrays above. */
@@ -41,9 +44,11 @@ const FIELDS = [
   'heading',
   'energy',
   'age',
+  'health',
   'size',
   'speed',
   'sensorRange',
+  'diet',
   'hue',
   'mutationRate',
 ] as const satisfies readonly (keyof Creatures)[];
@@ -73,9 +78,11 @@ export function createCreatures(capacity: number): Creatures {
     heading: new Float32Array(capacity),
     energy: new Float64Array(capacity),
     age: new Uint32Array(capacity),
+    health: new Float32Array(capacity),
     size: new Float32Array(capacity),
     speed: new Float32Array(capacity),
     sensorRange: new Float32Array(capacity),
+    diet: new Float32Array(capacity),
     hue: new Float32Array(capacity),
     mutationRate: new Float32Array(capacity),
     brain: [],
@@ -106,9 +113,11 @@ export function spawnCreature(c: Creatures, options: SpawnOptions): number {
   c.heading[i] = options.heading;
   c.energy[i] = options.energy;
   c.age[i] = options.age ?? 0;
+  c.health[i] = 1;
   c.size[i] = options.genes.size;
   c.speed[i] = options.genes.speed;
   c.sensorRange[i] = options.genes.sensorRange;
+  c.diet[i] = options.genes.diet;
   c.hue[i] = options.genes.hue;
   c.mutationRate[i] = options.genes.mutationRate;
   c.brain[i] = options.brain;
@@ -130,6 +139,7 @@ export function genesOf(c: Creatures, i: number): Genes {
     size: c.size[i]!,
     speed: c.speed[i]!,
     sensorRange: c.sensorRange[i]!,
+    diet: c.diet[i]!,
     hue: c.hue[i]!,
     mutationRate: c.mutationRate[i]!,
   };

@@ -11,6 +11,11 @@ const config: SimConfig = { ...defaultConfig, worldWidth: 400, worldHeight: 400 
 const LEFT = 0;
 const AHEAD = 1;
 const RIGHT = 2;
+/** Offsets of the per-ray inputs. */
+const MEAT = 1;
+const NEAR = 2;
+const KIN = 3;
+const BIGGER = 4;
 const ray = (index: number) => Input.Rays + index * INPUTS_PER_RAY;
 
 function setup() {
@@ -19,13 +24,13 @@ function setup() {
   const hash = new SpatialHash(config.worldWidth, config.worldHeight, config.senseRange);
   const creatures = createCreatures(8);
   const brain = founderBrain(new Rng('b'), new Innovations(), config);
-  const add = (x: number, y: number, heading: number, hue = 0.5) =>
+  const add = (x: number, y: number, heading: number, hue = 0.5, size = 1) =>
     spawnCreature(creatures, {
       x,
       y,
       heading,
       energy: 25,
-      genes: { size: 1, speed: 1, sensorRange: 1, hue, mutationRate: 0.05 },
+      genes: { size, speed: 1, sensorRange: 1, diet: 0.2, hue, mutationRate: 0.05 },
       brain,
       age: 900,
     });
@@ -62,6 +67,46 @@ describe('Senses', () => {
     expect(inputs[ray(RIGHT)]).toBe(0);
   });
 
+  it('sees meat underfoot and along a ray, capped at 1', () => {
+    const { plants, creatures, add, sense } = setup();
+    const i = add(210, 210, 0);
+    plants.meat[cellIndexAt(plants, 210, 210)] = config.meatScale / 2;
+    plants.meat[cellIndexAt(plants, 210 + config.senseRange / 2, 210)] = config.meatScale * 10;
+    const inputs = sense(creatures, i);
+    expect(inputs[Input.MeatUnderfoot]).toBeCloseTo(0.5, 6);
+    expect(inputs[ray(AHEAD) + MEAT]).toBe(1);
+    expect(inputs[ray(LEFT) + MEAT]).toBe(0);
+  });
+
+  it('reports health and whether the creature in view is bigger or smaller', () => {
+    const { creatures, add, sense } = setup();
+    const i = add(200, 200, 0);
+    creatures.health[i] = 0.4;
+    add(240, 200, 0, 0.5, 3);
+    const inputs = sense(creatures, i);
+    expect(inputs[Input.Health]).toBeCloseTo(0.4, 6);
+    expect(inputs[ray(AHEAD) + BIGGER]).toBeCloseTo(0.5, 6);
+    creatures.size[i] = 3;
+    expect(sense(creatures, i)[ray(AHEAD) + BIGGER]).toBe(0);
+  });
+
+  it('tracks the closest creature in view and the gap to it, for attacks', () => {
+    const { plants, creatures, add } = setup();
+    const i = add(200, 200, 0);
+    const near = add(215, 200, 0);
+    add(240, 200, 0);
+    add(190, 200, 0); // closer, but behind
+    const hash = new SpatialHash(config.worldWidth, config.worldHeight, config.senseRange);
+    hash.build(creatures.x, creatures.y, creatures.count);
+    const senses = new Senses(config, plants, hash);
+    senses.sense(creatures, i, 0, new Float32Array(INPUT_COUNT));
+    expect(senses.targetIndex).toBe(near);
+    expect(senses.targetGap).toBeCloseTo(15 - 2 * config.creatureRadius, 5);
+
+    senses.sense(creatures, near, 0, new Float32Array(INPUT_COUNT));
+    expect(senses.targetIndex).not.toBe(i);
+  });
+
   it('turns its rays with its heading', () => {
     const { plants, creatures, add, sense } = setup();
     // Halfway along a ray pointing in +y, from a start clear of any cell boundary.
@@ -81,12 +126,12 @@ describe('Senses', () => {
     add(200 + 20 * Math.cos(side), 200 + 20 * Math.sin(side), 0, 0.0); // +angle side, opposite colour
     const inputs = sense(creatures, i);
 
-    expect(inputs[ray(AHEAD) + 1]).toBeCloseTo(1 - 30 / config.senseRange, 5);
-    expect(inputs[ray(AHEAD) + 2]).toBeCloseTo(1, 5);
-    expect(inputs[ray(RIGHT) + 1]).toBeCloseTo(1 - 20 / config.senseRange, 5);
-    expect(inputs[ray(RIGHT) + 2]).toBeCloseTo(-1, 5);
-    expect(inputs[ray(LEFT) + 1]).toBe(0);
-    expect(inputs[ray(LEFT) + 2]).toBe(0);
+    expect(inputs[ray(AHEAD) + NEAR]).toBeCloseTo(1 - 30 / config.senseRange, 5);
+    expect(inputs[ray(AHEAD) + KIN]).toBeCloseTo(1, 5);
+    expect(inputs[ray(RIGHT) + NEAR]).toBeCloseTo(1 - 20 / config.senseRange, 5);
+    expect(inputs[ray(RIGHT) + KIN]).toBeCloseTo(-1, 5);
+    expect(inputs[ray(LEFT) + NEAR]).toBe(0);
+    expect(inputs[ray(LEFT) + KIN]).toBe(0);
   });
 
   it('does not see creatures behind it, beyond its range, or itself', () => {
@@ -95,22 +140,22 @@ describe('Senses', () => {
     add(170, 200, 0); // behind
     add(200 + config.senseRange + 5, 200, 0); // too far
     const inputs = sense(creatures, i);
-    for (const r of [LEFT, AHEAD, RIGHT]) expect(inputs[ray(r) + 1]).toBe(0);
+    for (const r of [LEFT, AHEAD, RIGHT]) expect(inputs[ray(r) + NEAR]).toBe(0);
   });
 
   it('sees across the wrapped edge of the world', () => {
     const { creatures, add, sense } = setup();
     const i = add(395, 200, 0);
     add(15, 200, 0);
-    expect(sense(creatures, i)[ray(AHEAD) + 1]).toBeCloseTo(1 - 20 / config.senseRange, 5);
+    expect(sense(creatures, i)[ray(AHEAD) + NEAR]).toBeCloseTo(1 - 20 / config.senseRange, 5);
   });
 
   it('sees farther with a larger sensor range gene', () => {
     const { creatures, add, sense } = setup();
     const i = add(200, 200, 0);
     add(200 + config.senseRange * 1.5, 200, 0);
-    expect(sense(creatures, i)[ray(AHEAD) + 1]).toBe(0);
+    expect(sense(creatures, i)[ray(AHEAD) + NEAR]).toBe(0);
     creatures.sensorRange[i] = 2;
-    expect(sense(creatures, i)[ray(AHEAD) + 1]).toBeCloseTo(0.25, 5);
+    expect(sense(creatures, i)[ray(AHEAD) + NEAR]).toBeCloseTo(0.25, 5);
   });
 });

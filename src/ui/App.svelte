@@ -25,6 +25,10 @@
     { label: 'Mean speed', color: '#ff8f6b' },
     { label: 'Mean sensor range', color: '#b08cff' },
   ];
+  const DIET_SERIES: ChartSeries[] = [
+    { label: 'Meat-eaters', color: '#e0566a' },
+    { label: 'Mean diet', color: '#b08cff', axis: 'right' },
+  ];
   const BRAIN_SERIES: ChartSeries[] = [
     { label: 'Mean links', color: '#e8c468' },
     { label: 'Mean hidden neurons', color: '#6cb6ff', axis: 'right' },
@@ -42,6 +46,9 @@
   );
   const traitData = $derived<uPlot.AlignedData | null>(
     history && [history.tick, history.meanSize, history.meanSpeed, history.meanSensorRange],
+  );
+  const dietData = $derived<uPlot.AlignedData | null>(
+    history && [history.tick, history.meatEaters, history.meanDiet],
   );
   const brainData = $derived<uPlot.AlignedData | null>(
     history && [history.tick, history.meanLinks, history.meanNeurons],
@@ -141,9 +148,18 @@
         <div><dt>Mean size</dt><dd>{decimal(snapshot?.meanSize)}</dd></div>
         <div><dt>Mean speed</dt><dd>{decimal(snapshot?.meanSpeed)}</dd></div>
         <div><dt>Mean sensor range</dt><dd>{decimal(snapshot?.meanSensorRange)}</dd></div>
+        <div title="Creatures whose diet gene is above 0.5; drawn as pointed shapes">
+          <dt>Meat-eaters</dt>
+          <dd>{count(snapshot?.meatEaters)}</dd>
+        </div>
+        <div title="0 eats only plants, 1 eats only meat">
+          <dt>Mean diet</dt>
+          <dd>{decimal(snapshot?.meanDiet)}</dd>
+        </div>
         <div><dt>Generation</dt><dd>{count(snapshot?.maxGeneration)}</dd></div>
         <div><dt>Births</dt><dd>{count(snapshot?.births)}</dd></div>
         <div><dt>Starved</dt><dd>{count(snapshot?.deaths.starved)}</dd></div>
+        <div><dt>Killed</dt><dd>{count(snapshot?.deaths.killed)}</dd></div>
         <div><dt>Died of old age</dt><dd>{count(snapshot?.deaths.oldAge)}</dd></div>
         <div
           title="Parentless creatures added because the population fell below the minimum"
@@ -154,6 +170,13 @@
       </dl>
 
       <Chart title="Population" series={POPULATION_SERIES} data={populationData} />
+      <Chart
+        title="Diet"
+        note="Meat-eaters are creatures that digest meat better than plants; they are drawn as pointed shapes. Mean diet runs from 0 (only plants) to 1 (only meat). Red ground is meat left by the dead."
+        series={DIET_SERIES}
+        data={dietData}
+      />
+
       <Inspector creature={snapshot?.selected ?? null} />
 
       <Chart

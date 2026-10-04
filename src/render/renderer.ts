@@ -15,6 +15,10 @@ const FIT_MARGIN = 0.9;
 /** Ground colour with no plants and with a full cell, as [r, g, b]. */
 const SOIL_COLOR = [28, 24, 20] as const;
 const PLANT_COLOR = [64, 158, 60] as const;
+/** Ground colour where meat lies thick. */
+const MEAT_COLOR = [190, 60, 70] as const;
+/** How strongly a cell full of meat covers the ground colour. */
+const MEAT_OPACITY = 0.85;
 const CREATURE_SATURATION = 0.7;
 /** Brightness of a starving creature; a well-fed one is at 1. */
 const DIMMEST = 0.45;
@@ -36,19 +40,30 @@ function hsvToRgb(h: number, s: number, v: number): number {
   return (channel(5) << 16) | (channel(3) << 8) | channel(1);
 }
 
-/** A white disc with a dark spot at the front, tinted per creature. */
-function createCreatureTexture(): Texture {
+/**
+ * A white body with a dark spot at the front, tinted per creature. Plant-eaters
+ * are discs; meat-eaters are pointed, so the two can be told apart at a glance.
+ */
+function createCreatureTexture(pointed: boolean): Texture {
   const size = CREATURE_TEXTURE_SIZE;
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext('2d')!;
   ctx.fillStyle = '#ffffff';
   ctx.beginPath();
-  ctx.arc(size / 2, size / 2, size / 2 - 1, 0, Math.PI * 2);
+  if (pointed) {
+    ctx.moveTo(size - 1, size / 2);
+    ctx.lineTo(size * 0.12, size * 0.06);
+    ctx.lineTo(size * 0.3, size / 2);
+    ctx.lineTo(size * 0.12, size * 0.94);
+    ctx.closePath();
+  } else {
+    ctx.arc(size / 2, size / 2, size / 2 - 1, 0, Math.PI * 2);
+  }
   ctx.fill();
   ctx.fillStyle = '#202020';
   ctx.beginPath();
-  ctx.arc(size * 0.78, size / 2, size * 0.11, 0, Math.PI * 2);
+  ctx.arc(size * (pointed ? 0.66 : 0.78), size / 2, size * 0.11, 0, Math.PI * 2);
   ctx.fill();
   return Texture.from(canvas);
 }
@@ -65,7 +80,8 @@ export class WorldRenderer {
   private creatureLayer = new Container();
   private selectionRing = new Graphics();
   private creatureSprites: Sprite[] = [];
-  private creatureTexture = Texture.EMPTY;
+  private plantEaterTexture = Texture.EMPTY;
+  private meatEaterTexture = Texture.EMPTY;
   private plantCanvas = document.createElement('canvas');
   private plantImage: ImageData | null = null;
   private hostObserver: ResizeObserver | null = null;
@@ -86,7 +102,8 @@ export class WorldRenderer {
       resolution: window.devicePixelRatio,
     });
     host.appendChild(this.app.canvas);
-    this.creatureTexture = createCreatureTexture();
+    this.plantEaterTexture = createCreatureTexture(false);
+    this.meatEaterTexture = createCreatureTexture(true);
     this.camera.addChild(this.plantSprite, this.overlay, this.creatureLayer, this.selectionRing);
     this.app.stage.addChild(this.camera);
     this.attachCameraControls(this.app.canvas);
@@ -159,7 +176,7 @@ export class WorldRenderer {
 
   /** One pixel per plant cell, stretched over the world. */
   private drawPlants(snapshot: Snapshot): void {
-    const { plantCols: cols, plantRows: rows, plants } = snapshot;
+    const { plantCols: cols, plantRows: rows, plants, meat } = snapshot;
     const canvas = this.plantCanvas;
     const ctx = canvas.getContext('2d')!;
     if (!this.plantImage || canvas.width !== cols || canvas.height !== rows) {
@@ -173,10 +190,13 @@ export class WorldRenderer {
     const pixels = this.plantImage.data;
     for (let i = 0; i < plants.length; i++) {
       const t = plants[i]! / 255;
+      // Meat shows as red over whatever grows beneath it.
+      const m = (meat[i]! / 255) * MEAT_OPACITY;
       const o = i * 4;
-      pixels[o] = SOIL_COLOR[0] + (PLANT_COLOR[0] - SOIL_COLOR[0]) * t;
-      pixels[o + 1] = SOIL_COLOR[1] + (PLANT_COLOR[1] - SOIL_COLOR[1]) * t;
-      pixels[o + 2] = SOIL_COLOR[2] + (PLANT_COLOR[2] - SOIL_COLOR[2]) * t;
+      for (let c = 0; c < 3; c++) {
+        const ground = SOIL_COLOR[c]! + (PLANT_COLOR[c]! - SOIL_COLOR[c]!) * t;
+        pixels[o + c] = ground + (MEAT_COLOR[c]! - ground) * m;
+      }
       pixels[o + 3] = 255;
     }
     ctx.putImageData(this.plantImage, 0, 0);
@@ -191,7 +211,7 @@ export class WorldRenderer {
     const minRadius = MIN_SCREEN_RADIUS / this.camera.scale.x;
 
     while (sprites.length < population) {
-      const sprite = new Sprite(this.creatureTexture);
+      const sprite = new Sprite(this.plantEaterTexture);
       sprite.anchor.set(0.5);
       sprites.push(sprite);
       this.creatureLayer.addChild(sprite);
@@ -204,6 +224,7 @@ export class WorldRenderer {
       const o = i * CREATURE_STRIDE;
       sprite.position.set(creatures[o]!, creatures[o + 1]!);
       sprite.rotation = creatures[o + 2]!;
+      sprite.texture = creatures[o + 6]! > 0.5 ? this.meatEaterTexture : this.plantEaterTexture;
       sprite.scale.set((Math.max(creatures[o + 4]!, minRadius) * 2) / CREATURE_TEXTURE_SIZE);
       // Hue is inherited, so relatives share a colour; hungry creatures are dimmer.
       const fed = Math.min(1, creatures[o + 3]! * 2);
