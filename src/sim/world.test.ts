@@ -195,6 +195,28 @@ describe('fighting', () => {
     expect(totalEnergy(world)).toBeCloseTo(expectedEnergy(world.ledger), 6);
   });
 
+  it('slows a wounded creature in proportion to its wounds', () => {
+    const moved = (health: number, woundSlow: number) => {
+      const world = createWorld({ ...smallConfig, ...noFighting, healRate: 0, woundSlow });
+      const { creatures } = world;
+      creatures.health.fill(health, 0, creatures.count);
+      let distance = 0;
+      for (let t = 0; t < 20; t++) {
+        const xs = Array.from(creatures.x.subarray(0, creatures.count));
+        const ys = Array.from(creatures.y.subarray(0, creatures.count));
+        step(world);
+        for (let i = 0; i < Math.min(xs.length, creatures.count); i++) {
+          distance += Math.hypot(creatures.x[i]! - xs[i]!, creatures.y[i]! - ys[i]!) % 400;
+        }
+      }
+      return distance;
+    };
+    const healthy = moved(1, 0.7);
+    expect(moved(0.5, 0.7)).toBeLessThan(healthy * 0.8);
+    // With the effect off, a wound changes movement only through what the brain senses.
+    expect(Math.abs(moved(0.5, 0) - healthy) / healthy).toBeLessThan(0.05);
+  });
+
   it('never happens when bites do no damage', () => {
     expect(runWorld(noFighting, 1500).deaths.killed).toBe(0);
   });

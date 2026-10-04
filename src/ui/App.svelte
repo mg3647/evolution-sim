@@ -2,7 +2,8 @@
   import { onMount } from 'svelte';
   import type uPlot from 'uplot';
   import { WorldRenderer } from '../render/renderer';
-  import { defaultConfig } from '../sim/config';
+  import { defaultConfig, type SimConfig } from '../sim/config';
+  import { presetConfig, RESTART_KEYS, type Preset } from '../sim/presets';
   import { EVENT_LABELS, type TimedEventKind } from '../sim/environment';
   import type { ToolKind } from '../sim/world';
   import { SimClient } from '../worker/client';
@@ -11,13 +12,15 @@
   import EnvironmentPanel from './EnvironmentPanel.svelte';
   import Inspector from './Inspector.svelte';
   import LineageTree from './LineageTree.svelte';
+  import SettingsPanel from './SettingsPanel.svelte';
   import SpeciesList from './SpeciesList.svelte';
 
-  type Tab = 'world' | 'creature' | 'evolution';
+  type Tab = 'world' | 'creature' | 'evolution' | 'settings';
   const TABS: { id: Tab; label: string }[] = [
     { id: 'world', label: 'World' },
     { id: 'creature', label: 'Creature' },
     { id: 'evolution', label: 'Evolution' },
+    { id: 'settings', label: 'Settings' },
   ];
 
   const SPEEDS: { label: string; value: Speed }[] = [
@@ -72,6 +75,10 @@
   let history = $state.raw<HistoryData | null>(null);
   let tree = $state.raw<TreeData | null>(null);
   let seed = $state(defaultConfig.seed);
+  /** The settings in force. Restart-only ones take effect at the next restart. */
+  let settings = $state<SimConfig>({ ...defaultConfig });
+  /** Set when a world is loaded from a file, so the settings follow the file's. */
+  let adoptLoadedSettings = false;
   let tab = $state<Tab>('world');
   let showScent = $state(false);
   let colorBySpecies = $state(false);
@@ -109,6 +116,11 @@
       client = new SimClient({
         onSnapshot: (s) => {
           snapshot = s;
+          if (adoptLoadedSettings) {
+            adoptLoadedSettings = false;
+            settings = { ...s.config };
+            seed = s.config.seed;
+          }
           r.update(s);
           const picked = s.selected?.id ?? 0;
           if (picked !== 0 && picked !== shownCreature) tab = 'creature';
@@ -117,9 +129,12 @@
         onHistory: (h) => (history = h),
         onTree: (t) => (tree = t),
         onSaved: download,
-        onError: (message) => (errorMessage = message),
+        onError: (message) => {
+          adoptLoadedSettings = false;
+          errorMessage = message;
+        },
       });
-      client.init({ ...defaultConfig, seed });
+      client.init({ ...settings, seed });
       r.onPick = (x, y, radius) => client?.pick(x, y, radius);
       r.onTool = (kind, x, y, fromX, fromY) => client?.applyTool(kind, x, y, fromX, fromY);
     });
@@ -142,7 +157,18 @@
 
   function restart(event: SubmitEvent) {
     event.preventDefault();
-    client?.init({ ...defaultConfig, seed });
+    client?.init({ ...settings, seed });
+  }
+
+  function changeSetting(key: keyof SimConfig, value: number) {
+    settings = { ...settings, [key]: value };
+    if (!RESTART_KEYS.has(key)) client?.setConfig({ [key]: value });
+  }
+
+  function applyPreset(preset: Preset) {
+    settings = presetConfig(preset, seed);
+    client?.init({ ...settings });
+    client?.setRandomEvents(settings.randomEvents);
   }
 
   function pickTool(next: ToolKind | null) {
@@ -177,6 +203,7 @@
     fileInput.value = '';
     if (!file) return;
     errorMessage = '';
+    adoptLoadedSettings = true;
     client?.load(await file.text());
   }
 
@@ -357,6 +384,8 @@
           Follow the selected creature
         </label>
         <Inspector creature={snapshot?.selected ?? null} />
+      {:else if tab === 'settings'}
+        <SettingsPanel config={settings} onChange={changeSetting} onPreset={applyPreset} />
       {:else}
         <dl>
           <div><dt>Mean size</dt><dd>{decimal(snapshot?.meanSize)}</dd></div>

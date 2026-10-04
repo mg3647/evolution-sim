@@ -90,6 +90,8 @@ export interface SimConfig {
   attackReach: number;
   /** Health regained per tick. */
   healRate: number;
+  /** How much a wound slows a creature: at 0.7, one on its last legs moves at 30% of its thrust. */
+  woundSlow: number;
 
   /** Meat is dense food: a mouthful of it is this many times a mouthful of plants. */
   meatBiteScale: number;
@@ -243,6 +245,7 @@ export const defaultConfig: SimConfig = {
   attackCost: 0.05,
   attackReach: 3,
   healRate: 0.001,
+  woundSlow: 0,
 
   meatBiteScale: 3,
   meatDecayRate: 0.0005,

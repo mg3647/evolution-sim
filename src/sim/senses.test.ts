@@ -157,9 +157,9 @@ describe('Senses', () => {
   it('turns its rays with its heading', () => {
     const { plants, creatures, add, sense } = setup();
     // Halfway along a ray pointing in +y, from a start clear of any cell boundary.
-    plants.energy[cellIndexAt(plants, 210, 210 + config.senseRange / 2)] = config.plantCapacity;
-    const facingAway = add(210, 210, 0);
-    const facingIt = add(210, 210, Math.PI / 2);
+    plants.energy[cellIndexAt(plants, 210, 205 + config.senseRange / 2)] = config.plantCapacity;
+    const facingAway = add(210, 205, 0);
+    const facingIt = add(210, 205, Math.PI / 2);
     expect(sense(creatures, facingAway)[ray(AHEAD)]).toBe(0);
     expect(sense(creatures, facingIt)[ray(AHEAD)]).toBeGreaterThan(0.4);
   });

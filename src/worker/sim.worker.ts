@@ -1,5 +1,7 @@
 import { enabledLinks, INPUT_COUNT, OUTPUT_COUNT } from '../sim/brain';
+import type { SimConfig } from '../sim/config';
 import { maxEnergyFor } from '../sim/genome';
+import { RESTART_KEYS } from '../sim/presets';
 import { wrappedDelta } from '../sim/geometry';
 import { loadWorld, saveWorld, type SavedWorld } from '../sim/serialize';
 import { applyTool, clearWorldWalls, triggerWorldEvent, type World } from '../sim/world';
@@ -358,6 +360,11 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
     runner.world.environment.randomEvents = message.enabled;
   } else if (message.type === 'setRendering') {
     rendering = message.enabled;
+  } else if (message.type === 'setConfig') {
+    const config = runner.world.config as unknown as Record<string, unknown>;
+    for (const [key, value] of Object.entries(message.changes)) {
+      if (!RESTART_KEYS.has(key as keyof SimConfig)) config[key] = value;
+    }
   } else if (message.type === 'save') {
     const { world } = runner;
     post({ type: 'saved', json: JSON.stringify(saveWorld(world)), tick: world.tick, seed: world.config.seed });

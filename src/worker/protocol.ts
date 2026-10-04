@@ -20,6 +20,8 @@ export type ToWorker =
   | { type: 'setRandomEvents'; enabled: boolean }
   /** With drawing off, snapshots carry numbers only, sent less often. */
   | { type: 'setRendering'; enabled: boolean }
+  /** Change settings in the running world. Settings that only matter at creation are ignored. */
+  | { type: 'setConfig'; changes: Partial<SimConfig> }
   | { type: 'save' }
   | { type: 'load'; json: string };
 

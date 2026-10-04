@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "longrun": "vitest run --config vitest.longrun.config.ts"
   },
   "dependencies": {
     "pixi.js": "^8.22.0",

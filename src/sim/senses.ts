@@ -3,7 +3,6 @@ import type { SimConfig } from './config';
 import type { Creatures } from './creatures';
 import { seasonAt } from './environment';
 import { maxEnergyFor } from './genome';
-import { wrap, wrappedDelta } from './geometry';
 import { cellIndexAt, type PlantField } from './plants';
 import type { SpatialHash } from './spatialHash';
 
@@ -41,16 +40,38 @@ export class Senses {
   private inputs: Float32Array = new Float32Array(0);
   private creatures!: Creatures;
   private nearest = new Float32Array(RAY_COUNT);
+  private cosHeading = 1;
+  private sinHeading = 0;
+
+  // This runs for every creature every tick and dominates the cost of a tick,
+  // so values that do not change per creature are worked out once.
+  private readonly cosSpread: number;
+  private readonly sinSpread: number;
+  /** Tangents of the angles bounding the centre ray and the whole field of view. */
+  private readonly tanCentre: number;
+  private readonly tanView: number;
+  /** False if the field of view reaches past straight sideways, where the tangent test breaks down. */
+  private readonly narrowView: boolean;
+  private cachedTick = -1;
+  private clock = 0;
+  private season = 0;
 
   constructor(
     private readonly config: SimConfig,
     private readonly field: PlantField,
     private readonly hash: SpatialHash,
-  ) {}
+  ) {
+    this.cosSpread = Math.cos(config.raySpread);
+    this.sinSpread = Math.sin(config.raySpread);
+    this.tanCentre = Math.tan(config.raySpread / 2);
+    this.tanView = Math.tan(config.raySpread * 1.5);
+    this.narrowView = config.raySpread * 1.5 < Math.PI / 2 - 0.01;
+  }
 
   /** Write creature i's inputs. The hash must have been built from `creatures`. */
   sense(creatures: Creatures, i: number, tick: number, inputs: Float32Array): void {
     const { config, field } = this;
+    const { worldWidth, worldHeight } = config;
     const x = creatures.x[i]!;
     const y = creatures.y[i]!;
     const heading = creatures.heading[i]!;
@@ -58,18 +79,23 @@ export class Senses {
     // Plant cover is relative to the richest possible cell; a barren world reads as zero.
     const plantScale = config.plantCapacity > 0 ? 1 / config.plantCapacity : 0;
     const meatScale = 1 / config.meatScale;
+    const cosHeading = Math.cos(heading);
+    const sinHeading = Math.sin(heading);
 
     for (let ray = 0; ray < RAY_COUNT; ray++) {
-      const angle = heading + (ray - 1) * config.raySpread;
-      const dx = Math.cos(angle) * range;
-      const dy = Math.sin(angle) * range;
+      // Each ray is the heading turned by a whole number of spreads: -1, 0, +1.
+      const turn = ray - 1;
+      const dx = (cosHeading * this.cosSpread - turn * sinHeading * this.sinSpread) * range;
+      const dy = (sinHeading * this.cosSpread + turn * cosHeading * this.sinSpread) * range;
       let plants = 0;
       let meat = 0;
       let scent = 0;
       let wall = 0;
       for (const t of GROUND_SAMPLES) {
-        const px = wrap(x + dx * t, config.worldWidth);
-        const py = wrap(y + dy * t, config.worldHeight);
+        let px = turn === 0 ? x + cosHeading * range * t : x + dx * t;
+        let py = turn === 0 ? y + sinHeading * range * t : y + dy * t;
+        px -= Math.floor(px / worldWidth) * worldWidth;
+        py -= Math.floor(py / worldHeight) * worldHeight;
         const cell = cellIndexAt(field, px, py);
         plants += field.energy[cell]!;
         meat += field.meat[cell]!;
@@ -93,6 +119,8 @@ export class Senses {
     this.x = x;
     this.y = y;
     this.heading = heading;
+    this.cosHeading = cosHeading;
+    this.sinHeading = sinHeading;
     this.range = range;
     this.inputs = inputs;
     this.creatures = creatures;
@@ -107,8 +135,13 @@ export class Senses {
     inputs[Input.Energy] = creatures.energy[i]! / maxEnergyFor(creatures.size[i]!, config);
     inputs[Input.Health] = creatures.health[i]!;
     inputs[Input.Age] = creatures.age[i]! / config.maxAge;
-    inputs[Input.Clock] = Math.sin((TWO_PI * tick) / config.clockPeriod);
-    inputs[Input.Season] = config.seasonStrength > 0 ? (seasonAt(tick, config) - 1) / config.seasonStrength : 0;
+    if (tick !== this.cachedTick) {
+      this.cachedTick = tick;
+      this.clock = Math.sin((TWO_PI * tick) / config.clockPeriod);
+      this.season = config.seasonStrength > 0 ? (seasonAt(tick, config) - 1) / config.seasonStrength : 0;
+    }
+    inputs[Input.Clock] = this.clock;
+    inputs[Input.Season] = this.season;
     inputs[Input.Sick] = creatures.sick[i]! > 0 ? 1 : 0;
     inputs[Input.Bias] = 1;
   }
@@ -116,17 +149,33 @@ export class Senses {
   private visit = (j: number): void => {
     if (j === this.self) return;
     const { config, creatures } = this;
-    const dx = wrappedDelta(this.x, creatures.x[j]!, config.worldWidth);
-    const dy = wrappedDelta(this.y, creatures.y[j]!, config.worldHeight);
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    if (distance === 0) return;
+    // Shortest way round the wrapped world, for two points inside it.
+    let dx = creatures.x[j]! - this.x;
+    if (dx > config.worldWidth / 2) dx -= config.worldWidth;
+    else if (dx < -config.worldWidth / 2) dx += config.worldWidth;
+    let dy = creatures.y[j]! - this.y;
+    if (dy > config.worldHeight / 2) dy -= config.worldHeight;
+    else if (dy < -config.worldHeight / 2) dy += config.worldHeight;
+    if (dx === 0 && dy === 0) return;
 
-    // Which ray points most nearly at the neighbor, if any does.
-    let bearing = (Math.atan2(dy, dx) - this.heading) % TWO_PI;
-    if (bearing > Math.PI) bearing -= TWO_PI;
-    else if (bearing < -Math.PI) bearing += TWO_PI;
-    const ray = Math.round(bearing / config.raySpread) + 1;
-    if (ray < 0 || ray >= RAY_COUNT) return;
+    // Which ray points most nearly at the neighbor, if any does. `ahead` and
+    // `aside` are the neighbor's position as seen from the creature.
+    let ray: number;
+    if (this.narrowView) {
+      const ahead = dx * this.cosHeading + dy * this.sinHeading;
+      if (ahead <= 0) return;
+      const aside = dy * this.cosHeading - dx * this.sinHeading;
+      const off = aside < 0 ? -aside : aside;
+      if (off >= ahead * this.tanView) return;
+      ray = off < ahead * this.tanCentre ? 1 : aside < 0 ? 0 : 2;
+    } else {
+      let bearing = (Math.atan2(dy, dx) - this.heading) % TWO_PI;
+      if (bearing > Math.PI) bearing -= TWO_PI;
+      else if (bearing < -Math.PI) bearing += TWO_PI;
+      ray = Math.round(bearing / config.raySpread) + 1;
+      if (ray < 0 || ray >= RAY_COUNT) return;
+    }
+    const distance = Math.sqrt(dx * dx + dy * dy);
 
     const mySize = creatures.size[this.self]!;
     const theirSize = creatures.size[j]!;

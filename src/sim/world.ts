@@ -163,7 +163,7 @@ export function step(world: World): void {
 
   const env = world.environment;
   expireEvents(env, world.tick);
-  maybeRandomEvent(env, world.tick, eventTarget(world));
+  if (env.randomEvents) maybeRandomEvent(env, world.tick, eventTarget(world));
   if (world.tick % config.fertilityUpdateInterval === 0) {
     world.plantCapacityTotal = driftFertility(env, plants, world.tick, config, world.rng, ledger);
   }
@@ -204,8 +204,9 @@ export function step(world: World): void {
       creatures.health[victim]! -= config.attackDamage * teeth * ratio;
     }
 
-    // Illness saps strength.
+    // Illness and wounds sap strength.
     if (sick) thrust *= config.plagueSlow;
+    thrust *= 1 - config.woundSlow * (1 - Math.max(0, creatures.health[i]!));
 
     // Act: turn, then move forward.
     const speed = creatures.speed[i]!;

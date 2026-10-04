@@ -79,6 +79,11 @@ export class SimClient {
     this.send({ type: 'setRendering', enabled });
   }
 
+  /** Change settings in the running world. Settings that only matter at creation are ignored. */
+  setConfig(changes: Partial<SimConfig>): void {
+    this.send({ type: 'setConfig', changes });
+  }
+
   /** Ask for the world as save data; it arrives through `onSaved`. */
   save(): void {
     this.send({ type: 'save' });

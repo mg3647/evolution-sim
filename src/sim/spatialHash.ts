@@ -1,4 +1,3 @@
-import { wrappedDelta } from './geometry';
 
 /**
  * Uniform grid over the wrapping world for fast "who is near this point"
@@ -68,29 +67,40 @@ export class SpatialHash {
    * measuring distance across the world's wrapped edges.
    */
   query(x: number, y: number, radius: number, visit: (index: number) => void): void {
+    const { cols, rows, worldWidth, worldHeight, cellStart, items, xs, ys } = this;
     const r2 = radius * radius;
-    const spanX = Math.ceil(radius / this.cellWidth);
-    const spanY = Math.ceil(radius / this.cellHeight);
-    // If the span covers the whole axis, scan each cell once rather than wrapping onto repeats.
-    const fullX = spanX * 2 + 1 >= this.cols;
-    const fullY = spanY * 2 + 1 >= this.rows;
-    const cx = Math.min(this.cols - 1, Math.floor(x / this.cellWidth));
-    const cy = Math.min(this.rows - 1, Math.floor(y / this.cellHeight));
+    const halfWidth = worldWidth / 2;
+    const halfHeight = worldHeight / 2;
 
-    const yFrom = fullY ? 0 : cy - spanY;
-    const yTo = fullY ? this.rows - 1 : cy + spanY;
-    const xFrom = fullX ? 0 : cx - spanX;
-    const xTo = fullX ? this.cols - 1 : cx + spanX;
+    // The cells the circle's bounding box touches. If that covers a whole
+    // axis, scan each cell once rather than wrapping onto repeats.
+    let xFrom = Math.floor((x - radius) / this.cellWidth);
+    let xTo = Math.floor((x + radius) / this.cellWidth);
+    let yFrom = Math.floor((y - radius) / this.cellHeight);
+    let yTo = Math.floor((y + radius) / this.cellHeight);
+    if (xTo - xFrom + 1 >= cols) {
+      xFrom = 0;
+      xTo = cols - 1;
+    }
+    if (yTo - yFrom + 1 >= rows) {
+      yFrom = 0;
+      yTo = rows - 1;
+    }
 
     for (let gy = yFrom; gy <= yTo; gy++) {
-      const row = ((gy % this.rows) + this.rows) % this.rows;
+      // The box reaches at most one world-width past either edge, so one step wraps it.
+      const row = (gy < 0 ? gy + rows : gy >= rows ? gy - rows : gy) * cols;
       for (let gx = xFrom; gx <= xTo; gx++) {
-        const col = ((gx % this.cols) + this.cols) % this.cols;
-        const cell = row * this.cols + col;
-        for (let k = this.cellStart[cell]!; k < this.cellStart[cell + 1]!; k++) {
-          const i = this.items[k]!;
-          const dx = wrappedDelta(x, this.xs[i]!, this.worldWidth);
-          const dy = wrappedDelta(y, this.ys[i]!, this.worldHeight);
+        const cell = row + (gx < 0 ? gx + cols : gx >= cols ? gx - cols : gx);
+        for (let k = cellStart[cell]!; k < cellStart[cell + 1]!; k++) {
+          const i = items[k]!;
+          // Shortest way round the wrapped world, for two points inside it.
+          let dx = xs[i]! - x;
+          if (dx > halfWidth) dx -= worldWidth;
+          else if (dx < -halfWidth) dx += worldWidth;
+          let dy = ys[i]! - y;
+          if (dy > halfHeight) dy -= worldHeight;
+          else if (dy < -halfHeight) dy += worldHeight;
           if (dx * dx + dy * dy <= r2) visit(i);
         }
       }
