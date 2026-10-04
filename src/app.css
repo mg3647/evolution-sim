@@ -1,0 +1,57 @@
+:root {
+  --bg: #0b0f14;
+  --panel: #131a22;
+  --border: #243140;
+  --text: #dbe4ec;
+  --muted: #8a9aa9;
+  --accent: #3fa7d6;
+  color-scheme: dark;
+  font: 14px/1.4 system-ui, 'Segoe UI', sans-serif;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+
+button,
+input {
+  font: inherit;
+  color: var(--text);
+  background: #1b2530;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 10px;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #06121a;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
