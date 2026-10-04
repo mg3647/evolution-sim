@@ -240,12 +240,12 @@ export const defaultConfig: SimConfig = {
   maxAge: 3000,
   bodyEnergy: 20,
 
-  attackDamage: 0.15,
+  attackDamage: 0.25,
   herbivoreAttack: 0.05,
   attackCost: 0.05,
-  attackReach: 3,
+  attackReach: 6,
   healRate: 0.001,
-  woundSlow: 0,
+  woundSlow: 0.7,
 
   meatBiteScale: 3,
   meatDecayRate: 0.0005,
@@ -301,9 +301,9 @@ export const defaultConfig: SimConfig = {
   scentSpread: 0.2,
 
   speciesInterval: 300,
-  speciesThreshold: 1,
+  speciesThreshold: 2,
   speciesMinAge: 6000,
-  speciesMinMembers: 5,
+  speciesMinMembers: 8,
 
   statsInterval: 30,
   statsCapacity: 1000,
