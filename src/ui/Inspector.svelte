@@ -54,7 +54,8 @@
     <p class="note">
       Turn: left of centre is left, right is right. Thrust: far left is standing still, far right is full
       speed. Reproduce: right of centre means it splits once it has enough energy. Attack: right of centre
-      means it bites the nearest creature in reach.
+      means it bites the nearest creature in reach. Emit scent: right of centre means it leaves a scent on
+      the ground that others can smell.
     </p>
     <ul>
       {#each OUTPUT_LABELS as label, k (label)}

@@ -128,6 +128,41 @@ export interface SimConfig {
   minMutationRate: number;
   maxMutationRate: number;
 
+  /** Ticks per year. Sunlight, and so plant growth, swings over the year. 0 turns seasons off. */
+  seasonLength: number;
+  /** How far sunlight swings above and below average: 0.4 means from 60% to 140%. */
+  seasonStrength: number;
+  /** Ticks over which the fertility map drifts to a completely new one. 0 keeps it fixed. */
+  fertilityDriftPeriod: number;
+  /** Ticks between updates of the drifting fertility map. */
+  fertilityUpdateInterval: number;
+
+  /** Plant growth multiplier and length, in ticks, of each timed event. */
+  droughtGrowth: number;
+  droughtLength: number;
+  foodBoomGrowth: number;
+  foodBoomLength: number;
+  iceAgeGrowth: number;
+  iceAgeLength: number;
+  /** Multiplier on creatures' per-tick energy cost during an ice age. */
+  iceAgeCost: number;
+  /** A plague strikes creatures whose hue is within this distance of its centre, with this chance each. */
+  plagueHueWidth: number;
+  plagueLethality: number;
+  /** Radius within which a meteor kills creatures and burns the ground bare. */
+  meteorRadius: number;
+  /** Whether events strike at random, and the average number of ticks between them. */
+  randomEvents: boolean;
+  randomEventInterval: number;
+
+  /** Scent added to a cell per tick by a creature that is emitting. */
+  scentEmit: number;
+  /** Energy per tick that emitting costs. */
+  scentCost: number;
+  /** Fraction of scent that fades per tick, and the share that seeps to neighboring cells. */
+  scentDecay: number;
+  scentSpread: number;
+
   /** Ticks between history samples at the start of a run. */
   statsInterval: number;
   /** Number of history samples kept. */
@@ -204,6 +239,29 @@ export const defaultConfig: SimConfig = {
   initialMutationRate: 0.08,
   minMutationRate: 0.005,
   maxMutationRate: 0.5,
+
+  seasonLength: 6000,
+  seasonStrength: 0.4,
+  fertilityDriftPeriod: 80000,
+  fertilityUpdateInterval: 100,
+
+  droughtGrowth: 0.15,
+  droughtLength: 3000,
+  foodBoomGrowth: 3,
+  foodBoomLength: 3000,
+  iceAgeGrowth: 0.4,
+  iceAgeLength: 8000,
+  iceAgeCost: 1.4,
+  plagueHueWidth: 0.12,
+  plagueLethality: 0.9,
+  meteorRadius: 350,
+  randomEvents: false,
+  randomEventInterval: 15000,
+
+  scentEmit: 0.05,
+  scentCost: 0.01,
+  scentDecay: 0.02,
+  scentSpread: 0.2,
 
   statsInterval: 30,
   statsCapacity: 1000,

@@ -1,4 +1,5 @@
 import type { SimConfig } from '../sim/config';
+import type { EventKind } from '../sim/environment';
 import type { FromWorker, HistoryData, Snapshot, Speed, ToWorker } from './protocol';
 
 export interface SimClientHandlers {
@@ -46,6 +47,18 @@ export class SimClient {
   /** Select the creature nearest a world position within `radius`, or none. */
   pick(x: number, y: number, radius: number): void {
     this.send({ type: 'pick', x, y, radius });
+  }
+
+  triggerEvent(kind: EventKind): void {
+    this.send({ type: 'event', kind });
+  }
+
+  clearWalls(): void {
+    this.send({ type: 'clearWalls' });
+  }
+
+  setRandomEvents(enabled: boolean): void {
+    this.send({ type: 'setRandomEvents', enabled });
   }
 
   destroy(): void {

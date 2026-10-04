@@ -17,6 +17,10 @@ const SOIL_COLOR = [28, 24, 20] as const;
 const PLANT_COLOR = [64, 158, 60] as const;
 /** Ground colour where meat lies thick. */
 const MEAT_COLOR = [190, 60, 70] as const;
+const WALL_COLOR = [120, 126, 134] as const;
+const SCENT_COLOR = [170, 120, 255] as const;
+/** How strongly full scent covers the ground when the scent overlay is on. */
+const SCENT_OPACITY = 0.7;
 /** How strongly a cell full of meat covers the ground colour. */
 const MEAT_OPACITY = 0.85;
 const CREATURE_SATURATION = 0.7;
@@ -72,6 +76,8 @@ function createCreatureTexture(pointed: boolean): Texture {
 export class WorldRenderer {
   /** Called with a world position and radius when the user clicks the world. */
   onPick: ((x: number, y: number, radius: number) => void) | null = null;
+  /** Whether to tint the ground with the scent creatures have left. */
+  showScent = false;
 
   private app = new Application();
   private camera = new Container();
@@ -122,6 +128,11 @@ export class WorldRenderer {
     this.setWorldSize(snapshot.config.worldWidth, snapshot.config.worldHeight);
     this.drawPlants(snapshot);
     this.drawCreatures(snapshot);
+  }
+
+  /** Redraw the last snapshot, after a display option changed. */
+  redraw(): void {
+    if (this.lastSnapshot) this.update(this.lastSnapshot);
   }
 
   /** Creature draw size depends on zoom, so redraw them when it changes. */
@@ -176,7 +187,8 @@ export class WorldRenderer {
 
   /** One pixel per plant cell, stretched over the world. */
   private drawPlants(snapshot: Snapshot): void {
-    const { plantCols: cols, plantRows: rows, plants, meat } = snapshot;
+    const { plantCols: cols, plantRows: rows, plants, meat, scent, walls } = snapshot;
+    const scentOpacity = this.showScent ? SCENT_OPACITY / 255 : 0;
     const canvas = this.plantCanvas;
     const ctx = canvas.getContext('2d')!;
     if (!this.plantImage || canvas.width !== cols || canvas.height !== rows) {
@@ -193,9 +205,15 @@ export class WorldRenderer {
       // Meat shows as red over whatever grows beneath it.
       const m = (meat[i]! / 255) * MEAT_OPACITY;
       const o = i * 4;
+      const s = scent[i]! * scentOpacity;
       for (let c = 0; c < 3; c++) {
+        if (walls[i]) {
+          pixels[o + c] = WALL_COLOR[c]!;
+          continue;
+        }
         const ground = SOIL_COLOR[c]! + (PLANT_COLOR[c]! - SOIL_COLOR[c]!) * t;
-        pixels[o + c] = ground + (MEAT_COLOR[c]! - ground) * m;
+        const withMeat = ground + (MEAT_COLOR[c]! - ground) * m;
+        pixels[o + c] = withMeat + (SCENT_COLOR[c]! - withMeat) * s;
       }
       pixels[o + 3] = 255;
     }

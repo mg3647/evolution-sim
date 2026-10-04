@@ -1,7 +1,7 @@
 import { enabledLinks, INPUT_COUNT, OUTPUT_COUNT } from '../sim/brain';
 import { maxEnergyFor } from '../sim/genome';
 import { wrappedDelta } from '../sim/geometry';
-import type { World } from '../sim/world';
+import { clearWorldWalls, triggerWorldEvent, type World } from '../sim/world';
 import {
   CREATURE_STRIDE,
   type FromWorker,
@@ -109,10 +109,12 @@ function sendSnapshot(now: number): void {
 
   const plants = new Uint8Array(p.energy.length);
   const meat = new Uint8Array(p.meat.length);
+  const scent = new Uint8Array(p.scent.length);
   let plantEnergy = 0;
   for (let i = 0; i < plants.length; i++) {
     plants[i] = (p.energy[i]! / config.plantCapacity) * 255;
     meat[i] = Math.min(1, p.meat[i]! / config.meatScale) * 255;
+    scent[i] = Math.min(1, p.scent[i]!) * 255;
     plantEnergy += p.energy[i]!;
   }
 
@@ -135,12 +137,26 @@ function sendSnapshot(now: number): void {
     plants,
     plantFill: world.plantCapacityTotal > 0 ? plantEnergy / world.plantCapacityTotal : 0,
     meat,
+    scent,
+    walls: p.walls.slice(),
+    environment: {
+      season: world.climate.season,
+      yearFraction: config.seasonLength > 0 ? (world.tick % config.seasonLength) / config.seasonLength : 0,
+      growth: world.climate.growth,
+      cost: world.climate.cost,
+      active: world.environment.active.map((event) => ({
+        kind: event.kind,
+        remaining: event.endTick - world.tick,
+      })),
+      randomEvents: world.environment.randomEvents,
+      log: world.environment.log.slice(),
+    },
     births: world.births,
     reseeded: world.reseeded,
     deaths: { ...world.deaths },
     selected,
   };
-  post({ type: 'snapshot', snapshot }, [creatures.buffer, plants.buffer, meat.buffer]);
+  post({ type: 'snapshot', snapshot }, [creatures.buffer, plants.buffer, meat.buffer, scent.buffer]);
   lastSnapshotTime = now;
 }
 
@@ -207,7 +223,10 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
   if (message.type === 'init') {
     const wasRunning = runner?.running ?? false;
     const speed = runner?.speed ?? 1;
+    // The random-events switch belongs to the user, so it survives a restart.
+    const randomEvents = runner?.world.environment.randomEvents ?? message.config.randomEvents;
     runner = new SimRunner(message.config);
+    runner.world.environment.randomEvents = randomEvents;
     runner.setSpeed(speed);
     sentHistoryVersion = -1;
     selectedId = 0;
@@ -228,6 +247,14 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
     runner.setSpeed(message.speed);
   } else if (message.type === 'pick') {
     pick(runner.world, message.x, message.y, message.radius);
+  } else if (message.type === 'event') {
+    triggerWorldEvent(runner.world, message.kind);
+    // While paused, run one tick so the event's deaths show at once.
+    if (!runner.running) runner.stepTicks(1);
+  } else if (message.type === 'clearWalls') {
+    clearWorldWalls(runner.world);
+  } else if (message.type === 'setRandomEvents') {
+    runner.world.environment.randomEvents = message.enabled;
   }
   const now = performance.now();
   sendSnapshot(now);

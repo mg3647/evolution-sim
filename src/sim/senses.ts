@@ -1,6 +1,7 @@
 import { Input, INPUTS_PER_RAY, RAY_COUNT } from './brain';
 import type { SimConfig } from './config';
 import type { Creatures } from './creatures';
+import { seasonAt } from './environment';
 import { maxEnergyFor } from './genome';
 import { wrap, wrappedDelta } from './geometry';
 import { cellIndexAt, type PlantField } from './plants';
@@ -13,13 +14,14 @@ const TWO_PI = Math.PI * 2;
 /** Offsets of the per-ray inputs. */
 const RAY_PLANTS = 0;
 const RAY_MEAT = 1;
-const RAY_NEARNESS = 2;
-const RAY_KIN = 3;
-const RAY_BIGGER = 4;
+const RAY_SCENT = 2;
+const RAY_NEARNESS = 3;
+const RAY_KIN = 4;
+const RAY_BIGGER = 5;
 
 /**
  * Fills a brain's inputs with what a creature perceives. Vision is three
- * rays (left, ahead, right). Each reports the plants and meat along it, and,
+ * rays (left, ahead, right). Each reports the plants, meat and scent along it, and,
  * for the closest creature in its direction, how near it is, how alike its
  * colour is to the viewer's, and whether it is bigger or smaller.
  */
@@ -61,16 +63,19 @@ export class Senses {
       const dy = Math.sin(angle) * range;
       let plants = 0;
       let meat = 0;
+      let scent = 0;
       for (const t of GROUND_SAMPLES) {
         const px = wrap(x + dx * t, config.worldWidth);
         const py = wrap(y + dy * t, config.worldHeight);
         const cell = cellIndexAt(field, px, py);
         plants += field.energy[cell]!;
         meat += field.meat[cell]!;
+        scent += field.scent[cell]!;
       }
       const o = Input.Rays + ray * INPUTS_PER_RAY;
       inputs[o + RAY_PLANTS] = (plants / GROUND_SAMPLES.length) * plantScale;
       inputs[o + RAY_MEAT] = Math.min(1, (meat / GROUND_SAMPLES.length) * meatScale);
+      inputs[o + RAY_SCENT] = Math.min(1, scent / GROUND_SAMPLES.length);
       inputs[o + RAY_NEARNESS] = 0;
       inputs[o + RAY_KIN] = 0;
       inputs[o + RAY_BIGGER] = 0;
@@ -91,10 +96,12 @@ export class Senses {
     const cell = cellIndexAt(field, x, y);
     inputs[Input.Underfoot] = field.energy[cell]! * plantScale;
     inputs[Input.MeatUnderfoot] = Math.min(1, field.meat[cell]! * meatScale);
+    inputs[Input.ScentUnderfoot] = Math.min(1, field.scent[cell]!);
     inputs[Input.Energy] = creatures.energy[i]! / maxEnergyFor(creatures.size[i]!, config);
     inputs[Input.Health] = creatures.health[i]!;
     inputs[Input.Age] = creatures.age[i]! / config.maxAge;
     inputs[Input.Clock] = Math.sin((TWO_PI * tick) / config.clockPeriod);
+    inputs[Input.Season] = config.seasonStrength > 0 ? (seasonAt(tick, config) - 1) / config.seasonStrength : 0;
     inputs[Input.Bias] = 1;
   }
 

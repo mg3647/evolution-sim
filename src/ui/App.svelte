@@ -3,9 +3,11 @@
   import type uPlot from 'uplot';
   import { WorldRenderer } from '../render/renderer';
   import { defaultConfig } from '../sim/config';
+  import { EVENT_KINDS, EVENT_LABELS, type EventKind } from '../sim/environment';
   import { SimClient } from '../worker/client';
   import type { HistoryData, Snapshot, Speed } from '../worker/protocol';
   import Chart, { type ChartSeries } from './Chart.svelte';
+  import EnvironmentPanel from './EnvironmentPanel.svelte';
   import Inspector from './Inspector.svelte';
 
   const SPEEDS: { label: string; value: Speed }[] = [
@@ -15,6 +17,15 @@
     { label: '16x', value: 16 },
     { label: 'Max', value: 'max' },
   ];
+
+  const EVENT_HINTS: Record<EventKind, string> = {
+    drought: 'Plants grow at 15% of normal for 3,000 ticks',
+    iceAge: 'Plants grow at 40% and living costs 40% more, for 8,000 ticks',
+    foodBoom: 'Plants grow three times as fast for 3,000 ticks',
+    plague: 'Kills about 90% of one colour family, chosen at random',
+    meteor: 'Kills everything and burns the ground within a circle at a random spot',
+    wall: 'Raises a wall that creatures cannot cross, at a random place',
+  };
 
   const POPULATION_SERIES: ChartSeries[] = [
     { label: 'Creatures', color: '#e8c468' },
@@ -40,6 +51,7 @@
   let snapshot = $state.raw<Snapshot | null>(null);
   let history = $state.raw<HistoryData | null>(null);
   let seed = $state(defaultConfig.seed);
+  let showScent = $state(false);
 
   const populationData = $derived<uPlot.AlignedData | null>(
     history && [history.tick, history.population, history.plantPercent],
@@ -90,6 +102,12 @@
     client?.init({ ...defaultConfig, seed });
   }
 
+  function toggleScent() {
+    if (!renderer) return;
+    renderer.showScent = showScent;
+    renderer.redraw();
+  }
+
   function count(value: number | undefined): string {
     return value === undefined ? '-' : value.toLocaleString();
   }
@@ -138,6 +156,37 @@
     <button onclick={() => renderer?.fitToView()} disabled={!snapshot}>Fit view</button>
   </header>
 
+  <div class="events">
+    <span class="label">Events</span>
+    <div class="group">
+      {#each EVENT_KINDS as kind (kind)}
+        <button title={EVENT_HINTS[kind]} onclick={() => client?.triggerEvent(kind)} disabled={!snapshot}>
+          {EVENT_LABELS[kind]}
+        </button>
+      {/each}
+      <button
+        title="Remove every wall"
+        onclick={() => client?.clearWalls()}
+        disabled={!snapshot || !snapshot.walls.includes(1)}
+      >
+        Clear walls
+      </button>
+    </div>
+    <label title="Let events strike on their own, about once every 15,000 ticks">
+      <input
+        type="checkbox"
+        checked={snapshot?.environment.randomEvents ?? false}
+        onchange={(event) => client?.setRandomEvents(event.currentTarget.checked)}
+        disabled={!snapshot}
+      />
+      Random events
+    </label>
+    <label title="Tint the ground purple where creatures have left scent">
+      <input type="checkbox" bind:checked={showScent} onchange={toggleScent} />
+      Show scent
+    </label>
+  </div>
+
   <div class="main">
     <div class="world" bind:this={host}></div>
 
@@ -160,6 +209,10 @@
         <div><dt>Births</dt><dd>{count(snapshot?.births)}</dd></div>
         <div><dt>Starved</dt><dd>{count(snapshot?.deaths.starved)}</dd></div>
         <div><dt>Killed</dt><dd>{count(snapshot?.deaths.killed)}</dd></div>
+        <div title="Deaths from plagues and meteors">
+          <dt>Died in disasters</dt>
+          <dd>{count(snapshot?.deaths.disaster)}</dd>
+        </div>
         <div><dt>Died of old age</dt><dd>{count(snapshot?.deaths.oldAge)}</dd></div>
         <div
           title="Parentless creatures added because the population fell below the minimum"
@@ -168,6 +221,8 @@
           <dd>{count(snapshot?.reseeded)}</dd>
         </div>
       </dl>
+
+      <EnvironmentPanel environment={snapshot?.environment ?? null} />
 
       <Chart title="Population" series={POPULATION_SERIES} data={populationData} />
       <Chart
@@ -210,6 +265,29 @@
     padding: 8px 14px;
     background: var(--panel);
     border-bottom: 1px solid var(--border);
+  }
+
+  .events {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 16px;
+    padding: 6px 14px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .events .label {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .events input {
+    width: auto;
+    padding: 0;
   }
 
   .group {

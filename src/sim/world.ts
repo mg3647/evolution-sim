@@ -29,6 +29,20 @@ import {
   strideFor,
   tickCostFor,
 } from './genome';
+import {
+  clearWalls,
+  climateAt,
+  createEnvironment,
+  driftFertility,
+  expireEvents,
+  maybeRandomEvent,
+  spreadScent,
+  triggerEvent,
+  type Climate,
+  type Environment,
+  type EventKind,
+  type EventTarget,
+} from './environment';
 import { wrap } from './geometry';
 import { createLedger, type EnergyLedger } from './ledger';
 import {
@@ -62,8 +76,15 @@ export interface World {
   /** Cumulative counts since the world was created. */
   births: number;
   reseeded: number;
-  deaths: { starved: number; oldAge: number; killed: number };
+  /** Killed counts bites; disaster counts plagues and meteors. */
+  deaths: { starved: number; oldAge: number; killed: number; disaster: number };
+  environment: Environment;
+  /** The climate used for the most recent tick. */
+  climate: Climate;
 }
+
+/** Health value that marks a creature struck down by an event this tick. */
+const STRUCK = -2;
 
 /** Add a creature with no parent at a random position. Returns the energy it embodies. */
 function spawnFounder(world: World, age: number): number {
@@ -101,7 +122,9 @@ export function createWorld(config: SimConfig): World {
     history: createHistory(config.statsInterval, config.statsCapacity),
     births: 0,
     reseeded: 0,
-    deaths: { starved: 0, oldAge: 0, killed: 0 },
+    deaths: { starved: 0, oldAge: 0, killed: 0, disaster: 0 },
+    environment: createEnvironment(config, rng, plants),
+    climate: { season: 1, growth: 1, cost: 1 },
   };
 
   for (let i = 0; i < config.initialCreatures; i++) {
@@ -118,8 +141,18 @@ export function step(world: World): void {
   const { config, plants, creatures, ledger } = world;
   world.tick++;
 
-  growPlants(plants, config.plantGrowthRate, config.plantBareGrowth, ledger);
+  const env = world.environment;
+  expireEvents(env, world.tick);
+  maybeRandomEvent(env, world.tick, eventTarget(world));
+  if (world.tick % config.fertilityUpdateInterval === 0) {
+    world.plantCapacityTotal = driftFertility(env, plants, world.tick, config, world.rng, ledger);
+  }
+  const climate = climateAt(env, world.tick, config);
+  world.climate = climate;
+
+  growPlants(plants, config.plantGrowthRate * climate.growth, config.plantBareGrowth, ledger);
   decayMeat(plants, config.meatDecayRate, ledger);
+  spreadScent(env, plants, config);
   world.hash.build(creatures.x, creatures.y, creatures.count);
 
   // Children born this tick are appended past `alive` and first act next tick.
@@ -137,6 +170,7 @@ export function step(world: World): void {
     const thrust = (brain.activation[INPUT_COUNT + Output.Thrust]! + 1) / 2;
     const wantsChild = brain.activation[INPUT_COUNT + Output.Reproduce]! >= 0;
     const attacking = brain.activation[INPUT_COUNT + Output.Attack]! > 0;
+    const emitting = brain.activation[INPUT_COUNT + Output.Emit]! > 0;
     const diet = creatures.diet[i]!;
 
     // Bite the closest creature in view if it is within reach. Teeth made for
@@ -154,8 +188,17 @@ export function step(world: World): void {
     const heading = creatures.heading[i]! + turn;
     const distance = strideFor(size, speed, config) * thrust;
     creatures.heading[i] = heading;
-    creatures.x[i] = wrap(creatures.x[i]! + Math.cos(heading) * distance, config.worldWidth);
-    creatures.y[i] = wrap(creatures.y[i]! + Math.sin(heading) * distance, config.worldHeight);
+    // Rounded to stored precision first, so the cell checked is the cell it lands in.
+    const toX = Math.fround(wrap(creatures.x[i]! + Math.cos(heading) * distance, config.worldWidth));
+    const toY = Math.fround(wrap(creatures.y[i]! + Math.sin(heading) * distance, config.worldHeight));
+    // A wall stops a creature entering its cell; one already inside may walk out.
+    if (
+      plants.walls[cellIndexAt(plants, toX, toY)] === 0 ||
+      plants.walls[cellIndexAt(plants, creatures.x[i]!, creatures.y[i]!)] === 1
+    ) {
+      creatures.x[i] = toX;
+      creatures.y[i] = toY;
+    }
 
     // Eat from the cell underfoot: one mouthful a tick, spent on meat first and
     // any left over on plants, each as far as the diet allows. Moving fast
@@ -172,13 +215,17 @@ export function step(world: World): void {
     const bite = Math.max(0, Math.min(mouthful * plantDigestion(diet), plants.energy[cell]!, maxEnergy - energy));
     plants.energy[cell]! -= bite;
     energy += bite;
+    if (emitting) plants.scent[cell]! += config.scentEmit;
 
-    // Pay for body, movement, senses, brain and fighting; what is spent leaves as heat.
+    // Pay for body, movement, senses, brain, fighting and signalling; what is
+    // spent leaves as heat. Cold weather makes everything cost more.
     const cost =
-      tickCostFor(size, speed, thrust, config) +
-      (attacking ? config.attackCost * size * size : 0) +
-      senseCostFor(creatures.sensorRange[i]!, config) +
-      brainCost(brain, config);
+      climate.cost *
+      (tickCostFor(size, speed, thrust, config) +
+        (attacking ? config.attackCost * size * size : 0) +
+        (emitting ? config.scentCost : 0) +
+        senseCostFor(creatures.sensorRange[i]!, config) +
+        brainCost(brain, config));
     const paid = Math.min(cost, energy);
     energy -= paid;
     ledger.heatOut += paid;
@@ -199,10 +246,12 @@ export function step(world: World): void {
 
   // Deaths. Backwards, so a removal only moves an already-checked creature.
   for (let i = creatures.count - 1; i >= 0; i--) {
+    const struck = creatures.health[i]! <= STRUCK;
     const killed = creatures.health[i]! <= 0;
     const starved = creatures.energy[i]! <= 0;
     if (!killed && !starved && creatures.age[i]! < config.maxAge) continue;
-    if (killed) world.deaths.killed++;
+    if (struck) world.deaths.disaster++;
+    else if (killed) world.deaths.killed++;
     else if (starved) world.deaths.starved++;
     else world.deaths.oldAge++;
     // The body and whatever it had stored stay behind as meat.
@@ -218,6 +267,36 @@ export function step(world: World): void {
   }
 
   if (world.tick % world.history.interval === 0) sampleHistory(world);
+}
+
+/** The view of the world that events act through. */
+function eventTarget(world: World): EventTarget {
+  const { creatures } = world;
+  return {
+    config: world.config,
+    rng: world.rng,
+    field: world.plants,
+    ledger: world.ledger,
+    count: () => creatures.count,
+    x: (i) => creatures.x[i]!,
+    y: (i) => creatures.y[i]!,
+    hue: (i) => creatures.hue[i]!,
+    strike: (i) => {
+      creatures.health[i] = STRUCK;
+    },
+  };
+}
+
+/**
+ * Trigger an event now. Creatures it strikes die in the next tick's death
+ * pass, so the world should be stepped afterwards.
+ */
+export function triggerWorldEvent(world: World, kind: EventKind): void {
+  triggerEvent(world.environment, kind, world.tick, eventTarget(world));
+}
+
+export function clearWorldWalls(world: World): void {
+  clearWalls(world.environment, world.plants, world.tick);
 }
 
 /**
@@ -328,6 +407,9 @@ export function hashWorld(world: World): number {
   h = hashBytes(h, bytesOf(new Uint32Array(header)));
   h = hashBytes(h, bytesOf(plants.energy));
   h = hashBytes(h, bytesOf(plants.meat));
+  h = hashBytes(h, bytesOf(plants.capacity));
+  h = hashBytes(h, bytesOf(plants.scent));
+  h = hashBytes(h, plants.walls);
   for (const field of [
     c.id,
     c.parentId,

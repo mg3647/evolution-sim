@@ -8,24 +8,27 @@ import type { Rng } from './rng';
  */
 
 export const RAY_COUNT = 3;
-/** Per vision ray: plant cover, meat, creature nearness, colour match, relative size. */
-export const INPUTS_PER_RAY = 5;
+/** Per vision ray: plant cover, meat, scent, creature nearness, colour match, relative size. */
+export const INPUTS_PER_RAY = 6;
 
 export const Input = {
   /** First of RAY_COUNT * INPUTS_PER_RAY ray inputs, ordered left, ahead, right. */
   Rays: 0,
   Underfoot: RAY_COUNT * INPUTS_PER_RAY,
   MeatUnderfoot: RAY_COUNT * INPUTS_PER_RAY + 1,
-  Energy: RAY_COUNT * INPUTS_PER_RAY + 2,
-  Health: RAY_COUNT * INPUTS_PER_RAY + 3,
-  Age: RAY_COUNT * INPUTS_PER_RAY + 4,
-  Clock: RAY_COUNT * INPUTS_PER_RAY + 5,
-  Bias: RAY_COUNT * INPUTS_PER_RAY + 6,
+  ScentUnderfoot: RAY_COUNT * INPUTS_PER_RAY + 2,
+  Energy: RAY_COUNT * INPUTS_PER_RAY + 3,
+  Health: RAY_COUNT * INPUTS_PER_RAY + 4,
+  Age: RAY_COUNT * INPUTS_PER_RAY + 5,
+  Clock: RAY_COUNT * INPUTS_PER_RAY + 6,
+  /** Sunlight relative to average: above zero in summer, below in winter. */
+  Season: RAY_COUNT * INPUTS_PER_RAY + 7,
+  Bias: RAY_COUNT * INPUTS_PER_RAY + 8,
 } as const;
-export const INPUT_COUNT = RAY_COUNT * INPUTS_PER_RAY + 7;
+export const INPUT_COUNT = RAY_COUNT * INPUTS_PER_RAY + 9;
 
-export const Output = { Turn: 0, Thrust: 1, Reproduce: 2, Attack: 3 } as const;
-export const OUTPUT_COUNT = 4;
+export const Output = { Turn: 0, Thrust: 1, Reproduce: 2, Attack: 3, Emit: 4 } as const;
+export const OUTPUT_COUNT = 5;
 
 /** Neuron ids below this are inputs and outputs; hidden neurons come after. */
 const FIXED_NODES = INPUT_COUNT + OUTPUT_COUNT;
@@ -35,19 +38,22 @@ export const INPUT_LABELS: string[] = [
   ...RAY_NAMES.flatMap((ray) => [
     `Plants ${ray}`,
     `Meat ${ray}`,
+    `Scent ${ray}`,
     `Creature ${ray}`,
     `Kin ${ray}`,
     `Bigger ${ray}`,
   ]),
   'Plants underfoot',
   'Meat underfoot',
+  'Scent underfoot',
   'Energy',
   'Health',
   'Age',
   'Clock',
+  'Season',
   'Bias',
 ];
-export const OUTPUT_LABELS: string[] = ['Turn', 'Thrust', 'Reproduce', 'Attack'];
+export const OUTPUT_LABELS: string[] = ['Turn', 'Thrust', 'Reproduce', 'Attack', 'Emit scent'];
 
 export interface LinkGene {
   /** Id shared by every link between the same two neurons, across all brains. */

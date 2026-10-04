@@ -13,9 +13,10 @@ const AHEAD = 1;
 const RIGHT = 2;
 /** Offsets of the per-ray inputs. */
 const MEAT = 1;
-const NEAR = 2;
-const KIN = 3;
-const BIGGER = 4;
+const SCENT = 2;
+const NEAR = 3;
+const KIN = 4;
+const BIGGER = 5;
 const ray = (index: number) => Input.Rays + index * INPUTS_PER_RAY;
 
 function setup() {
@@ -76,6 +77,19 @@ describe('Senses', () => {
     expect(inputs[Input.MeatUnderfoot]).toBeCloseTo(0.5, 6);
     expect(inputs[ray(AHEAD) + MEAT]).toBe(1);
     expect(inputs[ray(LEFT) + MEAT]).toBe(0);
+  });
+
+  it('smells scent underfoot and along a ray, and reports the season', () => {
+    const { plants, creatures, add, sense } = setup();
+    const i = add(210, 210, 0);
+    plants.scent[cellIndexAt(plants, 210, 210)] = 0.3;
+    plants.scent[cellIndexAt(plants, 210 + config.senseRange / 2, 210)] = 5;
+    const summer = sense(creatures, i, config.seasonLength / 4);
+    expect(summer[Input.ScentUnderfoot]).toBeCloseTo(0.3, 6);
+    expect(summer[ray(AHEAD) + SCENT]).toBe(1);
+    expect(summer[ray(LEFT) + SCENT]).toBe(0);
+    expect(summer[Input.Season]).toBeCloseTo(1, 5);
+    expect(sense(creatures, i, (config.seasonLength * 3) / 4)[Input.Season]).toBeCloseTo(-1, 5);
   });
 
   it('reports health and whether the creature in view is bigger or smaller', () => {

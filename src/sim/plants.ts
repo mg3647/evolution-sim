@@ -15,7 +15,7 @@ export interface PlantField {
   rows: number;
   cellWidth: number;
   cellHeight: number;
-  /** Fertility per cell in [0, 1]. Fixed for now; it drifts in a later milestone. */
+  /** Fertility per cell in [0, 1]. It drifts slowly; see environment.ts. */
   fertility: Float32Array;
   /** Most plant energy each cell can hold. */
   capacity: Float64Array;
@@ -23,14 +23,18 @@ export interface PlantField {
   energy: Float64Array;
   /** Energy of dead creatures lying in each cell. It rots away over time. */
   meat: Float64Array;
+  /** Scent left by creatures in each cell. It spreads and fades; it is a signal, not energy. */
+  scent: Float32Array;
+  /** 1 where a wall blocks movement into the cell. */
+  walls: Uint8Array;
 }
 
-/** Create a field with every cell grown to capacity. */
-export function createPlantField(config: SimConfig, rng: Rng): PlantField {
-  const cols = Math.max(1, Math.round(config.worldWidth / config.plantCellSize));
-  const rows = Math.max(1, Math.round(config.worldHeight / config.plantCellSize));
+/**
+ * A fresh fertility map: seeded noise, one value in [0, 1] per cell, tiling
+ * across the wrapped edges.
+ */
+export function generateFertility(config: SimConfig, rng: Rng, cols: number, rows: number): Float32Array {
   const fertility = tileableNoise(rng, cols, rows, FERTILITY_PERIODS);
-  const capacity = new Float64Array(cols * rows);
   const floor = config.fertilityFloor;
 
   // Summed octaves bunch up around the middle; stretch them to fill [0, 1] so
@@ -45,10 +49,18 @@ export function createPlantField(config: SimConfig, rng: Rng): PlantField {
 
   for (let i = 0; i < fertility.length; i++) {
     const stretched = (fertility[i]! - low) / spread;
-    const f = Math.min(1, Math.max(0, (stretched - floor) / (1 - floor)));
-    fertility[i] = f;
-    capacity[i] = f * config.plantCapacity;
+    fertility[i] = Math.min(1, Math.max(0, (stretched - floor) / (1 - floor)));
   }
+  return fertility;
+}
+
+/** Create a field with every cell grown to capacity. */
+export function createPlantField(config: SimConfig, rng: Rng): PlantField {
+  const cols = Math.max(1, Math.round(config.worldWidth / config.plantCellSize));
+  const rows = Math.max(1, Math.round(config.worldHeight / config.plantCellSize));
+  const fertility = generateFertility(config, rng, cols, rows);
+  const capacity = new Float64Array(cols * rows);
+  for (let i = 0; i < fertility.length; i++) capacity[i] = fertility[i]! * config.plantCapacity;
 
   return {
     cols,
@@ -59,6 +71,8 @@ export function createPlantField(config: SimConfig, rng: Rng): PlantField {
     capacity,
     energy: capacity.slice(),
     meat: new Float64Array(cols * rows),
+    scent: new Float32Array(cols * rows),
+    walls: new Uint8Array(cols * rows),
   };
 }
 

@@ -1,4 +1,5 @@
 import type { SimConfig } from '../sim/config';
+import type { EventKind, LogEntry, TimedEventKind } from '../sim/environment';
 
 /** Speed multiplier over the configured tick rate, or 'max' for unthrottled. */
 export type Speed = number | 'max';
@@ -10,7 +11,10 @@ export type ToWorker =
   | { type: 'step'; ticks: number }
   | { type: 'setSpeed'; speed: Speed }
   /** Select the creature nearest a world position within `radius`, or none. */
-  | { type: 'pick'; x: number; y: number; radius: number };
+  | { type: 'pick'; x: number; y: number; radius: number }
+  | { type: 'event'; kind: EventKind }
+  | { type: 'clearWalls' }
+  | { type: 'setRandomEvents'; enabled: boolean };
 
 /** Number of floats per creature in `Snapshot.creatures`. */
 export const CREATURE_STRIDE = 7;
@@ -39,6 +43,22 @@ export interface Inspection {
   /** Brain inputs and outputs this tick, in the order of INPUT_LABELS and OUTPUT_LABELS. */
   inputs: number[];
   outputs: number[];
+}
+
+/** The state of the seasons and events. */
+export interface EnvironmentView {
+  /** Sunlight from the season alone, relative to average: 1 is average. */
+  season: number;
+  /** How far through the year it is, from 0 to 1. A quarter of the way is midsummer. */
+  yearFraction: number;
+  /** Multiplier on plant growth from the season and events together. */
+  growth: number;
+  /** Multiplier on creatures' energy costs. */
+  cost: number;
+  active: { kind: TimedEventKind; remaining: number }[];
+  randomEvents: boolean;
+  /** Recent events, oldest first. */
+  log: LogEntry[];
 }
 
 /** What the page needs to draw one frame and update the controls. */
@@ -70,10 +90,15 @@ export interface Snapshot {
   plantFill: number;
   // Per cell: meat as 0..255 of the configured meat scale.
   meat: Uint8Array;
+  // Per cell: scent as 0..255 of the level that reads as 1 to the senses.
+  scent: Uint8Array;
+  // Per cell: 1 where there is a wall.
+  walls: Uint8Array;
+  environment: EnvironmentView;
 
   births: number;
   reseeded: number;
-  deaths: { starved: number; oldAge: number; killed: number };
+  deaths: { starved: number; oldAge: number; killed: number; disaster: number };
 
   /** The selected creature, or null if none is selected or it has died. */
   selected: Inspection | null;
