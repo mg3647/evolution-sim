@@ -8,33 +8,59 @@ import type { Rng } from './rng';
  */
 
 export const RAY_COUNT = 3;
-/**
- * Per vision ray: plant cover, meat, scent, wall, water, then for the nearest
- * creature its nearness, colour match, relative size and whether it is sick.
- */
-export const INPUTS_PER_RAY = 9;
+/** What each vision ray reports, as offsets within the ray's block of inputs. */
+export const Ray = {
+  // The ground along the ray.
+  Plants: 0,
+  Meat: 1,
+  Water: 2,
+  Wall: 3,
+  // The nearest creature in the ray's direction; all zero if there is none.
+  /** 1 touching, 0 at the edge of sight. */
+  Near: 4,
+  /** How alike its colour is: 1 the same, -1 opposite. */
+  Kin: 5,
+  /** Above zero if it is bigger, below if smaller. */
+  Bigger: 6,
+  /** -1 a pure plant-eater, 1 a pure meat-eater. */
+  MeatEater: 7,
+  /** 1 facing straight this way, -1 facing directly away. */
+  Approaching: 8,
+  /** 0 healthy, 1 nearly dead or sick. */
+  Hurt: 9,
+} as const;
+export const INPUTS_PER_RAY = 10;
 
+const AFTER_RAYS = RAY_COUNT * INPUTS_PER_RAY;
 export const Input = {
   /** First of RAY_COUNT * INPUTS_PER_RAY ray inputs, ordered left, ahead, right. */
   Rays: 0,
-  Underfoot: RAY_COUNT * INPUTS_PER_RAY,
-  MeatUnderfoot: RAY_COUNT * INPUTS_PER_RAY + 1,
-  ScentUnderfoot: RAY_COUNT * INPUTS_PER_RAY + 2,
+  /** How near the closest creature outside the field of view is. */
+  Behind: AFTER_RAYS,
+  /** How many creatures are within sensing range, up to 1 for a crowd. */
+  Crowding: AFTER_RAYS + 1,
+  Underfoot: AFTER_RAYS + 2,
+  MeatUnderfoot: AFTER_RAYS + 3,
   /** 1 while the creature is in water. */
-  InWater: RAY_COUNT * INPUTS_PER_RAY + 3,
-  Energy: RAY_COUNT * INPUTS_PER_RAY + 4,
-  Health: RAY_COUNT * INPUTS_PER_RAY + 5,
+  InWater: AFTER_RAYS + 4,
+  ScentUnderfoot: AFTER_RAYS + 5,
+  /** Above zero if scent is stronger to the right, below if to the left. */
+  ScentSide: AFTER_RAYS + 6,
+  Energy: AFTER_RAYS + 7,
+  Health: AFTER_RAYS + 8,
   /** 0 when full of water, 1 when about to die of thirst. */
-  Thirst: RAY_COUNT * INPUTS_PER_RAY + 6,
-  Age: RAY_COUNT * INPUTS_PER_RAY + 7,
-  Clock: RAY_COUNT * INPUTS_PER_RAY + 8,
-  /** Sunlight relative to average: above zero in summer, below in winter. */
-  Season: RAY_COUNT * INPUTS_PER_RAY + 9,
+  Thirst: AFTER_RAYS + 9,
+  Age: AFTER_RAYS + 10,
+  /** How badly it has been bitten since its last turn. */
+  Pain: AFTER_RAYS + 11,
   /** 1 while the creature itself is infected. */
-  Sick: RAY_COUNT * INPUTS_PER_RAY + 10,
-  Bias: RAY_COUNT * INPUTS_PER_RAY + 11,
+  Sick: AFTER_RAYS + 12,
+  Clock: AFTER_RAYS + 13,
+  /** Sunlight relative to average: above zero in summer, below in winter. */
+  Season: AFTER_RAYS + 14,
+  Bias: AFTER_RAYS + 15,
 } as const;
-export const INPUT_COUNT = RAY_COUNT * INPUTS_PER_RAY + 12;
+export const INPUT_COUNT = AFTER_RAYS + 16;
 
 export const Output = { Turn: 0, Thrust: 1, Reproduce: 2, Attack: 3, Emit: 4 } as const;
 export const OUTPUT_COUNT = 5;
@@ -47,25 +73,30 @@ export const INPUT_LABELS: string[] = [
   ...RAY_NAMES.flatMap((ray) => [
     `Plants ${ray}`,
     `Meat ${ray}`,
-    `Scent ${ray}`,
-    `Wall ${ray}`,
     `Water ${ray}`,
+    `Wall ${ray}`,
     `Creature ${ray}`,
     `Kin ${ray}`,
     `Bigger ${ray}`,
-    `Sick ${ray}`,
+    `Meat-eater ${ray}`,
+    `Coming ${ray}`,
+    `Hurt ${ray}`,
   ]),
+  'Creature behind',
+  'Crowding',
   'Plants underfoot',
   'Meat underfoot',
-  'Scent underfoot',
   'In water',
+  'Scent underfoot',
+  'Scent to the right',
   'Energy',
   'Health',
   'Thirst',
   'Age',
+  'Pain',
+  'Sick',
   'Clock',
   'Season',
-  'Sick',
   'Bias',
 ];
 export const OUTPUT_LABELS: string[] = ['Turn', 'Thrust', 'Reproduce', 'Attack', 'Emit scent'];

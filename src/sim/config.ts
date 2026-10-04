@@ -61,6 +61,12 @@ export interface SimConfig {
   senseCost: number;
   /** Ticks per cycle of the clock input. */
   clockPeriod: number;
+  /**
+   * Whether creatures sense what others eat, whether they are approaching or
+   * hurt, what is behind them, crowding and pain. Off, those inputs read
+   * zero; used to test whether an evolved population relies on them.
+   */
+  socialSenses: boolean;
 
   /** Energy per tick for each hidden neuron and each enabled link. */
   brainNeuronCost: number;
@@ -245,12 +251,13 @@ export const defaultConfig: SimConfig = {
   raySpread: 0.6,
   senseCost: 0.01,
   clockPeriod: 60,
+  socialSenses: true,
 
   brainNeuronCost: 0.002,
   brainLinkCost: 0.0005,
-  founderLinks: 4,
-  maxHiddenNeurons: 16,
-  maxLinks: 96,
+  founderLinks: 6,
+  maxHiddenNeurons: 32,
+  maxLinks: 200,
   weightChangeChance: 0.5,
   weightChangeScale: 4,
   weightResetChance: 0.02,

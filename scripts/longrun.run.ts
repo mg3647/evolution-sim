@@ -9,6 +9,12 @@
  *   TICKS  ticks per seed               (default: 200000)
  *   TUNE   JSON of config overrides     (default: {})
  *   TRACE  ticks between progress lines (default: 0, off)
+ *   FROM   measure only after this tick (default: 0)
+ *
+ * To test whether an evolved population relies on something, change a
+ * setting partway through and compare with an unchanged run:
+ *   CHANGE_AT  tick at which to apply CHANGE
+ *   CHANGE     JSON of config changes, e.g. {"socialSenses":false}
  */
 import { it } from 'vitest';
 import { defaultConfig, type SimConfig } from '../src/sim/config';
@@ -18,6 +24,9 @@ const seeds = (process.env.SEEDS ?? 'genesis,second,third').split(',');
 const ticks = Number(process.env.TICKS ?? 200000);
 const overrides = JSON.parse(process.env.TUNE ?? '{}') as Partial<SimConfig>;
 const trace = Number(process.env.TRACE ?? 0);
+const from = Number(process.env.FROM ?? 0);
+const changeAt = Number(process.env.CHANGE_AT ?? 0);
+const change = JSON.parse(process.env.CHANGE ?? '{}') as Partial<SimConfig>;
 /** Ticks between measurements. */
 const SAMPLE = 500;
 /** A world counts as having hunters while at least this many creatures mainly eat meat. */
@@ -60,9 +69,16 @@ function run(seed: string): Summary {
   let dietSum = 0;
   const started = performance.now();
 
+  let deathsBefore = { ...world.deaths };
+  let reseededBefore = 0;
   for (let tick = 1; tick <= ticks; tick++) {
+    if (tick === changeAt) Object.assign(world.config, change);
     step(world);
-    if (tick % SAMPLE !== 0) continue;
+    if (tick === from) {
+      deathsBefore = { ...world.deaths };
+      reseededBefore = world.reseeded;
+    }
+    if (tick % SAMPLE !== 0 || tick <= from) continue;
     samples++;
     popSum += c.count;
     popMin = Math.min(popMin, c.count);
@@ -89,12 +105,14 @@ function run(seed: string): Summary {
     }
   }
 
-  const d = world.deaths;
+  // Deaths are counted over the measured part of the run only.
+  const d = { ...world.deaths };
+  for (const cause of Object.keys(d) as (keyof typeof d)[]) d[cause] -= deathsBefore[cause];
   const deaths = d.starved + d.oldAge + d.killed + d.disaster + d.thirst;
   return {
     seed,
     population: { min: popMin, mean: popSum / samples, max: popMax },
-    reseeded: world.reseeded,
+    reseeded: world.reseeded - reseededBefore,
     atCap: capped / samples,
     hunterTime: hunterSamples / samples,
     hunters: hunterSum / samples,
@@ -111,7 +129,7 @@ function run(seed: string): Summary {
 const percent = (share: number) => `${Math.round(share * 100)}%`;
 
 it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
-  console.log(`overrides: ${JSON.stringify(overrides)}`);
+  console.log(`overrides: ${JSON.stringify(overrides)} from: ${from} change at ${changeAt}: ${JSON.stringify(change)}`);
   for (const seed of seeds) {
     const s = run(seed);
     console.log(

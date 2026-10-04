@@ -27,6 +27,8 @@ export interface Creatures {
   health: Float32Array;
   /** Water in the body, from 1 (full) to 0 (dies of thirst). */
   hydration: Float32Array;
+  /** Health lost to bites since the creature's last turn; it feels this as pain. */
+  pain: Float32Array;
   /** Above zero: ticks of infection left. Below zero: ticks of immunity left. Zero: can catch it. */
   sick: Int32Array;
   // Genes; see Genes in genome.ts.
@@ -53,6 +55,7 @@ const FIELDS = [
   'age',
   'health',
   'hydration',
+  'pain',
   'sick',
   'size',
   'speed',
@@ -93,6 +96,7 @@ export function createCreatures(capacity: number): Creatures {
     age: new Uint32Array(capacity),
     health: new Float32Array(capacity),
     hydration: new Float32Array(capacity),
+    pain: new Float32Array(capacity),
     sick: new Int32Array(capacity),
     size: new Float32Array(capacity),
     speed: new Float32Array(capacity),
@@ -131,6 +135,7 @@ export function spawnCreature(c: Creatures, options: SpawnOptions): number {
   c.age[i] = options.age ?? 0;
   c.health[i] = 1;
   c.hydration[i] = options.hydration ?? 1;
+  c.pain[i] = 0;
   c.sick[i] = 0;
   c.size[i] = options.genes.size;
   c.speed[i] = options.genes.speed;

@@ -87,10 +87,20 @@
 
     <h3>Brain inputs: what it senses now</h3>
     <p class="note">
-      For the nearest creature on each ray: &ldquo;Creature&rdquo; is how close it is, &ldquo;Kin&rdquo; is how
-      closely its colour matches (relatives read high), &ldquo;Bigger&rdquo; is right of centre if it is
-      larger, and &ldquo;Sick&rdquo; is whether it has the plague. &ldquo;Wall&rdquo; reads higher the nearer a
-      wall is on that ray.
+      Each of the three rays (left, ahead, right) reports the ground along it: plants, meat, water and
+      wall, each reading higher the more or the nearer it is.
+    </p>
+    <p class="note">
+      Each ray also reports the nearest creature in its direction. &ldquo;Creature&rdquo; is how close it
+      is. &ldquo;Kin&rdquo; is how closely its colour matches, so relatives read high. &ldquo;Bigger&rdquo;
+      is right of centre if it is larger. &ldquo;Meat-eater&rdquo; is right of centre for a meat-eater
+      and left for a plant-eater. &ldquo;Coming&rdquo; is right of centre if it is facing this way.
+      &ldquo;Hurt&rdquo; rises as it is wounded or sick. All read zero when no creature is there.
+    </p>
+    <p class="note">
+      &ldquo;Creature behind&rdquo; is how close the nearest creature out of sight is. &ldquo;Crowding&rdquo;
+      counts creatures all around. &ldquo;Pain&rdquo; is how hard it was just bitten. &ldquo;Scent to the
+      right&rdquo; is right of centre when scent is stronger on that side.
     </p>
     <ul>
       {#each INPUT_LABELS as label, k (label)}

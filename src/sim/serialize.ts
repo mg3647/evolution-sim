@@ -18,7 +18,7 @@ import type { World } from './world';
  */
 
 /** Bumped whenever the saved layout changes; older files are refused. */
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 /** Per-creature number arrays, saved up to the live count. */
 const CREATURE_FIELDS = [
@@ -33,6 +33,7 @@ const CREATURE_FIELDS = [
   'age',
   'health',
   'hydration',
+  'pain',
   'sick',
   'size',
   'speed',

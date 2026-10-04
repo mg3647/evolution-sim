@@ -192,6 +192,7 @@ export function step(world: World): void {
 
     // Sense, then think. Outputs are in [-1, 1].
     world.senses.sense(creatures, i, world.tick, brain.activation);
+    creatures.pain[i] = 0;
     think(brain);
     const turn = brain.activation[INPUT_COUNT + Output.Turn]! * config.maxTurn;
     let thrust = (brain.activation[INPUT_COUNT + Output.Thrust]! + 1) / 2;
@@ -208,7 +209,9 @@ export function step(world: World): void {
       const victim = world.senses.targetIndex;
       const ratio = size / creatures.size[victim]!;
       const teeth = config.herbivoreAttack + (1 - config.herbivoreAttack) * diet;
-      creatures.health[victim]! -= config.attackDamage * teeth * ratio;
+      const damage = config.attackDamage * teeth * ratio;
+      creatures.health[victim]! -= damage;
+      creatures.pain[victim]! += damage;
     }
 
     // Illness and wounds sap strength.
@@ -558,6 +561,7 @@ export function hashWorld(world: World): number {
     c.age,
     c.health,
     c.hydration,
+    c.pain,
     c.sick,
     c.size,
     c.speed,

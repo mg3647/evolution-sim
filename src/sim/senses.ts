@@ -1,4 +1,4 @@
-import { Input, INPUTS_PER_RAY, RAY_COUNT } from './brain';
+import { Input, INPUTS_PER_RAY, RAY_COUNT, Ray } from './brain';
 import type { SimConfig } from './config';
 import type { Creatures } from './creatures';
 import { seasonAt } from './environment';
@@ -6,26 +6,21 @@ import { maxEnergyFor } from './genome';
 import { cellIndexAt, type PlantField } from './plants';
 import type { SpatialHash } from './spatialHash';
 
-/** Points along each ray where ground cover is sampled, as fractions of its length. */
+/** Points along each ray where the ground is sampled, as fractions of its length. */
 const GROUND_SAMPLES = [0.5, 1];
 const TWO_PI = Math.PI * 2;
-
-/** Offsets of the per-ray inputs. */
-const RAY_PLANTS = 0;
-const RAY_MEAT = 1;
-const RAY_SCENT = 2;
-const RAY_WALL = 3;
-const RAY_WATER = 4;
-const RAY_NEARNESS = 5;
-const RAY_KIN = 6;
-const RAY_BIGGER = 7;
-const RAY_SICK = 8;
+/** This many creatures within sensing range reads as fully crowded. */
+const CROWD_FULL = 8;
+/** Health lost since its last turn that reads as full pain: about one hard bite. */
+const PAIN_FULL = 0.3;
 
 /**
  * Fills a brain's inputs with what a creature perceives. Vision is three
- * rays (left, ahead, right). Each reports the plants, meat and scent along it, and,
- * for the closest creature in its direction, how near it is, how alike its
- * colour is to the viewer's, and whether it is bigger or smaller.
+ * rays (left, ahead, right). Each reports the ground along it (plants, meat,
+ * water, wall) and, for the closest creature in its direction, how near it
+ * is, how alike its colour is, whether it is bigger, what it eats, whether
+ * it is coming this way, and whether it is hurt. Beyond vision a creature
+ * feels what is behind it, how crowded it is, scent, and its own body.
  */
 export class Senses {
   /** After sense(): index of the closest creature in view, or -1, and the gap to its edge. */
@@ -43,6 +38,8 @@ export class Senses {
   private nearest = new Float32Array(RAY_COUNT);
   private cosHeading = 1;
   private sinHeading = 0;
+  private nearestBehind = Infinity;
+  private neighbors = 0;
 
   // This runs for every creature every tick and dominates the cost of a tick,
   // so values that do not change per creature are worked out once.
@@ -82,6 +79,9 @@ export class Senses {
     const meatScale = 1 / config.meatScale;
     const cosHeading = Math.cos(heading);
     const sinHeading = Math.sin(heading);
+    /** Scent halfway along the left and right rays, for telling which side it is stronger on. */
+    let scentLeft = 0;
+    let scentRight = 0;
 
     for (let ray = 0; ray < RAY_COUNT; ray++) {
       // Each ray is the heading turned by a whole number of spreads: -1, 0, +1.
@@ -90,7 +90,6 @@ export class Senses {
       const dy = (sinHeading * this.cosSpread + turn * cosHeading * this.sinSpread) * range;
       let plants = 0;
       let meat = 0;
-      let scent = 0;
       let wall = 0;
       let water = 0;
       for (const t of GROUND_SAMPLES) {
@@ -101,21 +100,25 @@ export class Senses {
         const cell = cellIndexAt(field, px, py);
         plants += field.energy[cell]!;
         meat += field.meat[cell]!;
-        scent += field.scent[cell]!;
-        // A nearer wall reads stronger.
+        // A nearer wall or shore reads stronger.
         if (field.walls[cell]) wall = Math.max(wall, 1.5 - t);
         if (field.water[cell]) water = Math.max(water, 1.5 - t);
+        if (t === GROUND_SAMPLES[0]) {
+          if (turn < 0) scentLeft = field.scent[cell]!;
+          else if (turn > 0) scentRight = field.scent[cell]!;
+        }
       }
       const o = Input.Rays + ray * INPUTS_PER_RAY;
-      inputs[o + RAY_PLANTS] = (plants / GROUND_SAMPLES.length) * plantScale;
-      inputs[o + RAY_MEAT] = Math.min(1, (meat / GROUND_SAMPLES.length) * meatScale);
-      inputs[o + RAY_SCENT] = Math.min(1, scent / GROUND_SAMPLES.length);
-      inputs[o + RAY_WALL] = Math.min(1, wall);
-      inputs[o + RAY_WATER] = Math.min(1, water);
-      inputs[o + RAY_SICK] = 0;
-      inputs[o + RAY_NEARNESS] = 0;
-      inputs[o + RAY_KIN] = 0;
-      inputs[o + RAY_BIGGER] = 0;
+      inputs[o + Ray.Plants] = (plants / GROUND_SAMPLES.length) * plantScale;
+      inputs[o + Ray.Meat] = Math.min(1, (meat / GROUND_SAMPLES.length) * meatScale);
+      inputs[o + Ray.Water] = Math.min(1, water);
+      inputs[o + Ray.Wall] = Math.min(1, wall);
+      inputs[o + Ray.Near] = 0;
+      inputs[o + Ray.Kin] = 0;
+      inputs[o + Ray.Bigger] = 0;
+      inputs[o + Ray.MeatEater] = 0;
+      inputs[o + Ray.Approaching] = 0;
+      inputs[o + Ray.Hurt] = 0;
       this.nearest[ray] = Infinity;
     }
 
@@ -130,17 +133,26 @@ export class Senses {
     this.creatures = creatures;
     this.targetIndex = -1;
     this.targetGap = Infinity;
+    this.nearestBehind = Infinity;
+    this.neighbors = 0;
     this.hash.query(x, y, range, this.visit);
+
+    const social = config.socialSenses;
+    inputs[Input.Behind] = social && this.nearestBehind < range ? 1 - this.nearestBehind / range : 0;
+    inputs[Input.Crowding] = social ? Math.min(1, this.neighbors / CROWD_FULL) : 0;
+    inputs[Input.Pain] = social ? Math.min(1, creatures.pain[i]! / PAIN_FULL) : 0;
 
     const cell = cellIndexAt(field, x, y);
     inputs[Input.Underfoot] = field.energy[cell]! * plantScale;
     inputs[Input.MeatUnderfoot] = Math.min(1, field.meat[cell]! * meatScale);
-    inputs[Input.ScentUnderfoot] = Math.min(1, field.scent[cell]!);
     inputs[Input.InWater] = field.water[cell]!;
-    inputs[Input.Thirst] = 1 - creatures.hydration[i]!;
+    inputs[Input.ScentUnderfoot] = Math.min(1, field.scent[cell]!);
+    inputs[Input.ScentSide] = Math.min(1, scentRight) - Math.min(1, scentLeft);
     inputs[Input.Energy] = creatures.energy[i]! / maxEnergyFor(creatures.size[i]!, config);
     inputs[Input.Health] = creatures.health[i]!;
+    inputs[Input.Thirst] = 1 - creatures.hydration[i]!;
     inputs[Input.Age] = creatures.age[i]! / config.maxAge;
+    inputs[Input.Sick] = creatures.sick[i]! > 0 ? 1 : 0;
     if (tick !== this.cachedTick) {
       this.cachedTick = tick;
       this.clock = Math.sin((TWO_PI * tick) / config.clockPeriod);
@@ -148,7 +160,6 @@ export class Senses {
     }
     inputs[Input.Clock] = this.clock;
     inputs[Input.Season] = this.season;
-    inputs[Input.Sick] = creatures.sick[i]! > 0 ? 1 : 0;
     inputs[Input.Bias] = 1;
   }
 
@@ -163,25 +174,31 @@ export class Senses {
     if (dy > config.worldHeight / 2) dy -= config.worldHeight;
     else if (dy < -config.worldHeight / 2) dy += config.worldHeight;
     if (dx === 0 && dy === 0) return;
+    this.neighbors++;
 
     // Which ray points most nearly at the neighbor, if any does. `ahead` and
     // `aside` are the neighbor's position as seen from the creature.
-    let ray: number;
+    let ray = -1;
     if (this.narrowView) {
       const ahead = dx * this.cosHeading + dy * this.sinHeading;
-      if (ahead <= 0) return;
-      const aside = dy * this.cosHeading - dx * this.sinHeading;
-      const off = aside < 0 ? -aside : aside;
-      if (off >= ahead * this.tanView) return;
-      ray = off < ahead * this.tanCentre ? 1 : aside < 0 ? 0 : 2;
+      if (ahead > 0) {
+        const aside = dy * this.cosHeading - dx * this.sinHeading;
+        const off = aside < 0 ? -aside : aside;
+        if (off < ahead * this.tanView) ray = off < ahead * this.tanCentre ? 1 : aside < 0 ? 0 : 2;
+      }
     } else {
       let bearing = (Math.atan2(dy, dx) - this.heading) % TWO_PI;
       if (bearing > Math.PI) bearing -= TWO_PI;
       else if (bearing < -Math.PI) bearing += TWO_PI;
       ray = Math.round(bearing / config.raySpread) + 1;
-      if (ray < 0 || ray >= RAY_COUNT) return;
+      if (ray < 0 || ray >= RAY_COUNT) ray = -1;
     }
     const distance = Math.sqrt(dx * dx + dy * dy);
+    if (ray < 0) {
+      // Out of sight, but close enough to feel.
+      if (distance < this.nearestBehind) this.nearestBehind = distance;
+      return;
+    }
 
     const mySize = creatures.size[this.self]!;
     const theirSize = creatures.size[j]!;
@@ -194,9 +211,16 @@ export class Senses {
 
     this.nearest[ray] = distance;
     const o = Input.Rays + ray * INPUTS_PER_RAY;
-    this.inputs[o + RAY_NEARNESS] = 1 - distance / this.range;
-    this.inputs[o + RAY_KIN] = Math.cos(TWO_PI * (creatures.hue[j]! - creatures.hue[this.self]!));
-    this.inputs[o + RAY_BIGGER] = (theirSize - mySize) / (theirSize + mySize);
-    this.inputs[o + RAY_SICK] = creatures.sick[j]! > 0 ? 1 : 0;
+    const inputs = this.inputs;
+    inputs[o + Ray.Near] = 1 - distance / this.range;
+    inputs[o + Ray.Kin] = Math.cos(TWO_PI * (creatures.hue[j]! - creatures.hue[this.self]!));
+    inputs[o + Ray.Bigger] = (theirSize - mySize) / (theirSize + mySize);
+    if (!config.socialSenses) return;
+    // Plant-eaters read below zero and meat-eaters above, so neither looks like "nobody there".
+    inputs[o + Ray.MeatEater] = creatures.diet[j]! * 2 - 1;
+    // How squarely the other is facing this way: 1 is head-on, -1 is directly away.
+    const theirHeading = creatures.heading[j]!;
+    inputs[o + Ray.Approaching] = -(Math.cos(theirHeading) * dx + Math.sin(theirHeading) * dy) / distance;
+    inputs[o + Ray.Hurt] = creatures.sick[j]! > 0 ? 1 : 1 - Math.max(0, creatures.health[j]!);
   };
 }
