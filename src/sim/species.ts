@@ -1,35 +1,27 @@
-import type { Brain } from './brain';
 import type { SimConfig } from './config';
 import type { Creatures } from './creatures';
+import type { Lineage, LineageNode } from './lineage';
 
 /**
- * Groups creatures into species by how alike their genes are. Each species
- * has a representative; a creature belongs to a species if it is within a
- * set distance of that representative. A creature that fits none founds a
- * new species. Children start in their parent's species and are re-checked
- * at each classification, so species split as lineages drift apart.
+ * Groups creatures into species by ancestry and difference together: a
+ * species is a branch of the family tree that split off long enough ago and
+ * whose living members have, on average, become clearly different in body or
+ * diet from the group they split from. Relatives therefore stay together,
+ * and plant-eaters and meat-eaters end up apart.
  */
 
-/** How much each difference counts toward the distance between two creatures. */
-const SIZE_SCALE = 0.35;
-const SPEED_SCALE = 0.35;
-const SENSOR_SCALE = 0.6;
-const DIET_SCALE = 0.25;
-const BRAIN_WEIGHT = 3;
+/** A difference of this much in a gene's average counts as 1 toward the threshold. */
+const SIZE_SCALE = 0.2;
+const SPEED_SCALE = 0.2;
+const SENSOR_SCALE = 0.35;
+const DIET_SCALE = 0.15;
 
 export interface SpeciesRecord {
   id: number;
-  /** Tick at which the species was first seen. */
+  /** Tick at which the species was first recognised. */
   bornTick: number;
   /** Members at the last classification. */
   count: number;
-  /** Genes of the representative that membership is measured against. */
-  size: number;
-  speed: number;
-  sensorRange: number;
-  diet: number;
-  /** Innovation ids of the representative's enabled links. */
-  links: number[];
 }
 
 export interface SpeciesState {
@@ -41,95 +33,144 @@ export function createSpeciesState(): SpeciesState {
   return { nextId: 1, species: [] };
 }
 
-function enabledInnovations(brain: Brain): number[] {
-  const ids: number[] = [];
-  for (const link of brain.links) if (link.enabled) ids.push(link.innovation);
-  return ids.sort((a, b) => a - b);
+/** Sums over the living creatures in a branch. Sizes, speeds and ranges are summed as logs. */
+interface Tally {
+  count: number;
+  size: number;
+  speed: number;
+  sensor: number;
+  diet: number;
 }
 
-/** Share of links, across both wirings, that only one of them has. Both lists are sorted. */
-function wiringDifference(a: number[], b: number[]): number {
-  let shared = 0;
-  let i = 0;
-  let j = 0;
-  while (i < a.length && j < b.length) {
-    if (a[i] === b[j]) {
-      shared++;
-      i++;
-      j++;
-    } else if (a[i]! < b[j]!) i++;
-    else j++;
-  }
-  const union = a.length + b.length - shared;
-  return union === 0 ? 0 : 1 - shared / union;
+function emptyTally(): Tally {
+  return { count: 0, size: 0, speed: 0, sensor: 0, diet: 0 };
 }
 
-/** Distance between creature i and a species' representative: 0 is identical. */
-function distanceTo(record: SpeciesRecord, c: Creatures, i: number, links: number[]): number {
+function add(into: Tally, from: Tally, sign = 1): void {
+  into.count += sign * from.count;
+  into.size += sign * from.size;
+  into.speed += sign * from.speed;
+  into.sensor += sign * from.sensor;
+  into.diet += sign * from.diet;
+}
+
+/** How different the average members of two groups are: 1 or more is a clear difference. */
+function difference(a: Tally, b: Tally): number {
   return (
-    Math.abs(Math.log(c.size[i]! / record.size)) / SIZE_SCALE +
-    Math.abs(Math.log(c.speed[i]! / record.speed)) / SPEED_SCALE +
-    Math.abs(Math.log(c.sensorRange[i]! / record.sensorRange)) / SENSOR_SCALE +
-    Math.abs(c.diet[i]! - record.diet) / DIET_SCALE +
-    wiringDifference(links, record.links) * BRAIN_WEIGHT
+    Math.abs(a.size / a.count - b.size / b.count) / SIZE_SCALE +
+    Math.abs(a.speed / a.count - b.speed / b.count) / SPEED_SCALE +
+    Math.abs(a.sensor / a.count - b.sensor / b.count) / SENSOR_SCALE +
+    Math.abs(a.diet / a.count - b.diet / b.count) / DIET_SCALE
   );
 }
 
-/**
- * Assign every creature to a species, founding new ones as needed and
- * dropping those left empty. Each surviving species then takes its first
- * member as its new representative, so it follows its members as they evolve.
- */
-export function classifySpecies(state: SpeciesState, c: Creatures, tick: number, config: SimConfig): void {
-  const byId = new Map<number, SpeciesRecord>();
-  for (const record of state.species) {
-    record.count = 0;
-    byId.set(record.id, record);
-  }
-  const firstMember = new Map<number, number>();
+interface Group {
+  /** Living members not yet split off into a sub-branch's species. */
+  tally: Tally;
+  members: number[];
+  nodes: LineageNode[];
+}
 
-  for (let i = 0; i < c.count; i++) {
-    const links = enabledInnovations(c.brain[i]!);
-    const current = byId.get(c.species[i]!);
-    let home = current && distanceTo(current, c, i, links) <= config.speciesThreshold ? current : undefined;
-    if (!home) {
-      // Nearest other species within reach, if any.
-      let best = config.speciesThreshold;
-      for (const record of state.species) {
-        if (record === current) continue;
-        const distance = distanceTo(record, c, i, links);
-        if (distance <= best) {
-          best = distance;
-          home = record;
-        }
+/**
+ * Assign every creature, and every node of the family tree, to a species.
+ * A species keeps its id from one call to the next as long as most of its
+ * members were in it before.
+ */
+export function classifySpecies(
+  state: SpeciesState,
+  c: Creatures,
+  lineage: Lineage,
+  tick: number,
+  config: SimConfig,
+): void {
+  const indexOf = new Map<number, number>();
+  for (let i = 0; i < c.count; i++) indexOf.set(c.id[i]!, i);
+
+  // Tally the living members of every branch, children before parents.
+  const tallies = new Map<number, Tally>();
+  const roots: LineageNode[] = [];
+  for (const node of lineage.all()) if (node.parentId === 0) roots.push(node);
+  roots.sort((a, b) => a.id - b.id);
+
+  const order: LineageNode[] = [];
+  const pending = roots.slice().reverse();
+  while (pending.length > 0) {
+    const node = pending.pop()!;
+    order.push(node);
+    for (let k = node.children.length - 1; k >= 0; k--) pending.push(lineage.get(node.children[k]!)!);
+  }
+  for (let k = order.length - 1; k >= 0; k--) {
+    const node = order[k]!;
+    const tally = emptyTally();
+    const i = indexOf.get(node.id);
+    if (i !== undefined) {
+      tally.count = 1;
+      tally.size = Math.log(c.size[i]!);
+      tally.speed = Math.log(c.speed[i]!);
+      tally.sensor = Math.log(c.sensorRange[i]!);
+      tally.diet = c.diet[i]!;
+    }
+    for (const child of node.children) add(tally, tallies.get(child)!);
+    tallies.set(node.id, tally);
+  }
+
+  // Walk down from the trunk, splitting off each branch that qualifies.
+  const trunk: Group = { tally: emptyTally(), members: [], nodes: [] };
+  for (const root of roots) add(trunk.tally, tallies.get(root.id)!);
+  const groups: Group[] = [trunk];
+  const walk: [LineageNode, Group][] = roots
+    .slice()
+    .reverse()
+    .map((root) => [root, trunk]);
+  while (walk.length > 0) {
+    const [node, parentGroup] = walk.pop()!;
+    const branch = tallies.get(node.id)!;
+    let group = parentGroup;
+    const rest = parentGroup.tally.count - branch.count;
+    if (
+      tick - node.birthTick >= config.speciesMinAge &&
+      branch.count >= config.speciesMinMembers &&
+      rest >= config.speciesMinMembers
+    ) {
+      const others = { ...parentGroup.tally };
+      add(others, branch, -1);
+      if (difference(branch, others) >= config.speciesThreshold) {
+        parentGroup.tally = others;
+        group = { tally: { ...branch }, members: [], nodes: [] };
+        groups.push(group);
       }
     }
-    if (!home) {
-      home = {
-        id: state.nextId++,
-        bornTick: tick,
-        count: 0,
-        size: c.size[i]!,
-        speed: c.speed[i]!,
-        sensorRange: c.sensorRange[i]!,
-        diet: c.diet[i]!,
-        links,
-      };
-      state.species.push(home);
-      byId.set(home.id, home);
-    }
-    home.count++;
-    c.species[i] = home.id;
-    if (!firstMember.has(home.id)) firstMember.set(home.id, i);
+    group.nodes.push(node);
+    const i = indexOf.get(node.id);
+    if (i !== undefined) group.members.push(i);
+    for (let k = node.children.length - 1; k >= 0; k--) walk.push([lineage.get(node.children[k]!)!, group]);
   }
 
-  state.species = state.species.filter((record) => record.count > 0);
-  for (const record of state.species) {
-    const i = firstMember.get(record.id)!;
-    record.size = c.size[i]!;
-    record.speed = c.speed[i]!;
-    record.sensorRange = c.sensorRange[i]!;
-    record.diet = c.diet[i]!;
-    record.links = enabledInnovations(c.brain[i]!);
+  // Largest groups choose first: each keeps the id most of its members already had.
+  const known = new Map(state.species.map((record) => [record.id, record]));
+  const taken = new Set<number>();
+  const records: SpeciesRecord[] = [];
+  const live = groups.filter((group) => group.members.length > 0);
+  live.sort((a, b) => b.members.length - a.members.length);
+  for (const group of live) {
+    const votes = new Map<number, number>();
+    for (const i of group.members) {
+      const previous = c.species[i]!;
+      if (previous !== 0) votes.set(previous, (votes.get(previous) ?? 0) + 1);
+    }
+    let id = 0;
+    let most = 0;
+    for (const [candidate, count] of votes) {
+      if (!taken.has(candidate) && (count > most || (count === most && candidate < id))) {
+        id = candidate;
+        most = count;
+      }
+    }
+    if (id === 0) id = state.nextId++;
+    taken.add(id);
+    records.push({ id, bornTick: known.get(id)?.bornTick ?? tick, count: group.members.length });
+    for (const i of group.members) c.species[i] = id;
+    for (const node of group.nodes) node.species = id;
   }
+  state.species = records;
 }

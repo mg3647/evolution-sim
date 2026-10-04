@@ -17,7 +17,7 @@ import type { World } from './world';
  */
 
 /** Bumped whenever the saved layout changes; older files are refused. */
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 /** Per-creature number arrays, saved up to the live count. */
 const CREATURE_FIELDS = [
@@ -125,7 +125,7 @@ export function saveWorld(world: World): SavedWorld {
     lineage: world.lineage.save(),
     species: {
       nextId: world.species.nextId,
-      species: world.species.species.map((record) => ({ ...record, links: record.links.slice() })),
+      species: world.species.species.map((record) => ({ ...record })),
     },
   };
 }
@@ -209,7 +209,7 @@ export function loadWorld(saved: SavedWorld): World {
     lineage: Lineage.load(saved.lineage),
     species: {
       nextId: saved.species.nextId,
-      species: saved.species.species.map((record) => ({ ...record, links: record.links.slice() })),
+      species: saved.species.species.map((record) => ({ ...record })),
     },
   };
 }

@@ -1,10 +1,11 @@
 <script lang="ts">
+  import { speciesHue } from '../render/renderer';
   import type { TreeData } from '../worker/protocol';
 
   const HEIGHT = 280;
   const PAD = 6;
 
-  let { tree }: { tree: TreeData | null } = $props();
+  let { tree, bySpecies = false }: { tree: TreeData | null; bySpecies?: boolean } = $props();
 
   let canvas: HTMLCanvasElement;
   let living = $state(0);
@@ -44,7 +45,7 @@
     return { row, rows: next, children };
   }
 
-  function draw(data: TreeData): void {
+  function draw(data: TreeData, colorBySpecies: boolean): void {
     const width = canvas.clientWidth;
     const scale = window.devicePixelRatio || 1;
     canvas.width = width * scale;
@@ -69,7 +70,8 @@
       // A dead ancestor's line runs on to where its last child branches off.
       let end = alive ? data.tick : data.deathTick[k]!;
       for (const kid of children[k]!) end = Math.max(end, data.birthTick[kid]!);
-      ctx.strokeStyle = `hsl(${data.hue[k]! * 360}, 70%, ${alive ? 62 : 42}%)`;
+      const hue = colorBySpecies ? speciesHue(data.species[k]!) : data.hue[k]!;
+      ctx.strokeStyle = `hsl(${hue * 360}, 70%, ${alive ? 62 : 42}%)`;
       ctx.beginPath();
       ctx.moveTo(x(data.birthTick[k]!), y(k));
       ctx.lineTo(x(end), y(k));
@@ -92,7 +94,7 @@
     }
     living = alive;
     founders = roots;
-    draw(tree);
+    draw(tree, bySpecies);
   });
 </script>
 
@@ -101,7 +103,7 @@
   <p>
     Every creature alive now, traced back to its ancestors. Time runs left to right and ends at the
     present. Lines join at a common ancestor, so a join far to the left means two families split long
-    ago. Colour is the inherited body colour.
+    ago. Colour is the inherited body colour, or the species when "Colour by species" is ticked.
   </p>
   <canvas bind:this={canvas} style="height: {HEIGHT}px"></canvas>
   {#if tree}

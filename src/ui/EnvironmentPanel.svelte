@@ -62,7 +62,7 @@
         {/each}
       </ul>
     {:else}
-      <p>No events yet. Use the Events buttons above the world, or switch on random events.</p>
+      <p>No events yet. Use the tools and climate buttons above the world, or switch on random events.</p>
     {/if}
   {/if}
 </section>

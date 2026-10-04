@@ -4,7 +4,7 @@ import { climateAt, seasonAt, spreadScent } from './environment';
 import { wrappedDelta } from './geometry';
 import { expectedEnergy } from './ledger';
 import { cellIndexAt, totalPlantEnergy } from './plants';
-import { clearWorldWalls, createWorld, hashWorld, step, totalEnergy, triggerWorldEvent } from './world';
+import { applyTool, clearWorldWalls, createWorld, hashWorld, step, totalEnergy, triggerWorldEvent } from './world';
 
 const smallConfig: SimConfig = {
   ...defaultConfig,
@@ -216,6 +216,90 @@ describe('walls', () => {
       const cell = cellIndexAt(plants, creatures.x[i]!, creatures.y[i]!);
       expect(plants.walls[cell]).toBe(0);
     }
+  });
+});
+
+describe('hand tools', () => {
+  const quiet = { ...smallConfig, attackDamage: 0, fertilityDriftPeriod: 0 };
+
+  it('meteor strikes where it is aimed and nowhere else', () => {
+    const world = createWorld({ ...quiet, meteorRadius: 100 });
+    const { creatures, config } = world;
+    const inside = (i: number) =>
+      Math.hypot(
+        wrappedDelta(400, creatures.x[i]!, config.worldWidth),
+        wrappedDelta(400, creatures.y[i]!, config.worldHeight),
+      ) <= 100;
+    const doomed = new Set<number>();
+    const safe = new Set<number>();
+    for (let i = 0; i < creatures.count; i++) (inside(i) ? doomed : safe).add(creatures.id[i]!);
+    expect(doomed.size).toBeGreaterThan(0);
+
+    applyTool(world, 'meteor', 400, 400, 400, 400);
+    expect(world.plants.energy[cellIndexAt(world.plants, 400, 400)]).toBe(0);
+    step(world);
+    expect(world.deaths.disaster).toBe(doomed.size);
+    const alive = new Set(Array.from(creatures.id.subarray(0, creatures.count)));
+    for (const id of doomed) expect(alive.has(id)).toBe(false);
+    expect(world.environment.log[0]!.text).toBe(`Meteor killed ${doomed.size} creatures`);
+    expect(totalEnergy(world)).toBeCloseTo(expectedEnergy(world.ledger), 6);
+    expect(safe.size).toBeGreaterThan(0);
+  });
+
+  it('plague infects the creatures within reach of the point, and only those', () => {
+    const world = createWorld(quiet);
+    const { creatures, config } = world;
+    applyTool(world, 'plague', 400, 400, 400, 400);
+    let infected = 0;
+    for (let i = 0; i < creatures.count; i++) {
+      const near =
+        Math.hypot(
+          wrappedDelta(400, creatures.x[i]!, config.worldWidth),
+          wrappedDelta(400, creatures.y[i]!, config.worldHeight),
+        ) <= config.plagueToolRadius;
+      expect(creatures.sick[i]! > 0).toBe(near);
+      if (near) infected++;
+    }
+    expect(infected).toBeGreaterThan(0);
+    expect(world.environment.plagueActive).toBe(true);
+    expect(world.environment.log[0]!.text).toBe(`Plague broke out: ${infected} infected`);
+  });
+
+  it('wall draws along a drag and erase removes it', () => {
+    const world = createWorld(quiet);
+    const { plants } = world;
+    applyTool(world, 'wall', 500, 300, 300, 300);
+    for (let x = 300; x <= 500; x += 10) expect(plants.walls[cellIndexAt(plants, x, 300)]).toBe(1);
+    expect(plants.walls[cellIndexAt(plants, 400, 500)]).toBe(0);
+    applyTool(world, 'erase', 500, 300, 300, 300);
+    expect(plants.walls.every((cell) => cell === 0)).toBe(true);
+  });
+
+  it('fertilise makes land fully fertile and blight makes it barren, both lasting', () => {
+    const world = createWorld({ ...quiet, initialCreatures: 0, fertilityDriftPeriod: 2000, fertilityUpdateInterval: 50 });
+    const { plants, config } = world;
+    const here = cellIndexAt(plants, 400, 400);
+    const far = cellIndexAt(plants, 100, 100);
+    const farBefore = plants.fertility[far];
+
+    applyTool(world, 'blight', 400, 400, 400, 400);
+    expect(plants.fertility[here]).toBe(0);
+    expect(plants.capacity[here]).toBe(0);
+    expect(plants.energy[here]).toBe(0);
+    expect(plants.fertility[far]).toBe(farBefore);
+    expect(totalEnergy(world)).toBeCloseTo(expectedEnergy(world.ledger), 6);
+
+    applyTool(world, 'fertilise', 400, 400, 400, 400);
+    expect(plants.fertility[here]).toBe(1);
+    expect(plants.capacity[here]).toBe(config.plantCapacity);
+    // Still fertile after the map has drifted for a while.
+    for (let t = 0; t < 1500; t++) step(world);
+    expect(plants.fertility[here]).toBe(1);
+    expect(plants.energy[here]).toBeGreaterThan(config.plantCapacity * 0.5);
+    expect(world.plantCapacityTotal).toBeCloseTo(
+      plants.capacity.reduce((sum, value) => sum + value, 0),
+      6,
+    );
   });
 });
 

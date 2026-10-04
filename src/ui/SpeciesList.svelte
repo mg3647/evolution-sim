@@ -14,9 +14,9 @@
 <section>
   <h2>Species</h2>
   <p>
-    Creatures grouped by how alike their bodies, diets and brain wiring are. A group that drifts far
-    enough from the rest becomes a new species. Tick "Colour by species" above the world to see them
-    on the map.
+    A species is a branch of the family tree that split off at least a year (6,000 ticks) ago and has
+    since become clearly different in body or diet from the group it left. Tick "Colour by species"
+    above the world to see them on the map and the tree.
   </p>
   <table>
     <thead>

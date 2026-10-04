@@ -12,6 +12,8 @@ export interface LineageNode {
   /** Tick of death, or -1 while alive. */
   deathTick: number;
   hue: number;
+  /** Species it was last grouped into, or 0 before the first grouping; see species.ts. */
+  species: number;
   /** Ids of kept descendants whose nearest kept ancestor is this node. */
   children: number[];
 }
@@ -34,7 +36,16 @@ export class Lineage {
   /** Record a birth. `parentId` is 0 for a creature with no parent. */
   born(id: number, parentId: number, tick: number, hue: number): void {
     const parent = parentId === 0 ? undefined : this.nodes.get(parentId);
-    this.nodes.set(id, { id, parentId: parent ? parentId : 0, birthTick: tick, deathTick: -1, hue, children: [] });
+    this.nodes.set(id, {
+      id,
+      parentId: parent ? parentId : 0,
+      birthTick: tick,
+      deathTick: -1,
+      hue,
+      // A newborn counts as its parent's species until the next grouping.
+      species: parent ? parent.species : 0,
+      children: [],
+    });
     parent?.children.push(id);
   }
 

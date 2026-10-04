@@ -2,7 +2,7 @@ import { enabledLinks, INPUT_COUNT, OUTPUT_COUNT } from '../sim/brain';
 import { maxEnergyFor } from '../sim/genome';
 import { wrappedDelta } from '../sim/geometry';
 import { loadWorld, saveWorld, type SavedWorld } from '../sim/serialize';
-import { clearWorldWalls, triggerWorldEvent, type World } from '../sim/world';
+import { applyTool, clearWorldWalls, triggerWorldEvent, type World } from '../sim/world';
 import {
   CREATURE_STRIDE,
   type FromWorker,
@@ -261,14 +261,22 @@ function sendTree(now: number): void {
     birthTick: new Float64Array(nodes.length),
     deathTick: new Float64Array(nodes.length),
     hue: new Float32Array(nodes.length),
+    species: new Uint32Array(nodes.length),
   };
   nodes.forEach((node, k) => {
     tree.parent[k] = indexOf.get(node.parentId) ?? -1;
     tree.birthTick[k] = node.birthTick;
     tree.deathTick[k] = node.deathTick;
     tree.hue[k] = node.hue;
+    tree.species[k] = node.species;
   });
-  post({ type: 'tree', tree }, [tree.parent.buffer, tree.birthTick.buffer, tree.deathTick.buffer, tree.hue.buffer]);
+  post({ type: 'tree', tree }, [
+    tree.parent.buffer,
+    tree.birthTick.buffer,
+    tree.deathTick.buffer,
+    tree.hue.buffer,
+    tree.species.buffer,
+  ]);
   sentTreeTick = world.tick;
   lastTreeTime = now;
 }
@@ -340,6 +348,10 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
     triggerWorldEvent(runner.world, message.kind);
     // While paused, run one tick so the event's deaths show at once.
     if (!runner.running) runner.stepTicks(1);
+  } else if (message.type === 'tool') {
+    applyTool(runner.world, message.tool, message.x, message.y, message.fromX, message.fromY);
+    // While paused, run one tick so a meteor's deaths show at once.
+    if (message.tool === 'meteor' && !runner.running) runner.stepTicks(1);
   } else if (message.type === 'clearWalls') {
     clearWorldWalls(runner.world);
   } else if (message.type === 'setRandomEvents') {

@@ -161,6 +161,9 @@ export interface SimConfig {
   plagueCost: number;
   /** Radius within which a meteor kills creatures and burns the ground bare. */
   meteorRadius: number;
+  /** Reach of the hand tools: the plague tool infects within one, the land tools paint within the other. */
+  plagueToolRadius: number;
+  brushRadius: number;
   /** Whether events strike at random, and the average number of ticks between them. */
   randomEvents: boolean;
   randomEventInterval: number;
@@ -175,8 +178,16 @@ export interface SimConfig {
 
   /** Ticks between regroupings of creatures into species. */
   speciesInterval: number;
-  /** How different a creature may be from a species' representative and still belong to it. */
+  /**
+   * How different, on average, a branch of the family tree must be from the
+   * group it split from to count as its own species. 1 is a clear difference:
+   * for example 0.15 in diet, or 20% in size.
+   */
   speciesThreshold: number;
+  /** A branch must have split off at least this many ticks ago to be its own species. */
+  speciesMinAge: number;
+  /** A species, and the group it leaves behind, must each have at least this many members. */
+  speciesMinMembers: number;
 
   /** Ticks between history samples at the start of a run. */
   statsInterval: number;
@@ -276,6 +287,8 @@ export const defaultConfig: SimConfig = {
   plagueSlow: 0.5,
   plagueCost: 1.3,
   meteorRadius: 350,
+  plagueToolRadius: 90,
+  brushRadius: 70,
   randomEvents: false,
   randomEventInterval: 15000,
 
@@ -285,7 +298,9 @@ export const defaultConfig: SimConfig = {
   scentSpread: 0.2,
 
   speciesInterval: 300,
-  speciesThreshold: 4,
+  speciesThreshold: 1,
+  speciesMinAge: 6000,
+  speciesMinMembers: 5,
 
   statsInterval: 30,
   statsCapacity: 1000,

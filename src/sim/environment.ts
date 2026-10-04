@@ -1,5 +1,5 @@
 import type { SimConfig } from './config';
-import { wrappedDelta } from './geometry';
+import { wrap, wrappedDelta } from './geometry';
 import type { EnergyLedger } from './ledger';
 import { cellIndexAt, generateFertility, type PlantField } from './plants';
 import type { Rng } from './rng';
@@ -158,6 +158,14 @@ export function driftFertility(
     }
   }
 
+  return applyFertility(field, config, ledger);
+}
+
+/**
+ * Set each cell's plant capacity from its fertility. Plants above a shrunken
+ * capacity die off as heat. Returns the field's total capacity.
+ */
+export function applyFertility(field: PlantField, config: SimConfig, ledger: EnergyLedger): number {
   let total = 0;
   let died = 0;
   for (let i = 0; i < field.capacity.length; i++) {
@@ -171,6 +179,81 @@ export function driftFertility(
   }
   ledger.heatOut += died;
   return total;
+}
+
+/** Call `visit` with every cell whose centre lies within `radius` of (x, y), across wrapped edges. */
+function cellsWithin(
+  field: PlantField,
+  config: SimConfig,
+  x: number,
+  y: number,
+  radius: number,
+  visit: (cell: number) => void,
+): void {
+  const r2 = radius * radius;
+  for (let cy = 0; cy < field.rows; cy++) {
+    const dy = wrappedDelta(y, (cy + 0.5) * field.cellHeight, config.worldHeight);
+    if (Math.abs(dy) > radius) continue;
+    for (let cx = 0; cx < field.cols; cx++) {
+      const dx = wrappedDelta(x, (cx + 0.5) * field.cellWidth, config.worldWidth);
+      if (dx * dx + dy * dy <= r2) visit(cy * field.cols + cx);
+    }
+  }
+}
+
+/**
+ * Make the land within `radius` of (x, y) fully fertile (value 1) or barren
+ * (value 0). The change is written into the drifting maps as well, so it
+ * lasts until the fertility has drifted to a new map twice over.
+ */
+export function paintFertility(
+  env: Environment,
+  field: PlantField,
+  config: SimConfig,
+  x: number,
+  y: number,
+  radius: number,
+  value: 0 | 1,
+): void {
+  cellsWithin(field, config, x, y, radius, (cell) => {
+    field.fertility[cell] = value;
+    env.fertilityFrom[cell] = value;
+    env.fertilityTo[cell] = value;
+  });
+}
+
+/** Set (value 1) or clear (value 0) wall along the straight line between two points. */
+export function wallLine(
+  field: PlantField,
+  config: SimConfig,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  value: 0 | 1,
+): void {
+  const length = Math.hypot(x1 - x0, y1 - y0);
+  // Step by half a cell so no cell along the line is skipped.
+  const stride = Math.min(field.cellWidth, field.cellHeight) / 2;
+  const steps = Math.max(1, Math.ceil(length / stride));
+  for (let k = 0; k <= steps; k++) {
+    const x = wrap(x0 + ((x1 - x0) * k) / steps, config.worldWidth);
+    const y = wrap(y0 + ((y1 - y0) * k) / steps, config.worldHeight);
+    field.walls[cellIndexAt(field, x, y)] = value;
+    // A diagonal line of cells would leak at the corners; make it two cells thick.
+    field.walls[cellIndexAt(field, wrap(x + field.cellWidth, config.worldWidth), y)] = value;
+  }
+}
+
+/** Strike a meteor at a chosen point and log it. */
+export function meteorAt(env: Environment, tick: number, target: EventTarget, x: number, y: number): void {
+  addLog(env, tick, `Meteor killed ${meteor(target, x, y)} creatures`);
+}
+
+/** Record an outbreak that began with `infected` creatures. */
+export function noteOutbreak(env: Environment, tick: number, infected: number): void {
+  if (infected > 0) env.plagueActive = true;
+  addLog(env, tick, `Plague broke out: ${infected} infected`);
 }
 
 /** Fade scent everywhere and let it seep into neighboring cells. */
@@ -225,13 +308,9 @@ export function triggerEvent(env: Environment, kind: EventKind, tick: number, ta
     else env.active.push({ kind, endTick: tick + length });
     addLog(env, tick, `${EVENT_LABELS[kind]} began`);
   } else if (kind === 'plague') {
-    const infected = plague(target);
-    if (infected > 0) env.plagueActive = true;
-    addLog(env, tick, `Plague broke out: ${infected} infected`);
+    noteOutbreak(env, tick, plague(target));
   } else if (kind === 'meteor') {
-    const x = rng.range(0, config.worldWidth);
-    const y = rng.range(0, config.worldHeight);
-    addLog(env, tick, `Meteor killed ${meteor(target, x, y)} creatures`);
+    meteorAt(env, tick, target, rng.range(0, config.worldWidth), rng.range(0, config.worldHeight));
   } else {
     wall(target);
     addLog(env, tick, 'A wall rose');
@@ -268,17 +347,11 @@ function meteor(target: EventTarget, x: number, y: number): number {
     }
   }
   let burned = 0;
-  for (let cy = 0; cy < field.rows; cy++) {
-    for (let cx = 0; cx < field.cols; cx++) {
-      const dx = wrappedDelta(x, (cx + 0.5) * field.cellWidth, config.worldWidth);
-      const dy = wrappedDelta(y, (cy + 0.5) * field.cellHeight, config.worldHeight);
-      if (dx * dx + dy * dy > r2) continue;
-      const cell = cy * field.cols + cx;
-      burned += field.energy[cell]! + field.meat[cell]!;
-      field.energy[cell] = 0;
-      field.meat[cell] = 0;
-    }
-  }
+  cellsWithin(field, config, x, y, config.meteorRadius, (cell) => {
+    burned += field.energy[cell]! + field.meat[cell]!;
+    field.energy[cell] = 0;
+    field.meat[cell] = 0;
+  });
   ledger.heatOut += burned;
   return struck;
 }
@@ -288,18 +361,9 @@ function wall(target: EventTarget): void {
   const { config, rng, field } = target;
   const length = Math.min(config.worldWidth, config.worldHeight) * rng.range(WALL_SPAN / 2, WALL_SPAN);
   const angle = rng.range(0, Math.PI);
-  const startX = rng.range(0, config.worldWidth);
-  const startY = rng.range(0, config.worldHeight);
-  // Step by half a cell so no cell along the line is skipped.
-  const stride = Math.min(field.cellWidth, field.cellHeight) / 2;
-  for (let d = 0; d <= length; d += stride) {
-    const x = (((startX + Math.cos(angle) * d) % config.worldWidth) + config.worldWidth) % config.worldWidth;
-    const y = (((startY + Math.sin(angle) * d) % config.worldHeight) + config.worldHeight) % config.worldHeight;
-    const cell = cellIndexAt(field, x, y);
-    field.walls[cell] = 1;
-    // A diagonal line of cells would leak at the corners; thicken it by one cell.
-    field.walls[cellIndexAt(field, (x + field.cellWidth) % config.worldWidth, y)] = 1;
-  }
+  const x = rng.range(0, config.worldWidth);
+  const y = rng.range(0, config.worldHeight);
+  wallLine(field, config, x, y, x + Math.cos(angle) * length, y + Math.sin(angle) * length, 1);
 }
 
 export function clearWalls(env: Environment, field: PlantField, tick: number): void {

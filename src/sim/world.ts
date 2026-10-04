@@ -35,7 +35,12 @@ import {
   createEnvironment,
   driftFertility,
   expireEvents,
+  applyFertility,
   maybeRandomEvent,
+  meteorAt,
+  noteOutbreak,
+  paintFertility,
+  wallLine,
   notePlagueOver,
   spreadScent,
   triggerEvent,
@@ -44,7 +49,7 @@ import {
   type EventKind,
   type EventTarget,
 } from './environment';
-import { wrap } from './geometry';
+import { wrap, wrappedDelta } from './geometry';
 import { createLedger, type EnergyLedger } from './ledger';
 import { Lineage } from './lineage';
 import {
@@ -146,7 +151,7 @@ export function createWorld(config: SimConfig): World {
     spawnFounder(world, rng.int(0, Math.floor(config.maxAge / 2)));
   }
   world.ledger.initial = totalEnergy(world);
-  classifySpecies(world.species, world.creatures, 0, config);
+  classifySpecies(world.species, world.creatures, world.lineage, 0, config);
   sampleHistory(world);
   return world;
 }
@@ -305,7 +310,7 @@ export function step(world: World): void {
   }
 
   if (world.tick % config.speciesInterval === 0) {
-    classifySpecies(world.species, creatures, world.tick, config);
+    classifySpecies(world.species, creatures, world.lineage, world.tick, config);
   }
   if (world.tick % world.history.interval === 0) sampleHistory(world);
 }
@@ -363,6 +368,44 @@ function eventTarget(world: World): EventTarget {
  */
 export function triggerWorldEvent(world: World, kind: EventKind): void {
   triggerEvent(world.environment, kind, world.tick, eventTarget(world));
+}
+
+/** Tools the user applies at a point, or along a drag, on the map. */
+export type ToolKind = 'meteor' | 'plague' | 'wall' | 'erase' | 'fertilise' | 'blight';
+
+/**
+ * Apply a hand tool. (x, y) is where the pointer is now; (fromX, fromY) is
+ * where it was at the previous step of a drag, or the same point for a click.
+ * As with events, creatures struck by a meteor die in the next tick.
+ */
+export function applyTool(
+  world: World,
+  tool: ToolKind,
+  x: number,
+  y: number,
+  fromX: number,
+  fromY: number,
+): void {
+  const { config, plants, environment: env, creatures } = world;
+  if (tool === 'meteor') {
+    meteorAt(env, world.tick, eventTarget(world), x, y);
+  } else if (tool === 'plague') {
+    const r2 = config.plagueToolRadius * config.plagueToolRadius;
+    let infected = 0;
+    for (let i = 0; i < creatures.count; i++) {
+      const dx = wrappedDelta(x, creatures.x[i]!, config.worldWidth);
+      const dy = wrappedDelta(y, creatures.y[i]!, config.worldHeight);
+      if (dx * dx + dy * dy > r2 || creatures.sick[i] !== 0) continue;
+      creatures.sick[i] = config.plagueDuration;
+      infected++;
+    }
+    noteOutbreak(env, world.tick, infected);
+  } else if (tool === 'wall' || tool === 'erase') {
+    wallLine(plants, config, fromX, fromY, x, y, tool === 'wall' ? 1 : 0);
+  } else {
+    paintFertility(env, plants, config, x, y, config.brushRadius, tool === 'fertilise' ? 1 : 0);
+    world.plantCapacityTotal = applyFertility(plants, config, world.ledger);
+  }
 }
 
 export function clearWorldWalls(world: World): void {

@@ -3,7 +3,8 @@
   import type uPlot from 'uplot';
   import { WorldRenderer } from '../render/renderer';
   import { defaultConfig } from '../sim/config';
-  import { EVENT_KINDS, EVENT_LABELS, type EventKind } from '../sim/environment';
+  import { EVENT_LABELS, type TimedEventKind } from '../sim/environment';
+  import type { ToolKind } from '../sim/world';
   import { SimClient } from '../worker/client';
   import type { HistoryData, Snapshot, Speed, TreeData } from '../worker/protocol';
   import Chart, { type ChartSeries } from './Chart.svelte';
@@ -27,14 +28,22 @@
     { label: 'Max', value: 'max' },
   ];
 
-  const EVENT_HINTS: Record<EventKind, string> = {
+  /** Events that affect the whole world at once. The rest are applied by hand with tools. */
+  const CLIMATE_EVENTS: TimedEventKind[] = ['drought', 'iceAge', 'foodBoom'];
+  const EVENT_HINTS: Record<TimedEventKind, string> = {
     drought: 'Plants grow at 15% of normal for 3,000 ticks',
     iceAge: 'Plants grow at 40% and living costs 40% more, for 8,000 ticks',
     foodBoom: 'Plants grow three times as fast for 3,000 ticks',
-    plague: 'Infects a few creatures; it spreads by contact, weakens the sick and kills some',
-    meteor: 'Kills everything and burns the ground within a circle at a random spot',
-    wall: 'Raises a wall that creatures cannot cross, at a random place',
   };
+
+  const TOOLS: { id: ToolKind; label: string; hint: string }[] = [
+    { id: 'meteor', label: 'Meteor', hint: 'Click to strike: kills everything and burns the ground inside the ring' },
+    { id: 'plague', label: 'Plague', hint: 'Click to infect the creatures inside the ring; it then spreads by contact' },
+    { id: 'wall', label: 'Wall', hint: 'Drag to draw a wall that creatures cannot cross' },
+    { id: 'erase', label: 'Erase wall', hint: 'Drag over a wall to remove that part of it' },
+    { id: 'fertilise', label: 'Fertilise', hint: 'Drag to make land fully fertile; plants then grow there' },
+    { id: 'blight', label: 'Blight', hint: 'Drag to make land barren; plants there die' },
+  ];
 
   const POPULATION_SERIES: ChartSeries[] = [
     { label: 'Creatures', color: '#e8c468' },
@@ -69,6 +78,8 @@
   let drawWorld = $state(true);
   let follow = $state(false);
   let errorMessage = $state('');
+  /** The tool in hand, or null for plain selecting and panning. */
+  let tool = $state<ToolKind | null>(null);
   /** Id of the creature the panel last switched to, so a new pick opens the Creature tab once. */
   let shownCreature = 0;
 
@@ -110,8 +121,14 @@
       });
       client.init({ ...defaultConfig, seed });
       r.onPick = (x, y, radius) => client?.pick(x, y, radius);
+      r.onTool = (kind, x, y, fromX, fromY) => client?.applyTool(kind, x, y, fromX, fromY);
     });
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') pickTool(null);
+    };
+    window.addEventListener('keydown', onKey);
     return () => {
+      window.removeEventListener('keydown', onKey);
       disposed = true;
       client?.destroy();
       renderer?.destroy();
@@ -126,6 +143,11 @@
   function restart(event: SubmitEvent) {
     event.preventDefault();
     client?.init({ ...defaultConfig, seed });
+  }
+
+  function pickTool(next: ToolKind | null) {
+    tool = next;
+    renderer?.setTool(next);
   }
 
   function applyViewOptions() {
@@ -221,16 +243,32 @@
   </header>
 
   <div class="events">
-    <span class="label">Events</span>
-    <div class="group">
-      {#each EVENT_KINDS as kind (kind)}
-        <button title={EVENT_HINTS[kind]} onclick={() => client?.triggerEvent(kind)} disabled={!snapshot}>
-          {EVENT_LABELS[kind]}
+    <span class="label" title="Pick a tool, then click or drag on the world. Press Esc to put it down.">Tools</span>
+    <div class="group" role="group" aria-label="Tools">
+      <button
+        class:active={tool === null}
+        title="Drag to move the view, click a creature to inspect it"
+        onclick={() => pickTool(null)}
+      >
+        Select
+      </button>
+      {#each TOOLS as t (t.id)}
+        <button class:active={tool === t.id} title={t.hint} onclick={() => pickTool(t.id)} disabled={!snapshot}>
+          {t.label}
         </button>
       {/each}
       <button title="Remove every wall" onclick={() => client?.clearWalls()} disabled={!snapshot}>
         Clear walls
       </button>
+    </div>
+
+    <span class="label view">Climate</span>
+    <div class="group">
+      {#each CLIMATE_EVENTS as kind (kind)}
+        <button title={EVENT_HINTS[kind]} onclick={() => client?.triggerEvent(kind)} disabled={!snapshot}>
+          {EVENT_LABELS[kind]}
+        </button>
+      {/each}
     </div>
     <label title="Let events strike on their own, about once every 15,000 ticks">
       <input
@@ -265,7 +303,7 @@
   {/if}
 
   <div class="main">
-    <div class="world" class:paused-drawing={!drawWorld} bind:this={host}>
+    <div class="world" class:paused-drawing={!drawWorld} class:tool={tool !== null} bind:this={host}>
       {#if !drawWorld}
         <div class="notice">Drawing is off. The world is still running; tick "Draw world" to see it.</div>
       {/if}
@@ -330,7 +368,7 @@
           </div>
         </dl>
 
-        <LineageTree {tree} />
+        <LineageTree {tree} bySpecies={colorBySpecies} />
         <SpeciesList species={snapshot?.species ?? []} tick={snapshot?.tick ?? 0} />
         <Chart
           title="Number of species"
@@ -402,6 +440,7 @@
 
   .group {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 4px;
   }
@@ -461,6 +500,11 @@
 
   .world:active {
     cursor: grabbing;
+  }
+
+  .world.tool,
+  .world.tool:active {
+    cursor: crosshair;
   }
 
   .world.paused-drawing :global(canvas) {

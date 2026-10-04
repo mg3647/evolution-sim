@@ -1,4 +1,5 @@
 import { Application, Container, Graphics, Sprite, Texture } from 'pixi.js';
+import type { ToolKind } from '../sim/world';
 import { CREATURE_STRIDE, type Snapshot } from '../worker/protocol';
 
 const BACKGROUND_COLOR = 0x0b0f14;
@@ -32,6 +33,17 @@ const PICK_RADIUS = 14;
 /** A press that moves less than this many pixels is a click, not a drag. */
 const CLICK_SLOP = 4;
 const SELECTION_COLOR = 0xffffff;
+/** Tools that keep applying as the pointer is dragged; the others apply once per click. */
+const DRAG_TOOLS: ReadonlySet<ToolKind> = new Set(['wall', 'erase', 'fertilise', 'blight']);
+/** Colour of the outline showing where each tool would act. */
+const TOOL_COLORS: Record<ToolKind, number> = {
+  meteor: 0xff7a3c,
+  plague: 0xb6ff3c,
+  wall: 0xc8ced6,
+  erase: 0xc8ced6,
+  fertilise: 0x5fd35f,
+  blight: 0xb08a5a,
+};
 /** Ring drawn around creatures infected with the plague. */
 const SICK_COLOR = 0xb6ff3c;
 /** Smallest radius a creature is drawn at, in screen pixels. */
@@ -86,6 +98,8 @@ function createCreatureTexture(pointed: boolean): Texture {
 export class WorldRenderer {
   /** Called with a world position and radius when the user clicks the world. */
   onPick: ((x: number, y: number, radius: number) => void) | null = null;
+  /** Called when the tool in hand is applied: at a point, or along a drag from one point to the next. */
+  onTool: ((tool: ToolKind, x: number, y: number, fromX: number, fromY: number) => void) | null = null;
   /** Whether to tint the ground with the scent creatures have left. */
   showScent = false;
   /** Colour creatures by their inherited hue, or by the species they are grouped into. */
@@ -99,6 +113,9 @@ export class WorldRenderer {
   private overlay = new Graphics();
   private creatureLayer = new Container();
   private selectionRing = new Graphics();
+  private toolCursor = new Graphics();
+  private tool: ToolKind | null = null;
+  private lastToolPoint = { x: 0, y: 0 };
   private creatureSprites: Sprite[] = [];
   private plantEaterTexture = Texture.EMPTY;
   private meatEaterTexture = Texture.EMPTY;
@@ -124,7 +141,13 @@ export class WorldRenderer {
     host.appendChild(this.app.canvas);
     this.plantEaterTexture = createCreatureTexture(false);
     this.meatEaterTexture = createCreatureTexture(true);
-    this.camera.addChild(this.plantSprite, this.overlay, this.creatureLayer, this.selectionRing);
+    this.camera.addChild(
+      this.plantSprite,
+      this.overlay,
+      this.creatureLayer,
+      this.selectionRing,
+      this.toolCursor,
+    );
     this.app.stage.addChild(this.camera);
     this.attachCameraControls(this.app.canvas);
     // Keep the world fitted through window resizes until the user moves the camera.
@@ -293,14 +316,62 @@ export class WorldRenderer {
     }
   }
 
+  /** Pick up a tool, or put it down with null. */
+  setTool(tool: ToolKind | null): void {
+    this.tool = tool;
+    this.toolCursor.clear();
+  }
+
+  /** Outline the area the tool in hand would affect at a world position. */
+  private drawToolCursor(x: number, y: number): void {
+    const config = this.lastSnapshot?.config;
+    const cursor = this.toolCursor;
+    cursor.clear();
+    if (!config || !this.tool) return;
+    const radius =
+      this.tool === 'meteor'
+        ? config.meteorRadius
+        : this.tool === 'plague'
+          ? config.plagueToolRadius
+          : this.tool === 'wall' || this.tool === 'erase'
+            ? config.plantCellSize
+            : config.brushRadius;
+    cursor.circle(x, y, radius).stroke({ color: TOOL_COLORS[this.tool], pixelLine: true });
+  }
+
   private attachCameraControls(canvas: HTMLCanvasElement): void {
+    /** World position under a pointer event. */
+    const worldPoint = (event: PointerEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const zoom = this.camera.scale.x;
+      return {
+        x: (event.clientX - rect.left - this.camera.position.x) / zoom,
+        y: (event.clientY - rect.top - this.camera.position.y) / zoom,
+      };
+    };
+
     canvas.addEventListener('pointerdown', (event) => {
       this.dragging = true;
       this.lastPointer = { x: event.clientX, y: event.clientY };
       this.pressPoint = { x: event.clientX, y: event.clientY };
       canvas.setPointerCapture(event.pointerId);
+      if (this.tool) {
+        const point = worldPoint(event);
+        this.lastToolPoint = point;
+        this.onTool?.(this.tool, point.x, point.y, point.x, point.y);
+      }
     });
     canvas.addEventListener('pointermove', (event) => {
+      if (this.tool) {
+        // With a tool in hand, a drag applies the tool instead of moving the camera.
+        const point = worldPoint(event);
+        this.drawToolCursor(point.x, point.y);
+        if (this.dragging && DRAG_TOOLS.has(this.tool)) {
+          this.onTool?.(this.tool, point.x, point.y, this.lastToolPoint.x, this.lastToolPoint.y);
+          this.lastToolPoint = point;
+        }
+        return;
+      }
       if (!this.dragging) return;
       this.camera.position.x += event.clientX - this.lastPointer.x;
       this.camera.position.y += event.clientY - this.lastPointer.y;
@@ -315,17 +386,14 @@ export class WorldRenderer {
     };
     canvas.addEventListener('pointerup', (event) => {
       endDrag(event);
+      if (this.tool) return;
       const moved = Math.hypot(event.clientX - this.pressPoint.x, event.clientY - this.pressPoint.y);
       if (moved > CLICK_SLOP) return;
-      const rect = canvas.getBoundingClientRect();
-      const zoom = this.camera.scale.x;
-      this.onPick?.(
-        (event.clientX - rect.left - this.camera.position.x) / zoom,
-        (event.clientY - rect.top - this.camera.position.y) / zoom,
-        PICK_RADIUS / zoom,
-      );
+      const point = worldPoint(event);
+      this.onPick?.(point.x, point.y, PICK_RADIUS / this.camera.scale.x);
     });
     canvas.addEventListener('pointercancel', endDrag);
+    canvas.addEventListener('pointerleave', () => this.toolCursor.clear());
 
     canvas.addEventListener(
       'wheel',

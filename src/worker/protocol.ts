@@ -1,5 +1,6 @@
 import type { SimConfig } from '../sim/config';
 import type { EventKind, LogEntry, TimedEventKind } from '../sim/environment';
+import type { ToolKind } from '../sim/world';
 
 /** Speed multiplier over the configured tick rate, or 'max' for unthrottled. */
 export type Speed = number | 'max';
@@ -13,6 +14,8 @@ export type ToWorker =
   /** Select the creature nearest a world position within `radius`, or none. */
   | { type: 'pick'; x: number; y: number; radius: number }
   | { type: 'event'; kind: EventKind }
+  /** Apply a hand tool at (x, y), or along a drag from (fromX, fromY) to it. */
+  | { type: 'tool'; tool: ToolKind; x: number; y: number; fromX: number; fromY: number }
   | { type: 'clearWalls' }
   | { type: 'setRandomEvents'; enabled: boolean }
   /** With drawing off, snapshots carry numbers only, sent less often. */
@@ -172,6 +175,8 @@ export interface TreeData {
   /** Tick of death, or -1 if alive. */
   deathTick: Float64Array;
   hue: Float32Array;
+  /** Species id, or 0 if it has not been grouped yet. */
+  species: Uint32Array;
 }
 
 export type FromWorker =

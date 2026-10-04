@@ -1,5 +1,6 @@
 import type { SimConfig } from '../sim/config';
 import type { EventKind } from '../sim/environment';
+import type { ToolKind } from '../sim/world';
 import type { FromWorker, HistoryData, Snapshot, Speed, ToWorker, TreeData } from './protocol';
 
 export interface SimClientHandlers {
@@ -58,6 +59,11 @@ export class SimClient {
 
   triggerEvent(kind: EventKind): void {
     this.send({ type: 'event', kind });
+  }
+
+  /** Apply a hand tool at (x, y), or along a drag from (fromX, fromY) to it. */
+  applyTool(tool: ToolKind, x: number, y: number, fromX: number, fromY: number): void {
+    this.send({ type: 'tool', tool, x, y, fromX, fromY });
   }
 
   clearWalls(): void {
