@@ -16,13 +16,6 @@
   import SettingsPanel from './SettingsPanel.svelte';
   import SpeciesList from './SpeciesList.svelte';
 
-  type Tab = 'world' | 'creature' | 'evolution' | 'settings';
-  const TABS: { id: Tab; label: string }[] = [
-    { id: 'world', label: 'World' },
-    { id: 'creature', label: 'Creature' },
-    { id: 'evolution', label: 'Evolution' },
-    { id: 'settings', label: 'Settings' },
-  ];
 
   const SPEEDS: { label: string; value: Speed }[] = [
     { label: '1x', value: 1 },
@@ -81,7 +74,6 @@
   let settings = $state<SimConfig>({ ...defaultConfig });
   /** Set when a world is loaded from a file, so the settings follow the file's. */
   let adoptLoadedSettings = false;
-  let tab = $state<Tab>('world');
   let showScent = $state(false);
   let colorBySpecies = $state(false);
   let drawWorld = $state(true);
@@ -91,6 +83,17 @@
   let tool = $state<ToolKind | null>(null);
   /** Id of the creature the panel last switched to, so a new pick opens the Creature tab once. */
   let shownCreature = 0;
+  /** Panel width in pixels for U1 (resizable panel) */
+  let panelWidth = $state<number>(380);
+  let isResizing = $state(false);
+  /** Track which sections are expanded in the foldable panel (U2) */
+  let expandedSections = $state<Record<string, boolean>>({
+    world: true,
+    creature: true,
+    settings: true,
+    evolution: true,
+    charts: true,
+  });
 
   const populationData = $derived<uPlot.AlignedData | null>(
     history && [history.tick, history.population, history.plantPercent],
@@ -127,7 +130,7 @@
           }
           r.update(s);
           const picked = s.selected?.id ?? 0;
-          if (picked !== 0 && picked !== shownCreature) tab = 'creature';
+          if (picked !== 0 && picked !== shownCreature) expandedSections.creature = true;
           shownCreature = picked;
         },
         onHistory: (h) => (history = h),
@@ -219,6 +222,37 @@
   function decimal(value: number | undefined): string {
     return value === undefined ? '-' : value.toFixed(2);
   }
+
+  function startResizing(e: MouseEvent) {
+    if ((e.target as HTMLElement).classList.contains('resize-handle')) {
+      isResizing = true;
+    }
+  }
+
+  function stopResizing() {
+    isResizing = false;
+  }
+
+  function onMouseMove(e: MouseEvent) {
+    if (!isResizing) return;
+    // Calculate new panel width from mouse position (from right edge)
+    const newWidth = window.innerWidth - e.clientX;
+    // Constrain between 300px and 900px
+    panelWidth = Math.max(300, Math.min(900, newWidth));
+  }
+
+  function toggleSection(section: string) {
+    expandedSections[section] = !expandedSections[section];
+  }
+
+  onMount(() => {
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', stopResizing);
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', stopResizing);
+    };
+  });
 </script>
 
 <div class="layout">
@@ -294,37 +328,43 @@
       </button>
     </div>
 
-    <span class="label view">Climate</span>
-    <div class="group">
-      {#each CLIMATE_EVENTS as kind (kind)}
-        <button title={EVENT_HINTS[kind]} onclick={() => client?.triggerEvent(kind)} disabled={!snapshot}>
-          {EVENT_LABELS[kind]}
-        </button>
-      {/each}
-    </div>
-    <label title="Let events strike on their own, about once every 15,000 ticks">
-      <input
-        type="checkbox"
-        checked={snapshot?.environment.randomEvents ?? false}
-        onchange={(event) => client?.setRandomEvents(event.currentTarget.checked)}
-        disabled={!snapshot}
-      />
-      Random events
-    </label>
+    <details class="menu" open>
+      <summary class="label view">Climate</summary>
+      <div class="group" style="padding: 6px 0;">
+        {#each CLIMATE_EVENTS as kind (kind)}
+          <button title={EVENT_HINTS[kind]} onclick={() => client?.triggerEvent(kind)} disabled={!snapshot}>
+            {EVENT_LABELS[kind]}
+          </button>
+        {/each}
+      </div>
+      <label title="Let events strike on their own, about once every 15,000 ticks">
+        <input
+          type="checkbox"
+          checked={snapshot?.environment.randomEvents ?? false}
+          onchange={(event) => client?.setRandomEvents(event.currentTarget.checked)}
+          disabled={!snapshot}
+        />
+        Random events
+      </label>
+    </details>
 
-    <span class="label view">View</span>
-    <label title="Tint the ground purple where creatures have left scent">
-      <input type="checkbox" bind:checked={showScent} onchange={applyViewOptions} />
-      Show scent
-    </label>
-    <label title="Colour creatures by the species they are grouped into, instead of by family colour">
-      <input type="checkbox" bind:checked={colorBySpecies} onchange={applyViewOptions} />
-      Colour by species
-    </label>
-    <label title="Untick to stop drawing the world while it runs. The charts and numbers keep updating.">
-      <input type="checkbox" bind:checked={drawWorld} onchange={toggleDrawing} />
-      Draw world
-    </label>
+    <details class="menu" open>
+      <summary class="label view">View</summary>
+      <div style="padding: 6px 0;">
+        <label title="Tint the ground purple where creatures have left scent">
+          <input type="checkbox" bind:checked={showScent} onchange={applyViewOptions} />
+          Show scent
+        </label>
+        <label title="Colour creatures by the species they are grouped into, instead of by family colour">
+          <input type="checkbox" bind:checked={colorBySpecies} onchange={applyViewOptions} />
+          Colour by species
+        </label>
+        <label title="Untick to stop drawing the world while it runs. The charts and numbers keep updating.">
+          <input type="checkbox" bind:checked={drawWorld} onchange={toggleDrawing} />
+          Draw world
+        </label>
+      </div>
+    </details>
   </div>
 
   {#if errorMessage}
@@ -341,16 +381,14 @@
       {/if}
     </div>
 
-    <aside>
-      <div class="tabs" role="tablist">
-        {#each TABS as t (t.id)}
-          <button role="tab" aria-selected={tab === t.id} class:active={tab === t.id} onclick={() => (tab = t.id)}>
-            {t.label}
-          </button>
-        {/each}
-      </div>
-
-      {#if tab === 'world'}
+    <button class="resize-handle" onmousedown={startResizing} type="button" title="Drag to resize the panel" aria-label="Resize panel"></button>
+    <aside style={`width: ${panelWidth}px`}>
+      <!-- World Stats Section -->
+      <div class="section">
+        <button class="section-header" onclick={() => toggleSection('world')} type="button">
+          <span class="toggle">{expandedSections.world ? '▼' : '▶'}</span> World
+        </button>
+        {#if expandedSections.world !== undefined ? expandedSections.world : true}
         <dl>
           <div><dt>Creatures</dt><dd>{count(snapshot?.population)}</dd></div>
           <div><dt>Plants</dt><dd>{snapshot ? Math.round(snapshot.plantFill * 100) : '-'}%</dd></div>
@@ -391,24 +429,40 @@
           </div>
         </dl>
 
-        <EnvironmentPanel environment={snapshot?.environment ?? null} />
+          <EnvironmentPanel environment={snapshot?.environment ?? null} />
+        {/if}
+      </div>
 
-        <Chart title="Population" series={POPULATION_SERIES} data={populationData} />
-        <Chart
-          title="Diet"
-          note="How many creatures digest plants better (drawn as discs) and how many digest meat better (drawn as pointed shapes). Red ground is meat left by the dead."
-          series={DIET_SERIES}
-          data={dietData}
-        />
-      {:else if tab === 'creature'}
-        <label class="follow" title="Keep the selected creature in the middle of the view">
-          <input type="checkbox" bind:checked={follow} onchange={applyViewOptions} />
-          Follow the selected creature
-        </label>
-        <Inspector creature={snapshot?.selected ?? null} />
-      {:else if tab === 'settings'}
-        <SettingsPanel config={settings} onChange={changeSetting} onPreset={applyPreset} />
-      {:else}
+      <!-- Creature Inspector Section -->
+      <div class="section">
+        <button class="section-header" onclick={() => toggleSection('creature')} type="button">
+          <span class="toggle">{expandedSections.creature ? '▼' : '▶'}</span> Creature
+        </button>
+        {#if expandedSections.creature}
+          <label class="follow" title="Keep the selected creature in the middle of the view">
+            <input type="checkbox" bind:checked={follow} onchange={applyViewOptions} />
+            Follow the selected creature
+          </label>
+          <Inspector creature={snapshot?.selected ?? null} />
+        {/if}
+      </div>
+
+      <!-- Settings Section -->
+      <div class="section">
+        <button class="section-header" onclick={() => toggleSection('settings')} type="button">
+          <span class="toggle">{expandedSections.settings ? '▼' : '▶'}</span> Settings
+        </button>
+        {#if expandedSections.settings}
+          <SettingsPanel config={settings} onChange={changeSetting} onPreset={applyPreset} />
+        {/if}
+      </div>
+
+      <!-- Evolution Stats Section -->
+      <div class="section">
+        <button class="section-header" onclick={() => toggleSection('evolution')} type="button">
+          <span class="toggle">{expandedSections.evolution ? '▼' : '▶'}</span> Evolution
+        </button>
+        {#if expandedSections.evolution}
         <dl>
           <div><dt>Mean size</dt><dd>{decimal(snapshot?.meanSize)}</dd></div>
           <div><dt>Mean speed</dt><dd>{decimal(snapshot?.meanSpeed)}</dd></div>
@@ -419,28 +473,45 @@
           </div>
         </dl>
 
-        <LineageTree {tree} bySpecies={colorBySpecies} />
-        <SpeciesList species={snapshot?.species ?? []} tick={snapshot?.tick ?? 0} />
-        <BrainCompare groups={profiles} />
-        <Chart
-          title="Number of species"
-          note="Rises when families drift apart, falls when a species dies out."
-          series={SPECIES_SERIES}
-          data={speciesData}
-        />
-        <Chart
-          title="Traits"
-          note="Average body genes. 1 is what the first generation starts with."
-          series={TRAIT_SERIES}
-          data={traitData}
-        />
-        <Chart
-          title="Brains"
-          note="Average brain wiring. Links are rules connecting a sense to an action; hidden neurons combine senses. Both cost energy, so brains grow only when the extra wiring pays for itself."
-          series={BRAIN_SERIES}
-          data={brainData}
-        />
-      {/if}
+          <LineageTree {tree} bySpecies={colorBySpecies} />
+          <SpeciesList species={snapshot?.species ?? []} tick={snapshot?.tick ?? 0} />
+          <BrainCompare groups={profiles} />
+        {/if}
+      </div>
+
+      <!-- Charts Section -->
+      <div class="section">
+        <button class="section-header" onclick={() => toggleSection('charts')} type="button">
+          <span class="toggle">{expandedSections.charts ? '▼' : '▶'}</span> Charts
+        </button>
+        {#if expandedSections.charts}
+          <Chart title="Population" series={POPULATION_SERIES} data={populationData} />
+          <Chart
+            title="Diet"
+            note="How many creatures digest plants better (drawn as discs) and how many digest meat better (drawn as pointed shapes). Red ground is meat left by the dead."
+            series={DIET_SERIES}
+            data={dietData}
+          />
+          <Chart
+            title="Number of species"
+            note="Rises when families drift apart, falls when a species dies out."
+            series={SPECIES_SERIES}
+            data={speciesData}
+          />
+          <Chart
+            title="Traits"
+            note="Average body genes. 1 is what the first generation starts with."
+            series={TRAIT_SERIES}
+            data={traitData}
+          />
+          <Chart
+            title="Brains"
+            note="Average brain wiring. Links are rules connecting a sense to an action; hidden neurons combine senses. Both cost energy, so brains grow only when the extra wiring pays for itself."
+            series={BRAIN_SERIES}
+            data={brainData}
+          />
+        {/if}
+      </div>
     </aside>
   </div>
 </div>
@@ -577,33 +648,90 @@
     pointer-events: none;
   }
 
+  .resize-handle {
+    width: 8px;
+    flex-shrink: 0;
+    cursor: col-resize;
+    background: transparent;
+    border: none;
+    border-left: 1px solid var(--border);
+    user-select: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .resize-handle:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .resize-handle:focus {
+    outline: 2px solid var(--border);
+    outline-offset: -1px;
+  }
+
   aside {
-    width: 340px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    padding: 12px;
+    gap: 0;
+    padding: 0;
     overflow-y: auto;
     background: var(--panel);
     border-left: 1px solid var(--border);
+    max-width: 1200px;
   }
 
-  /* The tabs stay at the top of the panel while its contents scroll beneath. */
-  .tabs {
-    position: sticky;
-    top: -12px;
-    z-index: 2;
-    display: flex;
-    gap: 4px;
-    margin: -12px -12px -8px;
-    padding: 12px 12px 8px;
-    background: var(--panel);
+  .section {
     border-bottom: 1px solid var(--border);
   }
 
-  .tabs button {
-    flex: 1;
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    padding: 12px;
+    width: 100%;
+    cursor: pointer;
+    background: var(--panel);
+    border: none;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    user-select: none;
+    transition: background 0.2s;
+    text-align: left;
+  }
+
+  .section-header:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .section-header:focus {
+    outline: 2px solid var(--border);
+    outline-offset: -1px;
+  }
+
+  .toggle {
+    display: inline-block;
+    width: 16px;
+    text-align: center;
+    font-size: 11px;
+  }
+
+  .section > :not(.section-header) {
+    padding: 0 12px;
+  }
+
+  .section > :first-of-type:not(.section-header) {
+    padding-top: 12px;
+  }
+
+  .section > :last-child:not(.section-header) {
+    padding-bottom: 12px;
   }
 
   dl {
@@ -629,9 +757,30 @@
     font-variant-numeric: tabular-nums;
   }
 
+  .menu {
+    padding: 6px 0;
+    border: none;
+  }
+
+  .menu summary {
+    display: list-item;
+    cursor: pointer;
+    padding: 6px 0;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .menu[open] summary {
+    margin-bottom: 6px;
+  }
+
   @media (max-width: 800px) {
     .main {
       flex-direction: column;
+    }
+
+    .resize-handle {
+      display: none;
     }
 
     aside {
