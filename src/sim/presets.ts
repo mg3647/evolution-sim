@@ -148,6 +148,24 @@ export const PRESETS: Preset[] = [
     overrides: { plantCapacity: 16, seasonStrength: 0.8, seasonLength: 9000, fertilityDriftPeriod: 30000 },
   },
   {
+    id: 'dry',
+    label: 'Dry land',
+    description: 'No lakes or river, so no thirst. The world as it was before water.',
+    overrides: { waterShare: 0 },
+  },
+  {
+    id: 'wetlands',
+    label: 'Wetlands',
+    description: 'Nearly a third of the map is water, with rich land along every shore.',
+    overrides: { waterShare: 0.3, moistureBoost: 0.7 },
+  },
+  {
+    id: 'dark',
+    label: 'Long dark nights',
+    description: 'Days twice as long, and creatures see only a fifth as far at midnight.',
+    overrides: { dayLength: 1200, nightVision: 0.2 },
+  },
+  {
     id: 'chaos',
     label: 'Chaos',
     description: 'Random droughts, plagues, meteors and walls every few thousand ticks.',

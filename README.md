@@ -3,7 +3,10 @@
 A 2D world of creatures whose bodies and brains evolve under natural selection
 alone: no fitness score, just a closed energy economy. Runs in the browser.
 
-Status: all eight milestones of the v1 plan are built. Plants regrow on a fertility map. Creatures see with
+Status: v2. Creatures have 49 senses and 7 actions: besides what is below,
+they see what others eat, whether they are approaching or hurt, feel what is
+behind them, crowding and pain, hear and make calls, give energy to one
+another, and see less far at night. Plants regrow on a fertility map. Creatures see with
 three vision rays, decide with a small neural net whose wiring is inherited
 and mutated, eat, pay energy costs, reproduce and die. Bodies and brains
 evolve. Creatures can bite each other, the dead leave meat, and a diet gene
