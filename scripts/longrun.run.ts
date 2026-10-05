@@ -17,6 +17,7 @@
  *   CHANGE     JSON of config changes, e.g. {"socialSenses":false}
  */
 import { it } from 'vitest';
+import { BIOME_COUNT, BIOME_LABELS } from '../src/sim/biomes';
 import { defaultConfig, type SimConfig } from '../src/sim/config';
 import { daylightAt } from '../src/sim/environment';
 import { cellIndexAt, groundHue, visibility } from '../src/sim/plants';
@@ -33,6 +34,8 @@ const change = JSON.parse(process.env.CHANGE ?? '{}') as Partial<SimConfig>;
 const SAMPLE = 500;
 /** A world counts as having hunters while at least this many creatures mainly eat meat. */
 const HUNTER_QUORUM = 10;
+/** A biome counts as holding creatures while at least this many stand in it. */
+const BIOME_QUORUM = 5;
 
 interface Summary {
   seed: string;
@@ -68,11 +71,11 @@ interface Summary {
   /** Mean fur gene overall. */
   meanFur: number;
   /**
-   * Creatures standing in cold, mild and hot regions (a region's own
-   * temperature below -1/3, between, and above 1/3): the share of the
-   * population there, and their mean fur and size.
+   * Per biome: its share of the land, the share of the population standing
+   * in it, the share of samples in which it held at least a few creatures,
+   * and those creatures' mean fur, size, speed and diet.
    */
-  zones: { share: number; fur: number; size: number }[];
+  biomes: { land: number; share: number; occupied: number; fur: number; size: number; speed: number; diet: number }[];
   ticksPerSecond: number;
 }
 
@@ -92,9 +95,14 @@ function run(seed: string): Summary {
   let dietSum = 0;
   let hiddenSum = 0;
   let furSum = 0;
-  const zoneCount = [0, 0, 0];
-  const zoneFur = [0, 0, 0];
-  const zoneSize = [0, 0, 0];
+  const zero = () => new Array<number>(BIOME_COUNT).fill(0);
+  const biomeCount = zero();
+  const biomeOccupied = zero();
+  const biomeLand = zero();
+  const biomeFur = zero();
+  const biomeSize = zero();
+  const biomeSpeed = zero();
+  const biomeDiet = zero();
   const started = performance.now();
 
   let callerSum = 0;
@@ -134,14 +142,19 @@ function run(seed: string): Summary {
     let diet = 0;
     let hidden = 0;
     let fur = 0;
+    const here = zero();
+    for (let cell = 0; cell < world.plants.biome.length; cell++) {
+      if (world.plants.water[cell] === 0) biomeLand[world.plants.biome[cell]!]!++;
+    }
     for (let i = 0; i < c.count; i++) {
       const cell = cellIndexAt(world.plants, c.x[i]!, c.y[i]!);
       const ground = groundHue(world.plants, cell, world.config);
-      const heat = world.plants.temperature[cell]!;
-      const zone = heat < -1 / 3 ? 0 : heat > 1 / 3 ? 2 : 1;
-      zoneCount[zone]!++;
-      zoneFur[zone]! += c.fur[i]!;
-      zoneSize[zone]! += c.size[i]!;
+      const biome = world.plants.biome[cell]!;
+      here[biome]!++;
+      biomeFur[biome]! += c.fur[i]!;
+      biomeSize[biome]! += c.size[i]!;
+      biomeSpeed[biome]! += c.speed[i]!;
+      biomeDiet[biome]! += c.diet[i]!;
       fur += c.fur[i]!;
       hidden += 1 - visibility(c.hue[i]!, ground, 1);
       if (c.diet[i]! > 0.5) hunters++;
@@ -157,6 +170,10 @@ function run(seed: string): Summary {
     dietSum += diet / Math.max(1, c.count);
     hiddenSum += hidden / Math.max(1, c.count);
     furSum += fur / Math.max(1, c.count);
+    for (let biome = 0; biome < BIOME_COUNT; biome++) {
+      biomeCount[biome]! += here[biome]!;
+      if (here[biome]! >= BIOME_QUORUM) biomeOccupied[biome]!++;
+    }
     if (trace > 0 && tick % trace === 0) {
       console.log(
         `  ${seed} t=${tick} pop=${c.count} hunters=${hunters} species=${world.species.species.length} killed=${world.deaths.killed}`,
@@ -189,10 +206,14 @@ function run(seed: string): Summary {
     meanDiet: dietSum / samples,
     hidden: hiddenSum / samples,
     meanFur: furSum / samples,
-    zones: zoneCount.map((count, zone) => ({
-      share: count / Math.max(1, zoneCount[0]! + zoneCount[1]! + zoneCount[2]!),
-      fur: zoneFur[zone]! / Math.max(1, count),
-      size: zoneSize[zone]! / Math.max(1, count),
+    biomes: biomeCount.map((count, biome) => ({
+      land: biomeLand[biome]! / Math.max(1, biomeLand.reduce((a, b) => a + b, 0)),
+      share: count / Math.max(1, biomeCount.reduce((a, b) => a + b, 0)),
+      occupied: biomeOccupied[biome]! / samples,
+      fur: biomeFur[biome]! / Math.max(1, count),
+      size: biomeSize[biome]! / Math.max(1, count),
+      speed: biomeSpeed[biome]! / Math.max(1, count),
+      diet: biomeDiet[biome]! / Math.max(1, count),
     })),
     ticksPerSecond: (ticks * 1000) / (performance.now() - started),
   };
@@ -224,9 +245,14 @@ it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
         `diet=${s.meanDiet.toFixed(2)}`,
         `hidden=${s.hidden.toFixed(2)}`,
         `fur=${s.meanFur.toFixed(2)}`,
-        `cold/mild/hot share=${s.zones.map((z) => percent(z.share)).join('/')} fur=${s.zones.map((z) => z.fur.toFixed(2)).join('/')} size=${s.zones.map((z) => z.size.toFixed(2)).join('/')}`,
+
         `tps=${Math.round(s.ticksPerSecond)}`,
       ].join(' '),
     );
+    for (const [k, b] of s.biomes.entries()) {
+      console.log(
+        `    ${BIOME_LABELS[k]!.padEnd(10)} land=${percent(b.land)} creatures=${percent(b.share)} occupied=${percent(b.occupied)} fur=${b.fur.toFixed(2)} size=${b.size.toFixed(2)} speed=${b.speed.toFixed(2)} diet=${b.diet.toFixed(2)}`,
+      );
+    }
   }
 });

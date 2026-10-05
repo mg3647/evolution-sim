@@ -239,8 +239,8 @@ export interface SimConfig {
 
   /**
    * How strongly temperature varies across the map and through the year and
-   * day. 0 turns temperature off: no heat or cold costs, and the temperature
-   * senses read zero.
+   * day. 0 turns temperature off: no heat or cold costs, the temperature
+   * senses read zero, and the whole map is plain grassland.
    */
   temperatureStrength: number;
   /** Rough width of the map's hot and cold regions, in world units. */
@@ -261,12 +261,25 @@ export interface SimConfig {
   sizeWarmth: number;
   /** Energy per tick a full coat of fur costs, as a share of the body's upkeep. */
   furCost: number;
+  /** How much moving flat out heats a body: felt as this much extra temperature at full thrust. */
+  exertionHeat: number;
+
+  /** Added to every place's own temperature: below zero for a colder world, above for a hotter one. */
+  climateShift: number;
+  /**
+   * A place counts as hot or cold, and so as desert, rainforest or tundra,
+   * when its own temperature is further than this from mild. Higher leaves
+   * more of the map as grassland and forest.
+   */
+  biomeTempThreshold: number;
+  /** Soil wetter than this grows forest (or rainforest where hot) instead of grassland (or desert). */
+  biomeWetThreshold: number;
 }
 
 export const defaultConfig: SimConfig = {
   seed: 'genesis',
-  worldWidth: 2000,
-  worldHeight: 2000,
+  worldWidth: 4000,
+  worldHeight: 4000,
   ticksPerSecond: 30,
 
   plantCellSize: 20,
@@ -284,7 +297,7 @@ export const defaultConfig: SimConfig = {
   swimSpeed: 0.5,
   swimCost: 1.5,
 
-  initialCreatures: 400,
+  initialCreatures: 1200,
   creatureStartEnergy: 40,
   creatureMaxEnergy: 100,
   creatureRadius: 5,
@@ -336,7 +349,7 @@ export const defaultConfig: SimConfig = {
   offspringShare: 0.5,
   birthCost: 0,
   minReproduceAge: 150,
-  maxCreatures: 5000,
+  maxCreatures: 10000,
   minPopulation: 20,
 
   minSize: 0.4,
@@ -404,4 +417,9 @@ export const defaultConfig: SimConfig = {
   furHeat: 0.4,
   sizeWarmth: 0.3,
   furCost: 0.15,
+  exertionHeat: 0.3,
+
+  climateShift: 0,
+  biomeTempThreshold: 0.35,
+  biomeWetThreshold: 0.55,
 };

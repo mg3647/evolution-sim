@@ -1,3 +1,4 @@
+import { BIOME_COUNT } from '../sim/biomes';
 import { enabledLinks, INPUT_COUNT, OUTPUT_COUNT } from '../sim/brain';
 import type { SimConfig } from '../sim/config';
 import { daylightAt } from '../sim/environment';
@@ -76,12 +77,8 @@ function pick(world: World, x: number, y: number, radius: number): void {
 function inspect(world: World, i: number): Inspection {
   const { creatures: c, config } = world;
   const brain = c.brain[i]!;
-  const temperature = temperatureAt(
-    world.plants,
-    cellIndexAt(world.plants, c.x[i]!, c.y[i]!),
-    world.climate.warmth,
-    config,
-  );
+  const cell = cellIndexAt(world.plants, c.x[i]!, c.y[i]!);
+  const temperature = temperatureAt(world.plants, cell, world.climate.warmth, config, world.climate.dayWarmth);
   return {
     index: i,
     id: c.id[i]!,
@@ -101,6 +98,7 @@ function inspect(world: World, i: number): Inspection {
     fur: c.fur[i]!,
     temperature,
     temperatureStress: temperatureStress(temperature, c.size[i]!, c.fur[i]!, config),
+    biome: world.plants.biome[cell]!,
     mutationRate: c.mutationRate[i]!,
     hiddenNeurons: brain.hiddenIds.length,
     links: enabledLinks(brain),
@@ -193,9 +191,10 @@ function sendSnapshot(now: number): void {
   const scent = new Uint8Array(cells);
   const temperature = new Uint8Array(cells);
   for (let i = 0; i < cells; i++) {
-    const heat = temperatureAt(p, i, world.climate.warmth, config);
+    const heat = temperatureAt(p, i, world.climate.warmth, config, world.climate.dayWarmth);
     temperature[i] = Math.max(0, Math.min(1, (heat + 1.5) / 3)) * 255;
-    plants[i] = (p.energy[i]! / config.plantCapacity) * 255;
+    // Rich biomes hold more than the plain capacity; they draw as fully grown.
+    plants[i] = Math.min(1, p.energy[i]! / config.plantCapacity) * 255;
     meat[i] = Math.min(1, p.meat[i]! / config.meatScale) * 255;
     scent[i] = Math.min(1, p.scent[i]!) * 255;
   }
@@ -226,6 +225,7 @@ function sendSnapshot(now: number): void {
     walls: rendering ? p.walls.slice() : new Uint8Array(0),
     water: rendering ? p.water.slice() : new Uint8Array(0),
     temperature,
+    biome: rendering ? p.biome.slice() : new Uint8Array(0),
     environment: {
       season: world.climate.season,
       yearFraction: config.seasonLength > 0 ? (world.tick % config.seasonLength) / config.seasonLength : 0,
@@ -365,7 +365,35 @@ function sendLab(): void {
     tally.hueY += Math.sin(c.hue[i]! * Math.PI * 2);
     tally.diet += c.diet[i]!;
   }
+  const land = new Array<number>(BIOME_COUNT).fill(0);
+  const { plants: p } = world;
+  for (let cell = 0; cell < p.biome.length; cell++) if (p.water[cell] === 0) land[p.biome[cell]!]!++;
+  const landTotal = Math.max(1, land.reduce((a, b) => a + b, 0));
+  const biomes = land.map((cells) => ({
+    land: cells / landTotal,
+    count: 0,
+    meanSize: 0,
+    meanSpeed: 0,
+    meanFur: 0,
+    meanDiet: 0,
+  }));
+  for (let i = 0; i < c.count; i++) {
+    const biome = biomes[p.biome[cellIndexAt(p, c.x[i]!, c.y[i]!)]!]!;
+    biome.count++;
+    biome.meanSize += c.size[i]!;
+    biome.meanSpeed += c.speed[i]!;
+    biome.meanFur += c.fur[i]!;
+    biome.meanDiet += c.diet[i]!;
+  }
+  for (const biome of biomes) {
+    const count = Math.max(1, biome.count);
+    biome.meanSize /= count;
+    biome.meanSpeed /= count;
+    biome.meanFur /= count;
+    biome.meanDiet /= count;
+  }
   const lab: LabData = {
+    biomes,
     tick: world.tick,
     population: c.count,
     foundersEver: world.config.initialCreatures + world.reseeded,

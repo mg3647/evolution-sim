@@ -8,6 +8,7 @@ import {
   Output,
   think,
 } from './brain';
+import { BIOME_TRAITS } from './biomes';
 import type { SimConfig } from './config';
 import {
   createCreatures,
@@ -24,6 +25,7 @@ import {
   founderGenes,
   maxEnergyFor,
   meatDigestion,
+  moveCostFor,
   mutateGenes,
   plantDigestion,
   senseCostFor,
@@ -173,7 +175,7 @@ export function createWorld(config: SimConfig): World {
     species: createSpeciesState(),
     infected: 0,
     plagueDeaths: 0,
-    climate: { season: 1, growth: 1, cost: 1, warmth: 0 },
+    climate: { season: 1, growth: 1, cost: 1, warmth: 0, dayWarmth: 0, bloom: 1 },
   };
 
   for (let i = 0; i < config.initialCreatures; i++) {
@@ -200,8 +202,9 @@ export function step(world: World): void {
   const climate = climateAt(env, world.tick, config);
   world.climate = climate;
   world.senses.warmth = climate.warmth;
+  world.senses.dayWarmth = climate.dayWarmth;
 
-  growPlants(plants, config.plantGrowthRate * climate.growth, config.plantBareGrowth, ledger);
+  growPlants(plants, config.plantGrowthRate * climate.growth, config.plantBareGrowth, ledger, climate.bloom);
   decayMeat(plants, config.meatDecayRate, ledger);
   spreadScent(env, plants, config);
   world.hash.build(creatures.x, creatures.y, creatures.count);
@@ -275,6 +278,7 @@ export function step(world: World): void {
     // any left over on plants, each as far as the diet allows. Moving fast
     // makes for a poor mouthful.
     const cell = cellIndexAt(plants, creatures.x[i]!, creatures.y[i]!);
+    const land = BIOME_TRAITS[plants.biome[cell]!]!;
     const maxEnergy = maxEnergyFor(size, config);
     let energy = creatures.energy[i]!;
     let mouthful = biteFor(size, config) * (1 - config.eatSlowdown * thrust);
@@ -290,13 +294,17 @@ export function step(world: World): void {
 
     // Water drains away with time and is topped up in or beside water.
     if (plants.hasWater) {
-      const hydration = creatures.hydration[i]! - config.thirstRate;
+      const hydration = creatures.hydration[i]! - config.thirstRate * land.thirst;
       creatures.hydration[i] = plants.shore[cell] === 1 ? Math.min(1, hydration + config.drinkRate) : hydration;
     }
 
     // Pay for body, movement, senses, brain, fighting and signalling, and for
     // being too hot or too cold; what is spent leaves as heat. An ice age
-    // makes everything cost more.
+    // makes everything cost more. Undergrowth makes moving cost more, and
+    // moving hard heats the body: bad in the heat, welcome in the cold.
+    const felt =
+      temperatureAt(plants, cell, climate.warmth, config, climate.dayWarmth) +
+      (config.temperatureStrength > 0 ? config.exertionHeat * thrust : 0);
     const cost =
       climate.cost *
       (sick ? config.plagueCost : 1) *
@@ -305,7 +313,8 @@ export function step(world: World): void {
         (attacking ? config.attackCost * size * size : 0) +
         (emitting ? config.scentCost : 0) +
         (calling ? config.callCost : 0) +
-        climateCostFor(temperatureAt(plants, cell, climate.warmth, config), size, creatures.fur[i]!, config) +
+        (land.moveCost - 1) * moveCostFor(size, speed, thrust, config) +
+        climateCostFor(felt, size, creatures.fur[i]!, config) +
         senseCostFor(creatures.sensorRange[i]!, config) +
         brainCost(brain, config));
     const paid = Math.min(cost, energy);

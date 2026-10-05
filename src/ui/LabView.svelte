@@ -1,6 +1,8 @@
 <script lang="ts">
   import type uPlot from 'uplot';
   import { speciesHue } from '../render/renderer';
+  import { BIOME_GROUND } from '../render/renderer';
+  import { BIOME_LABELS } from '../sim/biomes';
   import { INPUT_COUNT, INPUT_LABELS, OUTPUT_LABELS } from '../sim/brain';
   import { HIDDEN_NODE } from '../sim/profile';
   import type { HistoryData, LabData, ProfileGroup } from '../worker/protocol';
@@ -145,6 +147,49 @@
             {/each}
           </tbody>
         </table>
+      {:else}
+        <p class="empty">No creatures yet.</p>
+      {/if}
+    </section>
+
+    <section class="card wide">
+      <h1>Traits by biome</h1>
+      <p class="teaches">
+        Adaptation, directly. Each row is the creatures standing in one biome right now. If evolution is fitting
+        bodies to places, tundra dwellers should be bigger and furrier than desert dwellers.
+      </p>
+      {#if lab && lab.population > 0}
+        <table class="biomes">
+          <thead>
+            <tr>
+              <th>Biome</th><th>Land</th><th>Creatures</th><th>Share</th><th></th>
+              <th>Size</th><th>Fur</th><th>Speed</th><th>Diet</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each lab.biomes as biome, k (k)}
+              {@const share = biome.count / lab.population}
+              <tr class:none={biome.count === 0}>
+                <td>
+                  <span class="swatch square" style="background: rgb({BIOME_GROUND[k]!.plant.join(',')})"></span>
+                  {BIOME_LABELS[k]}
+                </td>
+                <td>{percent(biome.land)}</td>
+                <td>{biome.count.toLocaleString()}</td>
+                <td>{percent(share)}</td>
+                <td class="bar"><span style="width: {share * 100}%"></span></td>
+                <td>{biome.count > 0 ? biome.meanSize.toFixed(2) : '-'}</td>
+                <td>{biome.count > 0 ? biome.meanFur.toFixed(2) : '-'}</td>
+                <td>{biome.count > 0 ? biome.meanSpeed.toFixed(2) : '-'}</td>
+                <td>{biome.count > 0 ? biome.meanDiet.toFixed(2) : '-'}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+        <p class="caption">
+          Land is each biome's share of the dry land; share is its part of the population. A biome holding far
+          less than its share of land is hard to live in. Diet runs from 0 (plants only) to 1 (meat only).
+        </p>
       {:else}
         <p class="empty">No creatures yet.</p>
       {/if}
@@ -393,6 +438,18 @@
 
   .bar {
     width: 40%;
+  }
+
+  .biomes .bar {
+    width: 22%;
+  }
+
+  .none td {
+    color: var(--muted);
+  }
+
+  .square {
+    border-radius: 2px;
   }
 
   .bar span {

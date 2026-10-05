@@ -15,7 +15,9 @@ hunting all emerge. A creature the colour of the ground under it can only be
 seen from close by, so colour is camouflage, and creatures see each other's
 actual colours. The map has hot and cold regions that warm and cool with the
 seasons and the hour: being too hot or too cold costs energy, big bodies and
-fur hold heat in, and creatures can feel the temperature. The world has lakes and a river: land beside water is
+fur hold heat in, and creatures can feel the temperature. Heat and wetness
+divide the 4,000 by 4,000 map into five biomes (grassland, forest, rainforest,
+desert, tundra), each with a perk and a drawback. The world has lakes and a river: land beside water is
 richer, and creatures must drink and can swim. It has seasons and slowly
 drifting fertility. You
 can trigger droughts, ice ages and food booms, and use hand tools to place
@@ -62,6 +64,10 @@ Set these environment variables to change what it runs:
 | `TICKS` | Ticks per seed | `200000` |
 | `TUNE` | JSON of setting overrides, e.g. `{"attackDamage":0.3}` | `{}` |
 | `TRACE` | Ticks between progress lines; 0 is off | `0` |
+| `FROM` | Measure only after this tick | `0` |
+
+Under each seed's line it prints one line per biome: its share of the land, the
+share of creatures standing in it, how often it held any, and their mean genes.
 
 ## Publishing
 

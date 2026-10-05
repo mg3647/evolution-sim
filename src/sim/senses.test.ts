@@ -10,7 +10,8 @@ import { SpatialHash } from './spatialHash';
 
 // A dry world in permanent daylight, so each test places only the water it
 // means to and sight does not change with the tick.
-// Camouflage is off except in the tests about it, so colours do not decide who is seen.
+// Camouflage is off except in the tests about it, so colours do not decide who is seen,
+// and temperature is off, so the land is all of one kind.
 const config: SimConfig = {
   ...defaultConfig,
   worldWidth: 400,
@@ -18,6 +19,7 @@ const config: SimConfig = {
   waterShare: 0,
   dayLength: 0,
   camouflage: 0,
+  temperatureStrength: 0,
 };
 const LEFT = 0;
 const AHEAD = 1;

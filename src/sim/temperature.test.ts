@@ -19,6 +19,9 @@ const config: SimConfig = {
   dayLength: 0,
   seasonLength: 0,
   camouflage: 0,
+  // Thresholds nothing reaches, so the land is all grassland unless a test says otherwise.
+  biomeTempThreshold: 2,
+  biomeWetThreshold: 2,
 };
 
 describe('the temperature map', () => {

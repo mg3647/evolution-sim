@@ -1,8 +1,13 @@
+import { BIOME_TRAITS, biomeFor } from './biomes';
 import type { SimConfig } from './config';
 import type { EnergyLedger } from './ledger';
 import { tileableNoise } from './noise';
 import type { Rng } from './rng';
 import { distanceToWater, generateWater } from './water';
+
+/** Per biome: whether plants grow in a seasonal bloom, and how fast meat rots. Looked up in the per-cell loops. */
+const SEASONAL_BLOOM = BIOME_TRAITS.map((traits) => traits.seasonalBloom);
+const MEAT_ROT = BIOME_TRAITS.map((traits) => traits.meatRot);
 
 /** Noise features across the world, coarse to fine. */
 const FERTILITY_PERIODS = [3, 6, 12];
@@ -38,6 +43,8 @@ export interface PlantField {
   moisture: Float32Array;
   /** How hot each cell is on average: -1 the coldest regions, 1 the hottest. Fixed for the life of the world. */
   temperature: Float32Array;
+  /** The kind of land each cell is; see biomes.ts. It follows temperature and wetness, so it shifts as fertility drifts. */
+  biome: Uint8Array;
 }
 
 /**
@@ -105,16 +112,46 @@ export function generateTemperature(config: SimConfig, rng: Rng, cols: number, r
   return temperature;
 }
 
-/** How hot a cell is right now: its own temperature plus the warmth of the season and hour. */
-export function temperatureAt(field: PlantField, cell: number, warmth: number, config: SimConfig): number {
-  return config.temperatureStrength * (field.temperature[cell]! + warmth);
+/**
+ * How hot a cell is right now: its own temperature plus the warmth of the
+ * season and hour. `dayWarmth` is the part of that warmth owed to the time
+ * of day; a biome with a stronger swing between day and night gets more of it.
+ */
+export function temperatureAt(
+  field: PlantField,
+  cell: number,
+  warmth: number,
+  config: SimConfig,
+  dayWarmth = 0,
+): number {
+  const swing = BIOME_TRAITS[field.biome[cell]!]!.daySwing;
+  return (
+    config.temperatureStrength *
+    (field.temperature[cell]! + config.climateShift + warmth + (swing - 1) * dayWarmth)
+  );
 }
 
-/** Most plant energy a cell can hold: none under water, more on moist ground near it. */
+/** How wet a cell's soil is, from 0 to 1: its fertility, plus the damp of any water nearby. */
+export function wetness(field: PlantField, cell: number, config: SimConfig): number {
+  return Math.min(1, field.fertility[cell]! + field.moisture[cell]! * config.moistureBoost);
+}
+
+/** Set every cell's biome from its temperature and wetness. With temperature off, all land is grassland. */
+export function classifyBiomes(field: PlantField, config: SimConfig): void {
+  if (config.temperatureStrength <= 0) {
+    field.biome.fill(0);
+    return;
+  }
+  const rules = { temperature: config.biomeTempThreshold, wetness: config.biomeWetThreshold };
+  for (let i = 0; i < field.biome.length; i++) {
+    field.biome[i] = biomeFor(field.temperature[i]! + config.climateShift, wetness(field, i, config), rules);
+  }
+}
+
+/** Most plant energy a cell can hold: none under water, more on moist ground near it, and more or less by biome. */
 export function cellCapacity(field: PlantField, cell: number, config: SimConfig): number {
   if (field.water[cell] === 1) return 0;
-  const richness = Math.min(1, field.fertility[cell]! + field.moisture[cell]! * config.moistureBoost);
-  return richness * config.plantCapacity;
+  return wetness(field, cell, config) * config.plantCapacity * BIOME_TRAITS[field.biome[cell]!]!.plants;
 }
 
 /** Create a field with every cell grown to capacity. */
@@ -135,7 +172,9 @@ export function createPlantField(config: SimConfig, rng: Rng): PlantField {
     walls: new Uint8Array(cols * rows),
     ...waterDerived(generateWater(config, rng, cols, rows), cols, rows, config),
     temperature: generateTemperature(config, rng, cols, rows),
+    biome: new Uint8Array(cols * rows),
   };
+  classifyBiomes(field, config);
   for (let i = 0; i < fertility.length; i++) field.capacity[i] = cellCapacity(field, i, config);
   field.energy.set(field.capacity);
   return field;
@@ -154,35 +193,40 @@ export function cellIndexAt(field: PlantField, x: number, y: number): number {
  * Growth is logistic: existing plants make more plants, so a half-eaten cell
  * recovers fastest and a cell grazed bare recovers slowly, at `bareGrowth`
  * times the full rate. Overgrazing therefore costs the grazers later.
+ *
+ * `bloom` multiplies growth in biomes whose plants grow in one seasonal
+ * bloom: zero in the cold half of the year, well above one at midsummer.
  */
 export function growPlants(
   field: PlantField,
   growthRate: number,
   bareGrowth: number,
   ledger: EnergyLedger,
+  bloom = 1,
 ): void {
-  const { energy, capacity } = field;
+  const { energy, capacity, biome } = field;
   let grown = 0;
   for (let i = 0; i < energy.length; i++) {
     const cap = capacity[i]!;
     if (cap === 0) continue;
     const current = energy[i]!;
     const cover = bareGrowth + (1 - bareGrowth) * (current / cap);
-    const growth = (cap - current) * growthRate * cover;
+    const rate = SEASONAL_BLOOM[biome[i]!] ? growthRate * bloom : growthRate;
+    const growth = (cap - current) * Math.min(1, rate) * cover;
     energy[i] = current + growth;
     grown += growth;
   }
   ledger.sunIn += grown;
 }
 
-/** Rot a fraction of all meat away as heat. */
+/** Rot a fraction of all meat away as heat. Meat keeps longer in some biomes. */
 export function decayMeat(field: PlantField, decayRate: number, ledger: EnergyLedger): void {
-  const { meat } = field;
+  const { meat, biome } = field;
   let rotted = 0;
   for (let i = 0; i < meat.length; i++) {
     const current = meat[i]!;
     if (current === 0) continue;
-    const loss = current * decayRate;
+    const loss = current * decayRate * MEAT_ROT[biome[i]!]!;
     meat[i] = current - loss;
     rotted += loss;
   }
@@ -202,22 +246,23 @@ export function totalPlantEnergy(field: PlantField): number {
 }
 
 /** Hues of the ground, on the same 0 to 1 colour wheel as creatures' hue genes. */
-const BARE_HUE = 0.08;
 const PLANT_HUE = 0.33;
 const WATER_HUE = 0.58;
 /** A creature whose hue is this far from the ground's, or further, is not hidden at all. */
 const CAMOUFLAGE_GAP = 0.2;
 
 /**
- * The colour of the ground in a cell, as a hue: brown when bare, green when
- * full of plants, red where meat lies, blue for water.
+ * The colour of the ground in a cell, as a hue: its biome's bare colour
+ * (brown, sand in desert, icy in tundra), green when full of plants, red
+ * where meat lies, blue for water.
  */
 export function groundHue(field: PlantField, cell: number, config: SimConfig): number {
   if (field.water[cell] === 1) return WATER_HUE;
   const cover = config.plantCapacity > 0 ? Math.min(1, field.energy[cell]! / config.plantCapacity) : 0;
   const meat = Math.min(1, field.meat[cell]! / config.meatScale);
   // Red is hue 0, so meat pulls the hue down towards it.
-  return (BARE_HUE + (PLANT_HUE - BARE_HUE) * cover) * (1 - meat);
+  const bare = BIOME_TRAITS[field.biome[cell]!]!.bareHue;
+  return (bare + (PLANT_HUE - bare) * cover) * (1 - meat);
 }
 
 /**

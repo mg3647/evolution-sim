@@ -4,7 +4,7 @@ import { createCreatures, type Creatures } from './creatures';
 import type { ActiveEvent, LogEntry } from './environment';
 import type { EnergyLedger } from './ledger';
 import { Lineage, type LineageNode } from './lineage';
-import { waterDerived } from './plants';
+import { classifyBiomes, waterDerived } from './plants';
 import { Rng, type RngState } from './rng';
 import { Senses } from './senses';
 import { createSoundField } from './sound';
@@ -19,7 +19,7 @@ import type { World } from './world';
  */
 
 /** Bumped whenever the saved layout changes; older files are refused. */
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 9;
 
 /** Per-creature number arrays, saved up to the live count. */
 const CREATURE_FIELDS = [
@@ -166,9 +166,13 @@ export function loadWorld(saved: SavedWorld): World {
     scent: new Float32Array(saved.field.scent),
     walls: new Uint8Array(saved.field.walls),
     temperature: new Float32Array(saved.field.temperature),
+    biome: new Uint8Array(cells),
     // Shore and moisture follow from where the water is, so they are rebuilt, not saved.
     ...waterDerived(new Uint8Array(saved.field.water), cols, rows, config),
   };
+
+  // Biomes follow from temperature and wetness, so they are rebuilt, not saved.
+  classifyBiomes(plants, config);
 
   const count = saved.creatures.count;
   const creatures: Creatures = createCreatures(Math.max(16, count));
@@ -225,7 +229,7 @@ export function loadWorld(saved: SavedWorld): World {
       driftStart: saved.environment.driftStart,
       scentScratch: new Float32Array(cells),
     },
-    climate: { season: 1, growth: 1, cost: 1, warmth: 0 },
+    climate: { season: 1, growth: 1, cost: 1, warmth: 0, dayWarmth: 0, bloom: 1 },
     lineage: Lineage.load(saved.lineage),
     species: {
       nextId: saved.species.nextId,

@@ -1,3 +1,4 @@
+import { BIOME_TRAITS } from './biomes';
 import { Input, INPUTS_PER_RAY, RAY_COUNT, Ray } from './brain';
 import type { SimConfig } from './config';
 import type { Creatures } from './creatures';
@@ -33,6 +34,8 @@ export class Senses {
   targetGap = Infinity;
   /** The warmth of the season and hour, set by the world each tick; see Climate. */
   warmth = 0;
+  /** The part of that warmth owed to the time of day. */
+  dayWarmth = 0;
 
   // State for the neighbor visit, kept on the instance to avoid a closure per creature.
   private self = 0;
@@ -88,11 +91,12 @@ export class Senses {
       this.season = config.seasonStrength > 0 ? (seasonAt(tick, config) - 1) / config.seasonStrength : 0;
       this.daylight = daylightAt(tick, config);
     }
-    // Sight shortens in the dark.
+    // Sight shortens in the dark, and reaches further over open desert.
     const range =
       config.senseRange *
       creatures.sensorRange[i]! *
-      (config.nightVision + (1 - config.nightVision) * this.daylight);
+      (config.nightVision + (1 - config.nightVision) * this.daylight) *
+      BIOME_TRAITS[field.biome[cellIndexAt(field, x, y)]!]!.sight;
     // Plant cover is relative to the richest possible cell; a barren world reads as zero.
     const plantScale = config.plantCapacity > 0 ? 1 / config.plantCapacity : 0;
     const meatScale = 1 / config.meatScale;
@@ -197,12 +201,12 @@ export class Senses {
     inputs[Input.Season] = this.season;
     inputs[Input.Daylight] = this.daylight;
     if (config.temperatureStrength > 0) {
-      const here = temperatureAt(field, cell, this.warmth, config);
+      const here = temperatureAt(field, cell, this.warmth, config, this.dayWarmth);
       let aheadX = x + cosHeading * range;
       let aheadY = y + sinHeading * range;
       aheadX -= Math.floor(aheadX / worldWidth) * worldWidth;
       aheadY -= Math.floor(aheadY / worldHeight) * worldHeight;
-      const ahead = temperatureAt(field, cellIndexAt(field, aheadX, aheadY), this.warmth, config);
+      const ahead = temperatureAt(field, cellIndexAt(field, aheadX, aheadY), this.warmth, config, this.dayWarmth);
       inputs[Input.Temperature] = Math.max(-1, Math.min(1, here));
       inputs[Input.WarmerAhead] = Math.max(-1, Math.min(1, (ahead - here) * WARMER_GAIN));
     } else {
@@ -249,12 +253,14 @@ export class Senses {
       return;
     }
 
-    // A creature the colour of the ground it stands on cannot be seen from as far.
+    // A creature in the cover of a forest, or the colour of the ground it
+    // stands on, cannot be seen from as far.
+    const theirCell = cellIndexAt(this.field, creatures.x[j]!, creatures.y[j]!);
+    let seen = BIOME_TRAITS[this.field.biome[theirCell]!]!.cover;
     if (config.camouflage > 0) {
-      const cell = cellIndexAt(this.field, creatures.x[j]!, creatures.y[j]!);
-      const seen = visibility(creatures.hue[j]!, groundHue(this.field, cell, config), config.camouflage);
-      if (distance > this.range * seen) return;
+      seen *= visibility(creatures.hue[j]!, groundHue(this.field, theirCell, config), config.camouflage);
     }
+    if (distance > this.range * seen) return;
 
     const mySize = creatures.size[this.self]!;
     const theirSize = creatures.size[j]!;

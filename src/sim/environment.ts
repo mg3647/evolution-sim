@@ -1,7 +1,8 @@
 import type { SimConfig } from './config';
 import { wrap, wrappedDelta } from './geometry';
 import type { EnergyLedger } from './ledger';
-import { cellCapacity, cellIndexAt, generateFertility, type PlantField } from './plants';
+import { bloomGrowth } from './biomes';
+import { cellCapacity, cellIndexAt, classifyBiomes, generateFertility, type PlantField } from './plants';
 import type { Rng } from './rng';
 
 /**
@@ -69,6 +70,10 @@ export interface Climate {
   cost: number;
   /** Added to every cell's own temperature: the season, the time of day, and any ice age. */
   warmth: number;
+  /** The part of `warmth` owed to the time of day: above zero by day, below by night. */
+  dayWarmth: number;
+  /** Multiplier on plant growth in biomes that grow in one seasonal bloom. */
+  bloom: number;
 }
 
 export function createEnvironment(config: SimConfig, rng: Rng, field: PlantField): Environment {
@@ -115,8 +120,11 @@ export function climateAt(env: Environment, tick: number, config: SimConfig): Cl
   let growth = season;
   let cost = 1;
   // Summer and noon are warm; winter and midnight are cold.
-  let warmth = config.dayTempSwing * (daylightAt(tick, config) * 2 - 1);
-  if (config.seasonLength > 0) warmth += config.seasonTempSwing * Math.sin((TWO_PI * tick) / config.seasonLength);
+  const dayWarmth = config.dayTempSwing * (daylightAt(tick, config) * 2 - 1);
+  const yearPhase = config.seasonLength > 0 ? Math.sin((TWO_PI * tick) / config.seasonLength) : 0;
+  let warmth = dayWarmth + config.seasonTempSwing * yearPhase;
+  // Without seasons a bloom biome just grows steadily.
+  const bloom = config.seasonLength > 0 ? bloomGrowth(yearPhase) : 1;
   for (const event of env.active) {
     if (event.kind === 'drought') growth *= config.droughtGrowth;
     else if (event.kind === 'foodBoom') growth *= config.foodBoomGrowth;
@@ -126,7 +134,7 @@ export function climateAt(env: Environment, tick: number, config: SimConfig): Cl
       warmth -= config.iceAgeChill;
     }
   }
-  return { season, growth, cost, warmth };
+  return { season, growth, cost, warmth, dayWarmth, bloom };
 }
 
 /** Record the end of an outbreak once the last infection has cleared. */
@@ -182,6 +190,8 @@ export function driftFertility(
  * capacity die off as heat. Returns the field's total capacity.
  */
 export function applyFertility(field: PlantField, config: SimConfig, ledger: EnergyLedger): number {
+  // Wetness has moved, so the biomes may have too.
+  classifyBiomes(field, config);
   let total = 0;
   let died = 0;
   for (let i = 0; i < field.capacity.length; i++) {

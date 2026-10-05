@@ -67,7 +67,11 @@ export const SETTING_GROUPS: SettingGroup[] = [
   {
     title: 'Temperature',
     settings: [
-      { key: 'temperatureStrength', label: 'Temperature strength', hint: 'How far hot and cold places, seasons and nights differ; 0 turns temperature off', min: 0, max: 2, step: 0.1 },
+      { key: 'temperatureStrength', label: 'Temperature strength', hint: 'How far hot and cold places, seasons and nights differ; 0 turns temperature and biomes off', min: 0, max: 2, step: 0.1 },
+      { key: 'climateShift', label: 'Warmer or colder world', hint: 'Below zero makes everywhere colder, so more tundra; above makes everywhere hotter, so more desert and rainforest', min: -1, max: 1, step: 0.05 },
+      { key: 'biomeTempThreshold', label: 'Mild land', hint: 'Higher leaves more of the map as grassland and forest; lower gives more desert, rainforest and tundra', min: 0.05, max: 0.95, step: 0.05 },
+      { key: 'biomeWetThreshold', label: 'Open land', hint: 'Higher leaves more grassland and desert; lower gives more forest and rainforest', min: 0.05, max: 0.95, step: 0.05 },
+      { key: 'exertionHeat', label: 'Heat of moving', hint: 'How much hotter moving flat out makes a creature feel', min: 0, max: 1, step: 0.05 },
       { key: 'temperatureCost', label: 'Cost of heat and cold', hint: 'Extra energy a creature burns when too hot or too cold, as a multiple of its upkeep', min: 0, max: 5, step: 0.1 },
       { key: 'comfortBand', label: 'Comfort range', hint: 'How far from mild a plain creature can be before the temperature costs it anything', min: 0, max: 1, step: 0.05 },
       { key: 'furWarmth', label: 'Warmth of fur', hint: 'How much cold a full coat keeps out', min: 0, max: 1.5, step: 0.05 },
@@ -124,7 +128,7 @@ export const SETTING_GROUPS: SettingGroup[] = [
       { key: 'worldWidth', label: 'World width', hint: 'Width of the world', min: 600, max: 6000, step: 200 },
       { key: 'worldHeight', label: 'World height', hint: 'Height of the world', min: 600, max: 6000, step: 200 },
       { key: 'fertilityFloor', label: 'Barren land', hint: 'Higher leaves more of the map barren', min: 0, max: 0.7, step: 0.05 },
-      { key: 'biomeSize', label: 'Size of hot and cold regions', hint: 'Rough width of each region, in world units', min: 300, max: 3000, step: 100 },
+      { key: 'biomeSize', label: 'Biome size', hint: 'Rough width of each hot or cold region, in world units', min: 300, max: 3000, step: 100 },
       { key: 'waterShare', label: 'Water', hint: 'Share of the map that is lake or river; 0 means no water and no thirst', min: 0, max: 0.4, step: 0.01 },
     ],
   },
@@ -141,7 +145,7 @@ export const PRESETS: Preset[] = [
   {
     id: 'default',
     label: 'Balanced',
-    description: 'The tuned defaults: grazers, scavengers and some hunters.',
+    description: 'The tuned defaults: five biomes on a 4,000 by 4,000 map, with grazers, scavengers and some hunters.',
     overrides: {},
   },
   {
@@ -187,10 +191,40 @@ export const PRESETS: Preset[] = [
     overrides: { randomEvents: true, randomEventInterval: 4000 },
   },
   {
+    id: 'small',
+    label: 'Small world',
+    description: 'The 2,000 by 2,000 map of earlier versions: a quarter of the area, so it runs faster.',
+    overrides: { worldWidth: 2000, worldHeight: 2000, initialCreatures: 400, maxCreatures: 5000, biomeSize: 700 },
+  },
+  {
+    id: 'continents',
+    label: 'Continents',
+    description: 'A few very large biomes, so populations live far apart.',
+    overrides: { biomeSize: 2000 },
+  },
+  {
+    id: 'iceAgeWorld',
+    label: 'Ice age world',
+    description: 'A cold planet: mostly tundra, with mild land only where it would otherwise be hot.',
+    overrides: { climateShift: -0.5 },
+  },
+  {
+    id: 'oases',
+    label: 'Desert with oases',
+    description: 'A hot, dry planet: mostly desert, with life gathered around the water.',
+    overrides: { climateShift: 0.45, biomeWetThreshold: 0.7, waterShare: 0.1 },
+  },
+  {
+    id: 'noBiomes',
+    label: 'No biomes',
+    description: 'Temperature off: one kind of land everywhere, as before biomes.',
+    overrides: { temperatureStrength: 0 },
+  },
+  {
     id: 'big',
-    label: 'Big world',
-    description: 'Four times the area and creatures. Slower, but room for separate populations.',
-    overrides: { worldWidth: 4000, worldHeight: 4000, initialCreatures: 1600, maxCreatures: 10000 },
+    label: 'Huge world',
+    description: 'A 6,000 by 6,000 map. Slow, but room for many separate populations.',
+    overrides: { worldWidth: 6000, worldHeight: 6000, initialCreatures: 2700, maxCreatures: 10000 },
   },
 ];
 

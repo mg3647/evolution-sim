@@ -56,6 +56,8 @@ export interface Inspection {
   /** How hot it is where the creature stands, and how far beyond its comfort that is. */
   temperature: number;
   temperatureStress: number;
+  /** The kind of land it stands on; see Biome in biomes.ts. */
+  biome: number;
   mutationRate: number;
   hiddenNeurons: number;
   links: number;
@@ -150,6 +152,8 @@ export interface Snapshot {
   water: Uint8Array;
   // Per cell: how hot it is now, as 0..255 across temperatures -1.5 to 1.5.
   temperature: Uint8Array;
+  // Per cell: the kind of land it is; see Biome in biomes.ts.
+  biome: Uint8Array;
   environment: EnvironmentView;
 
   births: number;
@@ -227,8 +231,21 @@ export interface FounderView {
   meanDiet: number;
 }
 
+/** One biome and the creatures standing in it. */
+export interface BiomeView {
+  /** Share of the dry land that is this biome. */
+  land: number;
+  count: number;
+  meanSize: number;
+  meanSpeed: number;
+  meanFur: number;
+  meanDiet: number;
+}
+
 /** Numbers only the Lab view shows. */
 export interface LabData {
+  /** Per biome, in the order of BIOME_LABELS. */
+  biomes: BiomeView[];
   tick: number;
   population: number;
   /** How many parentless creatures the world has had, and how many still have living descendants. */

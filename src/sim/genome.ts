@@ -154,9 +154,14 @@ export function climateCostFor(temperature: number, size: number, fur: number, c
  * with the square of speed, so speed pays off only where food is sparse.
  */
 export function tickCostFor(size: number, speed: number, thrust: number, config: SimConfig): number {
-  const upkeep = upkeepFor(size, config);
-  // A body built for speed is costly per unit of distance even when it ambles,
-  // so the speed gene is not a free option to hold in reserve.
-  const movement = config.moveCost * config.creatureSpeed * size * size * speed * speed * thrust;
-  return upkeep + movement;
+  return upkeepFor(size, config) + moveCostFor(size, speed, thrust, config);
+}
+
+/**
+ * Energy spent per tick on moving. A body built for speed is costly per unit
+ * of distance even when it ambles, so the speed gene is not a free option to
+ * hold in reserve.
+ */
+export function moveCostFor(size: number, speed: number, thrust: number, config: SimConfig): number {
+  return config.moveCost * config.creatureSpeed * size * size * speed * speed * thrust;
 }

@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type uPlot from 'uplot';
-  import { WorldRenderer } from '../render/renderer';
+  import { BIOME_GROUND, WorldRenderer } from '../render/renderer';
+  import { BIOME_LABELS } from '../sim/biomes';
   import { defaultConfig, type SimConfig } from '../sim/config';
   import { presetConfig, RESTART_KEYS, type Preset } from '../sim/presets';
   import { EVENT_LABELS, type TimedEventKind } from '../sim/environment';
@@ -40,6 +41,15 @@
     { id: 'erase', label: 'Erase wall', hint: 'Drag over a wall to remove that part of it' },
     { id: 'fertilise', label: 'Fertilise', hint: 'Drag to make land fully fertile; plants then grow there' },
     { id: 'blight', label: 'Blight', hint: 'Drag to make land barren; plants there die' },
+  ];
+
+  /** What each biome gives and takes, shown when its name in the map key is pointed at. */
+  const BIOME_HINTS = [
+    'Grassland: steady food and open sight, but nowhere to hide',
+    'Forest: half again as many plants, and cover (creatures in it are seen from 40% less far), but moving costs 20% more',
+    'Rainforest: twice the plants, half the thirst and the deepest cover, but hot, which is hard on big bodies',
+    'Desert: creatures see half again as far, but few plants, two and a half times the thirst, hot days and cold nights',
+    'Tundra: meat rots four times slower and summer brings a bloom, but it is cold and nothing grows in autumn and winter',
   ];
 
   const POPULATION_SERIES: ChartSeries[] = [
@@ -469,6 +479,18 @@
             </svg>
             <span>Scent mark</span>
           </div>
+          {#if (snapshot?.config.temperatureStrength ?? 0) > 0}
+            {#each BIOME_LABELS as label, k (label)}
+              {@const ground = BIOME_GROUND[k]!}
+              <div class="legend-item" title={BIOME_HINTS[k]}>
+                <svg width="20" height="20" viewBox="0 0 20 20">
+                  <rect width="20" height="10" fill="rgb({ground.plant.join(',')})" />
+                  <rect y="10" width="20" height="10" fill="rgb({ground.soil.join(',')})" />
+                </svg>
+                <span>{label}</span>
+              </div>
+            {/each}
+          {/if}
         </div>
       </details>
 

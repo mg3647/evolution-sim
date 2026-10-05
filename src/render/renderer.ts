@@ -39,6 +39,19 @@ function seasonColors(yearFraction: number): { soil: number[]; plant: number[] }
   const blend = (a: Rgb, b: Rgb) => a.map((value, c) => value + (b[c]! - value) * t);
   return { soil: blend(from.soil, to.soil), plant: blend(from.plant, to.plant) };
 }
+/**
+ * How each biome's ground is drawn: its bare and fully grown colours, and how
+ * far the seasonal colours are pulled toward them. Indexed by Biome;
+ * grassland keeps the plain seasonal colours.
+ */
+export const BIOME_GROUND: readonly { soil: Rgb; plant: Rgb; pull: number }[] = [
+  { soil: [28, 24, 20], plant: [64, 158, 60], pull: 0 },
+  { soil: [22, 26, 18], plant: [28, 104, 50], pull: 0.75 },
+  { soil: [16, 30, 26], plant: [14, 128, 96], pull: 0.8 },
+  { soil: [168, 142, 92], plant: [150, 164, 78], pull: 0.85 },
+  { soil: [150, 162, 172], plant: [112, 158, 128], pull: 0.8 },
+];
+
 /** Ground colour where meat lies thick. */
 const MEAT_COLOR = [190, 60, 70] as const;
 const WALL_COLOR = [120, 126, 134] as const;
@@ -271,7 +284,7 @@ export class WorldRenderer {
 
   /** One pixel per plant cell, stretched over the world. */
   private drawPlants(snapshot: Snapshot): void {
-    const { plantCols: cols, plantRows: rows, plants, meat, scent, walls, water, temperature } = snapshot;
+    const { plantCols: cols, plantRows: rows, plants, meat, scent, walls, water, temperature, biome } = snapshot;
     const scentOpacity = this.showScent ? SCENT_OPACITY / 255 : 0;
     const canvas = this.plantCanvas;
     const ctx = canvas.getContext('2d')!;
@@ -298,9 +311,16 @@ export class WorldRenderer {
     const dark = (1 - environment.daylight) * steadiness + STEADY_DARK * (1 - steadiness);
     const dim: Rgb = [1 - NIGHT_DIMMING * dark, 1 - NIGHT_DIMMING * dark, 1 - NIGHT_DIMMING * 0.6 * dark];
 
+    // Each biome's bare and grown colours for this point in the year.
+    const grounds = BIOME_GROUND.map((ground) => ({
+      soil: soil.map((value, c) => value + (ground.soil[c]! - value) * ground.pull),
+      plant: plant.map((value, c) => value + (ground.plant[c]! - value) * ground.pull),
+    }));
+
     const pixels = this.plantImage.data;
     for (let i = 0; i < plants.length; i++) {
       const t = plants[i]! / 255;
+      const land = grounds[biome[i]!] ?? grounds[0]!;
       // Meat shows as red over whatever grows beneath it.
       const m = (meat[i]! / 255) * MEAT_OPACITY;
       const o = i * 4;
@@ -316,7 +336,7 @@ export class WorldRenderer {
         }
         if (tintOpacity > 0) {
           // The overlay replaces the ground's colour but keeps water a little darker, so lakes still show.
-          const base = water[i] ? WATER_COLOR[c]! : soil[c]! + (plant[c]! - soil[c]!) * t * 0.5;
+          const base = water[i] ? WATER_COLOR[c]! : land.soil[c]! + (land.plant[c]! - land.soil[c]!) * t * 0.5;
           pixels[o + c] = base + (tint[c]! - base) * tintOpacity;
           continue;
         }
@@ -326,7 +346,7 @@ export class WorldRenderer {
           pixels[o + c] = (withMeat + (SCENT_COLOR[c]! - withMeat) * s) * dim[c]!;
           continue;
         }
-        const ground = soil[c]! + (plant[c]! - soil[c]!) * t;
+        const ground = land.soil[c]! + (land.plant[c]! - land.soil[c]!) * t;
         const withMeat = ground + (MEAT_COLOR[c]! - ground) * m;
         pixels[o + c] = (withMeat + (SCENT_COLOR[c]! - withMeat) * s) * dim[c]!;
       }

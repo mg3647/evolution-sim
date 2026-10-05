@@ -28,7 +28,8 @@ function setWater(world: World, wet: (x: number, y: number) => boolean): void {
 
 describe('water in the world', () => {
   it('covers about the configured share, grows no plants, and enriches the land beside it', () => {
-    const world = createWorld({ ...smallConfig, initialCreatures: 0, waterShare: 0.2 });
+    // Temperature off, so no biome makes land richer or poorer than its soil.
+    const world = createWorld({ ...smallConfig, initialCreatures: 0, waterShare: 0.2, temperatureStrength: 0 });
     const { plants, config } = world;
     const wet = plants.water.reduce((sum, cell) => sum + cell, 0);
     expect(wet / plants.water.length).toBeCloseTo(0.2, 1);
