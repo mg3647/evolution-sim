@@ -16,13 +16,6 @@
   import SettingsPanel from './SettingsPanel.svelte';
   import SpeciesList from './SpeciesList.svelte';
 
-  type Tab = 'world' | 'creature' | 'evolution' | 'settings';
-  const TABS: { id: Tab; label: string }[] = [
-    { id: 'world', label: 'World' },
-    { id: 'creature', label: 'Creature' },
-    { id: 'evolution', label: 'Evolution' },
-    { id: 'settings', label: 'Settings' },
-  ];
 
   const SPEEDS: { label: string; value: Speed }[] = [
     { label: '1x', value: 1 },
@@ -81,7 +74,6 @@
   let settings = $state<SimConfig>({ ...defaultConfig });
   /** Set when a world is loaded from a file, so the settings follow the file's. */
   let adoptLoadedSettings = false;
-  let tab = $state<Tab>('world');
   let showScent = $state(false);
   let colorBySpecies = $state(false);
   let drawWorld = $state(true);
@@ -91,6 +83,18 @@
   let tool = $state<ToolKind | null>(null);
   /** Id of the creature the panel last switched to, so a new pick opens the Creature tab once. */
   let shownCreature = 0;
+  /** Panel width in pixels for U1 (resizable panel) */
+  let panelWidth = $state<number>(380);
+  let isResizing = $state(false);
+  /** Track which sections are expanded in the foldable panel (U2) */
+  let expandedSections = $state<Record<string, boolean>>({
+    world: true,
+    creature: true,
+    evolution: true,
+    charts: true,
+  });
+  /** U5: Settings drawer state */
+  let showSettingsDrawer = $state(false);
 
   const populationData = $derived<uPlot.AlignedData | null>(
     history && [history.tick, history.population, history.plantPercent],
@@ -127,7 +131,7 @@
           }
           r.update(s);
           const picked = s.selected?.id ?? 0;
-          if (picked !== 0 && picked !== shownCreature) tab = 'creature';
+          if (picked !== 0 && picked !== shownCreature) expandedSections.creature = true;
           shownCreature = picked;
         },
         onHistory: (h) => (history = h),
@@ -219,6 +223,37 @@
   function decimal(value: number | undefined): string {
     return value === undefined ? '-' : value.toFixed(2);
   }
+
+  function startResizing(e: MouseEvent) {
+    if ((e.target as HTMLElement).classList.contains('resize-handle')) {
+      isResizing = true;
+    }
+  }
+
+  function stopResizing() {
+    isResizing = false;
+  }
+
+  function onMouseMove(e: MouseEvent) {
+    if (!isResizing) return;
+    // Calculate new panel width from mouse position (from right edge)
+    const newWidth = window.innerWidth - e.clientX;
+    // Constrain between 300px and 900px
+    panelWidth = Math.max(300, Math.min(900, newWidth));
+  }
+
+  function toggleSection(section: string) {
+    expandedSections[section] = !expandedSections[section];
+  }
+
+  onMount(() => {
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', stopResizing);
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', stopResizing);
+    };
+  });
 </script>
 
 <div class="layout">
@@ -275,56 +310,66 @@
   </header>
 
   <div class="events">
-    <span class="label" title="Pick a tool, then click or drag on the world. Press Esc to put it down.">Tools</span>
-    <div class="group" role="group" aria-label="Tools">
-      <button
-        class:active={tool === null}
-        title="Drag to move the view, click a creature to inspect it"
-        onclick={() => pickTool(null)}
-      >
-        Select
-      </button>
-      {#each TOOLS as t (t.id)}
-        <button class:active={tool === t.id} title={t.hint} onclick={() => pickTool(t.id)} disabled={!snapshot}>
-          {t.label}
+    <details class="menu" open title="Pick a tool, then click or drag on the world. Press Esc to put it down.">
+      <summary class="label">Tools</summary>
+      <div class="group" role="group" aria-label="Tools" style="padding: 6px 0;">
+        <button
+          class:active={tool === null}
+          title="Drag to move the view, click a creature to inspect it"
+          onclick={() => pickTool(null)}
+        >
+          Select
         </button>
-      {/each}
-      <button title="Remove every wall" onclick={() => client?.clearWalls()} disabled={!snapshot}>
-        Clear walls
-      </button>
-    </div>
-
-    <span class="label view">Climate</span>
-    <div class="group">
-      {#each CLIMATE_EVENTS as kind (kind)}
-        <button title={EVENT_HINTS[kind]} onclick={() => client?.triggerEvent(kind)} disabled={!snapshot}>
-          {EVENT_LABELS[kind]}
+        {#each TOOLS as t (t.id)}
+          <button class:active={tool === t.id} title={t.hint} onclick={() => pickTool(t.id)} disabled={!snapshot}>
+            {t.label}
+          </button>
+        {/each}
+        <button title="Remove every wall" onclick={() => client?.clearWalls()} disabled={!snapshot}>
+          Clear walls
         </button>
-      {/each}
-    </div>
-    <label title="Let events strike on their own, about once every 15,000 ticks">
-      <input
-        type="checkbox"
-        checked={snapshot?.environment.randomEvents ?? false}
-        onchange={(event) => client?.setRandomEvents(event.currentTarget.checked)}
-        disabled={!snapshot}
-      />
-      Random events
-    </label>
+      </div>
+    </details>
 
-    <span class="label view">View</span>
-    <label title="Tint the ground purple where creatures have left scent">
-      <input type="checkbox" bind:checked={showScent} onchange={applyViewOptions} />
-      Show scent
-    </label>
-    <label title="Colour creatures by the species they are grouped into, instead of by family colour">
-      <input type="checkbox" bind:checked={colorBySpecies} onchange={applyViewOptions} />
-      Colour by species
-    </label>
-    <label title="Untick to stop drawing the world while it runs. The charts and numbers keep updating.">
-      <input type="checkbox" bind:checked={drawWorld} onchange={toggleDrawing} />
-      Draw world
-    </label>
+    <details class="menu" open>
+      <summary class="label">Climate</summary>
+      <div class="group" style="padding: 6px 0;">
+        {#each CLIMATE_EVENTS as kind (kind)}
+          <button title={EVENT_HINTS[kind]} onclick={() => client?.triggerEvent(kind)} disabled={!snapshot}>
+            {EVENT_LABELS[kind]}
+          </button>
+        {/each}
+      </div>
+      <label title="Let events strike on their own, about once every 15,000 ticks">
+        <input
+          type="checkbox"
+          checked={snapshot?.environment.randomEvents ?? false}
+          onchange={(event) => client?.setRandomEvents(event.currentTarget.checked)}
+          disabled={!snapshot}
+        />
+        Random events
+      </label>
+    </details>
+
+    <details class="menu" open>
+      <summary class="label">View</summary>
+      <div style="padding: 6px 0;">
+        <label title="Tint the ground purple where creatures have left scent">
+          <input type="checkbox" bind:checked={showScent} onchange={applyViewOptions} />
+          Show scent
+        </label>
+        <label title="Colour creatures by the species they are grouped into, instead of by family colour">
+          <input type="checkbox" bind:checked={colorBySpecies} onchange={applyViewOptions} />
+          Colour by species
+        </label>
+        <label title="Untick to stop drawing the world while it runs. The charts and numbers keep updating.">
+          <input type="checkbox" bind:checked={drawWorld} onchange={toggleDrawing} />
+          Draw world
+        </label>
+      </div>
+    </details>
+
+    <button onclick={() => (showSettingsDrawer = true)} title="Open settings drawer">⚙️ Settings</button>
   </div>
 
   {#if errorMessage}
@@ -334,23 +379,128 @@
     </div>
   {/if}
 
+  <!-- U5: Settings drawer -->
+  {#if showSettingsDrawer}
+    <button class="drawer-overlay" onclick={() => (showSettingsDrawer = false)} type="button" aria-label="Close settings"></button>
+    <div class="drawer">
+      <div class="drawer-header">
+        <h2>Settings</h2>
+        <button class="drawer-close" onclick={() => (showSettingsDrawer = false)} type="button" aria-label="Close settings">✕</button>
+      </div>
+      <SettingsPanel config={settings} onChange={changeSetting} onPreset={applyPreset} />
+    </div>
+  {/if}
+
   <div class="main">
     <div class="world" class:paused-drawing={!drawWorld} class:tool={tool !== null} bind:this={host}>
       {#if !drawWorld}
         <div class="notice">Drawing is off. The world is still running; tick "Draw world" to see it.</div>
       {/if}
+      <!-- U4: Floating creature card -->
+      {#if snapshot?.selected}
+        <div class="floating-card">
+          <div class="creature-info">
+            <div class="creature-name">Creature #{snapshot.selected.id}</div>
+            <div class="creature-stats">
+              <div><span class="label">Gen:</span> <span>{snapshot.selected.generation}</span></div>
+              <div><span class="label">Age:</span> <span>{snapshot.selected.age}</span></div>
+              <div><span class="label">Energy:</span> <span>{Math.round((snapshot.selected.energy / snapshot.selected.maxEnergy) * 100)}%</span></div>
+              <div><span class="label">Health:</span> <span>{Math.round(snapshot.selected.health * 100)}%</span></div>
+            </div>
+          </div>
+        </div>
+      {/if}
+
+      <!-- U6: Map legend -->
+      <details class="map-legend" open title="Click to toggle the map legend">
+        <summary>Map Key</summary>
+        <div class="legend-items">
+          <div class="legend-item">
+            <svg width="20" height="20" viewBox="0 0 20 20">
+              <circle cx="10" cy="10" r="6" fill="#e8c468" opacity="0.8"/>
+            </svg>
+            <span>Plant-eaters</span>
+          </div>
+          <div class="legend-item">
+            <svg width="20" height="20" viewBox="0 0 20 20">
+              <polygon points="10,4 16,16 4,16" fill="#e8c468" opacity="0.8"/>
+            </svg>
+            <span>Meat-eaters</span>
+          </div>
+          <div class="legend-item">
+            <svg width="20" height="20" viewBox="0 0 20 20">
+              <circle cx="10" cy="10" r="6" fill="none" stroke="#6db3ff" stroke-width="2"/>
+            </svg>
+            <span>Calling</span>
+          </div>
+          <div class="legend-item">
+            <svg width="20" height="20" viewBox="0 0 20 20">
+              <rect width="20" height="20" fill="#8b4444"/>
+            </svg>
+            <span>Meat (food)</span>
+          </div>
+          <div class="legend-item">
+            <svg width="20" height="20" viewBox="0 0 20 20">
+              <rect width="20" height="20" fill="#7b4a7b" opacity="0.6"/>
+            </svg>
+            <span>Scent mark</span>
+          </div>
+        </div>
+      </details>
+
+      <!-- U3: Stats overlay on map -->
+      <div class="stats-overlay">
+        <div class="stat-item">
+          <span class="stat-label">Creatures</span>
+          <span class="stat-value">{count(snapshot?.population)}</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Hunters</span>
+          <span class="stat-value">{count(snapshot?.meatEaters)}</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Species</span>
+          <span class="stat-value">{count(history?.speciesCount.at(-1))}</span>
+        </div>
+        {#if snapshot?.environment}
+          <div class="stat-item">
+            <span class="stat-label">Season</span>
+            <span class="stat-value">
+              {#if snapshot.environment.yearFraction < 0.125 || snapshot.environment.yearFraction >= 0.875}
+                🌱 Spring
+              {:else if snapshot.environment.yearFraction < 0.375}
+                ☀️ Summer
+              {:else if snapshot.environment.yearFraction < 0.625}
+                🍂 Autumn
+              {:else}
+                ❄️ Winter
+              {/if}
+            </span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Time</span>
+            <span class="stat-value">
+              {#if snapshot.environment.daylight > 0.7}
+                🌞 Day
+              {:else if snapshot.environment.daylight < 0.3}
+                🌙 Night
+              {:else}
+                🌅 Twilight
+              {/if}
+            </span>
+          </div>
+        {/if}
+      </div>
     </div>
 
-    <aside>
-      <div class="tabs" role="tablist">
-        {#each TABS as t (t.id)}
-          <button role="tab" aria-selected={tab === t.id} class:active={tab === t.id} onclick={() => (tab = t.id)}>
-            {t.label}
-          </button>
-        {/each}
-      </div>
-
-      {#if tab === 'world'}
+    <button class="resize-handle" onmousedown={startResizing} type="button" title="Drag to resize the panel" aria-label="Resize panel"></button>
+    <aside style={`width: ${panelWidth}px`}>
+      <!-- World Stats Section -->
+      <div class="section">
+        <button class="section-header" onclick={() => toggleSection('world')} type="button">
+          <span class="toggle">{expandedSections.world ? '▼' : '▶'}</span> World
+        </button>
+        {#if expandedSections.world !== undefined ? expandedSections.world : true}
         <dl>
           <div><dt>Creatures</dt><dd>{count(snapshot?.population)}</dd></div>
           <div><dt>Plants</dt><dd>{snapshot ? Math.round(snapshot.plantFill * 100) : '-'}%</dd></div>
@@ -391,24 +541,30 @@
           </div>
         </dl>
 
-        <EnvironmentPanel environment={snapshot?.environment ?? null} />
+          <EnvironmentPanel environment={snapshot?.environment ?? null} />
+        {/if}
+      </div>
 
-        <Chart title="Population" series={POPULATION_SERIES} data={populationData} />
-        <Chart
-          title="Diet"
-          note="How many creatures digest plants better (drawn as discs) and how many digest meat better (drawn as pointed shapes). Red ground is meat left by the dead."
-          series={DIET_SERIES}
-          data={dietData}
-        />
-      {:else if tab === 'creature'}
-        <label class="follow" title="Keep the selected creature in the middle of the view">
-          <input type="checkbox" bind:checked={follow} onchange={applyViewOptions} />
-          Follow the selected creature
-        </label>
-        <Inspector creature={snapshot?.selected ?? null} />
-      {:else if tab === 'settings'}
-        <SettingsPanel config={settings} onChange={changeSetting} onPreset={applyPreset} />
-      {:else}
+      <!-- Creature Inspector Section -->
+      <div class="section">
+        <button class="section-header" onclick={() => toggleSection('creature')} type="button">
+          <span class="toggle">{expandedSections.creature ? '▼' : '▶'}</span> Creature
+        </button>
+        {#if expandedSections.creature}
+          <label class="follow" title="Keep the selected creature in the middle of the view">
+            <input type="checkbox" bind:checked={follow} onchange={applyViewOptions} />
+            Follow the selected creature
+          </label>
+          <Inspector creature={snapshot?.selected ?? null} />
+        {/if}
+      </div>
+
+      <!-- Evolution Stats Section -->
+      <div class="section">
+        <button class="section-header" onclick={() => toggleSection('evolution')} type="button">
+          <span class="toggle">{expandedSections.evolution ? '▼' : '▶'}</span> Evolution
+        </button>
+        {#if expandedSections.evolution}
         <dl>
           <div><dt>Mean size</dt><dd>{decimal(snapshot?.meanSize)}</dd></div>
           <div><dt>Mean speed</dt><dd>{decimal(snapshot?.meanSpeed)}</dd></div>
@@ -419,28 +575,45 @@
           </div>
         </dl>
 
-        <LineageTree {tree} bySpecies={colorBySpecies} />
-        <SpeciesList species={snapshot?.species ?? []} tick={snapshot?.tick ?? 0} />
-        <BrainCompare groups={profiles} />
-        <Chart
-          title="Number of species"
-          note="Rises when families drift apart, falls when a species dies out."
-          series={SPECIES_SERIES}
-          data={speciesData}
-        />
-        <Chart
-          title="Traits"
-          note="Average body genes. 1 is what the first generation starts with."
-          series={TRAIT_SERIES}
-          data={traitData}
-        />
-        <Chart
-          title="Brains"
-          note="Average brain wiring. Links are rules connecting a sense to an action; hidden neurons combine senses. Both cost energy, so brains grow only when the extra wiring pays for itself."
-          series={BRAIN_SERIES}
-          data={brainData}
-        />
-      {/if}
+          <LineageTree {tree} bySpecies={colorBySpecies} />
+          <SpeciesList species={snapshot?.species ?? []} tick={snapshot?.tick ?? 0} />
+          <BrainCompare groups={profiles} />
+        {/if}
+      </div>
+
+      <!-- Charts Section -->
+      <div class="section">
+        <button class="section-header" onclick={() => toggleSection('charts')} type="button">
+          <span class="toggle">{expandedSections.charts ? '▼' : '▶'}</span> Charts
+        </button>
+        {#if expandedSections.charts}
+          <Chart title="Population" series={POPULATION_SERIES} data={populationData} />
+          <Chart
+            title="Diet"
+            note="How many creatures digest plants better (drawn as discs) and how many digest meat better (drawn as pointed shapes). Red ground is meat left by the dead."
+            series={DIET_SERIES}
+            data={dietData}
+          />
+          <Chart
+            title="Number of species"
+            note="Rises when families drift apart, falls when a species dies out."
+            series={SPECIES_SERIES}
+            data={speciesData}
+          />
+          <Chart
+            title="Traits"
+            note="Average body genes. 1 is what the first generation starts with."
+            series={TRAIT_SERIES}
+            data={traitData}
+          />
+          <Chart
+            title="Brains"
+            note="Average brain wiring. Links are rules connecting a sense to an action; hidden neurons combine senses. Both cost energy, so brains grow only when the extra wiring pays for itself."
+            series={BRAIN_SERIES}
+            data={brainData}
+          />
+        {/if}
+      </div>
     </aside>
   </div>
 </div>
@@ -478,10 +651,6 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-  }
-
-  .label.view {
-    margin-left: 12px;
   }
 
   .events input,
@@ -577,33 +746,292 @@
     pointer-events: none;
   }
 
-  aside {
-    width: 340px;
-    flex-shrink: 0;
+  .stats-overlay {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    z-index: 1;
     display: flex;
-    flex-direction: column;
-    gap: 16px;
-    padding: 12px;
-    overflow-y: auto;
-    background: var(--panel);
-    border-left: 1px solid var(--border);
+    gap: 12px;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 13px;
+    pointer-events: none;
   }
 
-  /* The tabs stay at the top of the panel while its contents scroll beneath. */
-  .tabs {
-    position: sticky;
-    top: -12px;
-    z-index: 2;
+  .stat-item {
     display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .stat-label {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .stat-value {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .map-legend {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    z-index: 1;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 12px;
+  }
+
+  .map-legend summary {
+    cursor: pointer;
+    padding: 4px;
+    font-weight: 600;
+    user-select: none;
+    list-style: none;
+  }
+
+  .map-legend summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .map-legend summary::before {
+    content: '▼ ';
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  .map-legend[open] summary::before {
+    content: '▲ ';
+  }
+
+  .legend-items {
+    margin-top: 8px;
+    padding-left: 4px;
+    display: flex;
+    flex-direction: column;
     gap: 4px;
-    margin: -12px -12px -8px;
-    padding: 12px 12px 8px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .legend-item svg {
+    flex-shrink: 0;
+  }
+
+  .floating-card {
+    position: absolute;
+    bottom: 16px;
+    left: 16px;
+    z-index: 2;
+    width: 200px;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.85);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 12px;
+    pointer-events: auto;
+  }
+
+  .creature-name {
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+
+  .creature-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .creature-stats div {
+    display: flex;
+    justify-content: space-between;
+    gap: 4px;
+  }
+
+  .creature-stats .label {
+    color: var(--muted);
+  }
+
+  .creature-stats span {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .drawer-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+    background: rgba(0, 0, 0, 0.5);
+    border: none;
+    padding: 0;
+    margin: 0;
+    cursor: default;
+  }
+
+  .drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 400px;
+    height: 100%;
+    z-index: 11;
     background: var(--panel);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    animation: slideIn 0.3s ease-out;
+  }
+
+  @keyframes slideIn {
+    from {
+      transform: translateX(100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+
+  .drawer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px;
     border-bottom: 1px solid var(--border);
   }
 
-  .tabs button {
-    flex: 1;
+  .drawer-header h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  .drawer-close {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 20px;
+    color: var(--muted);
+  }
+
+  .drawer-close:hover {
+    color: var(--text);
+  }
+
+  .menu summary {
+    cursor: pointer;
+    padding: 6px 0;
+    font-size: 12px;
+  }
+
+  .resize-handle {
+    width: 8px;
+    flex-shrink: 0;
+    cursor: col-resize;
+    background: transparent;
+    border: none;
+    border-left: 1px solid var(--border);
+    user-select: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .resize-handle:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .resize-handle:focus {
+    outline: 2px solid var(--border);
+    outline-offset: -1px;
+  }
+
+  aside {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+    overflow-y: auto;
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    max-width: 1200px;
+  }
+
+  .section {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    padding: 12px;
+    width: 100%;
+    cursor: pointer;
+    background: var(--panel);
+    border: none;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    user-select: none;
+    transition: background 0.2s;
+    text-align: left;
+  }
+
+  .section-header:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .section-header:focus {
+    outline: 2px solid var(--border);
+    outline-offset: -1px;
+  }
+
+  .toggle {
+    display: inline-block;
+    width: 16px;
+    text-align: center;
+    font-size: 11px;
+  }
+
+  .section > :not(.section-header) {
+    padding: 0 12px;
+  }
+
+  .section > :first-of-type:not(.section-header) {
+    padding-top: 12px;
+  }
+
+  .section > :last-child:not(.section-header) {
+    padding-bottom: 12px;
   }
 
   dl {
@@ -629,9 +1057,30 @@
     font-variant-numeric: tabular-nums;
   }
 
+  .menu {
+    padding: 6px 0;
+    border: none;
+  }
+
+  .menu summary {
+    display: list-item;
+    cursor: pointer;
+    padding: 6px 0;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .menu[open] summary {
+    margin-bottom: 6px;
+  }
+
   @media (max-width: 800px) {
     .main {
       flex-direction: column;
+    }
+
+    .resize-handle {
+      display: none;
     }
 
     aside {
