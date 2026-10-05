@@ -19,6 +19,7 @@
 import { it } from 'vitest';
 import { defaultConfig, type SimConfig } from '../src/sim/config';
 import { daylightAt } from '../src/sim/environment';
+import { cellIndexAt, groundHue, visibility } from '../src/sim/plants';
 import { createWorld, step } from '../src/sim/world';
 
 const seeds = (process.env.SEEDS ?? 'genesis,second,third').split(',');
@@ -59,6 +60,11 @@ interface Summary {
   species: { mean: number; max: number };
   meanSize: number;
   meanDiet: number;
+  /**
+   * How well creatures match the ground they stand on: 0 if none match, 1 if
+   * all match exactly. Random colours score about 0.2.
+   */
+  hidden: number;
   ticksPerSecond: number;
 }
 
@@ -76,6 +82,7 @@ function run(seed: string): Summary {
   let speciesMax = 0;
   let sizeSum = 0;
   let dietSum = 0;
+  let hiddenSum = 0;
   const started = performance.now();
 
   let callerSum = 0;
@@ -113,7 +120,10 @@ function run(seed: string): Summary {
     let hunters = 0;
     let size = 0;
     let diet = 0;
+    let hidden = 0;
     for (let i = 0; i < c.count; i++) {
+      const ground = groundHue(world.plants, cellIndexAt(world.plants, c.x[i]!, c.y[i]!), world.config);
+      hidden += 1 - visibility(c.hue[i]!, ground, 1);
       if (c.diet[i]! > 0.5) hunters++;
       size += c.size[i]!;
       diet += c.diet[i]!;
@@ -125,6 +135,7 @@ function run(seed: string): Summary {
     speciesMax = Math.max(speciesMax, world.species.species.length);
     sizeSum += size / Math.max(1, c.count);
     dietSum += diet / Math.max(1, c.count);
+    hiddenSum += hidden / Math.max(1, c.count);
     if (trace > 0 && tick % trace === 0) {
       console.log(
         `  ${seed} t=${tick} pop=${c.count} hunters=${hunters} species=${world.species.species.length} killed=${world.deaths.killed}`,
@@ -155,6 +166,7 @@ function run(seed: string): Summary {
     species: { mean: speciesSum / samples, max: speciesMax },
     meanSize: sizeSum / samples,
     meanDiet: dietSum / samples,
+    hidden: hiddenSum / samples,
     ticksPerSecond: (ticks * 1000) / (performance.now() - started),
   };
 }
@@ -183,6 +195,7 @@ it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
         `species=${s.species.mean.toFixed(1)}/${s.species.max}`,
         `size=${s.meanSize.toFixed(2)}`,
         `diet=${s.meanDiet.toFixed(2)}`,
+        `hidden=${s.hidden.toFixed(2)}`,
         `tps=${Math.round(s.ticksPerSecond)}`,
       ].join(' '),
     );

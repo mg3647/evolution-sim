@@ -12,7 +12,7 @@ export interface Genes {
   sensorRange: number;
   /** What it can digest: 0 eats only plants, 1 only meat, in between some of each. */
   diet: number;
-  /** Body colour as a hue in [0, 1). No effect on survival; it marks lineages. */
+  /** Body colour as a hue in [0, 1). Relatives look alike, and a creature the colour of the ground is harder to see. */
   hue: number;
   /** Standard deviation of the changes applied to each gene at birth. */
   mutationRate: number;

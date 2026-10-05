@@ -174,3 +174,33 @@ export function totalPlantEnergy(field: PlantField): number {
   for (let i = 0; i < field.energy.length; i++) total += field.energy[i]!;
   return total;
 }
+
+/** Hues of the ground, on the same 0 to 1 colour wheel as creatures' hue genes. */
+const BARE_HUE = 0.08;
+const PLANT_HUE = 0.33;
+const WATER_HUE = 0.58;
+/** A creature whose hue is this far from the ground's, or further, is not hidden at all. */
+const CAMOUFLAGE_GAP = 0.2;
+
+/**
+ * The colour of the ground in a cell, as a hue: brown when bare, green when
+ * full of plants, red where meat lies, blue for water.
+ */
+export function groundHue(field: PlantField, cell: number, config: SimConfig): number {
+  if (field.water[cell] === 1) return WATER_HUE;
+  const cover = config.plantCapacity > 0 ? Math.min(1, field.energy[cell]! / config.plantCapacity) : 0;
+  const meat = Math.min(1, field.meat[cell]! / config.meatScale);
+  // Red is hue 0, so meat pulls the hue down towards it.
+  return (BARE_HUE + (PLANT_HUE - BARE_HUE) * cover) * (1 - meat);
+}
+
+/**
+ * How far away a creature of the given hue can be seen while on ground of
+ * `ground` hue, as a share of the viewer's sight range: 1 when it stands out,
+ * down to 1 - camouflage when it matches exactly.
+ */
+export function visibility(hue: number, ground: number, camouflage: number): number {
+  let gap = Math.abs(hue - ground);
+  if (gap > 0.5) gap = 1 - gap;
+  return 1 - camouflage * Math.max(0, 1 - gap / CAMOUFLAGE_GAP);
+}

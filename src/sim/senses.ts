@@ -3,7 +3,7 @@ import type { SimConfig } from './config';
 import type { Creatures } from './creatures';
 import { daylightAt, seasonAt } from './environment';
 import { maxEnergyFor } from './genome';
-import { cellIndexAt, type PlantField } from './plants';
+import { cellIndexAt, groundHue, visibility, type PlantField } from './plants';
 import { soundCellAt, type SoundField } from './sound';
 import type { SpatialHash } from './spatialHash';
 
@@ -20,7 +20,8 @@ const PAIN_FULL = 0.3;
  * rays (left, ahead, right). Each reports the ground along it (plants, meat,
  * water, wall) and, for the closest creature in its direction, how near it
  * is, how alike its colour is, whether it is bigger, what it eats, whether
- * it is coming this way, and whether it is hurt. Beyond vision a creature
+ * it is coming this way, and whether it is hurt. A creature the colour of the
+ * ground under it can only be seen from closer. Beyond vision a creature
  * feels what is behind it, how crowded it is, scent, and its own body.
  */
 export class Senses {
@@ -226,6 +227,13 @@ export class Senses {
       // Out of sight, but close enough to feel.
       if (distance < this.nearestBehind) this.nearestBehind = distance;
       return;
+    }
+
+    // A creature the colour of the ground it stands on cannot be seen from as far.
+    if (config.camouflage > 0) {
+      const cell = cellIndexAt(this.field, creatures.x[j]!, creatures.y[j]!);
+      const seen = visibility(creatures.hue[j]!, groundHue(this.field, cell, config), config.camouflage);
+      if (distance > this.range * seen) return;
     }
 
     const mySize = creatures.size[this.self]!;

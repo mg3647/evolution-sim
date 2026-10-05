@@ -230,6 +230,12 @@ export interface SimConfig {
   statsInterval: number;
   /** Number of history samples kept. */
   statsCapacity: number;
+
+  /**
+   * How much a creature the colour of the ground under it is hidden: the share
+   * cut from the distance it can be seen at. 0 turns camouflage off.
+   */
+  camouflage: number;
 }
 
 export const defaultConfig: SimConfig = {
@@ -359,4 +365,6 @@ export const defaultConfig: SimConfig = {
 
   statsInterval: 30,
   statsCapacity: 1000,
+
+  camouflage: 0.7,
 };

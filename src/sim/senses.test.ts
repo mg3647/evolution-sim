@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { founderBrain, Innovations, Input, INPUT_COUNT, INPUT_LABELS, INPUTS_PER_RAY, Ray } from './brain';
 import { defaultConfig, type SimConfig } from './config';
 import { createCreatures, spawnCreature, type Creatures } from './creatures';
-import { cellIndexAt, createPlantField } from './plants';
+import { cellIndexAt, createPlantField, groundHue, visibility } from './plants';
 import { Rng } from './rng';
 import { Senses } from './senses';
 import { buildSound, createSoundField } from './sound';
@@ -10,7 +10,15 @@ import { SpatialHash } from './spatialHash';
 
 // A dry world in permanent daylight, so each test places only the water it
 // means to and sight does not change with the tick.
-const config: SimConfig = { ...defaultConfig, worldWidth: 400, worldHeight: 400, waterShare: 0, dayLength: 0 };
+// Camouflage is off except in the tests about it, so colours do not decide who is seen.
+const config: SimConfig = {
+  ...defaultConfig,
+  worldWidth: 400,
+  worldHeight: 400,
+  waterShare: 0,
+  dayLength: 0,
+  camouflage: 0,
+};
 const LEFT = 0;
 const AHEAD = 1;
 const RIGHT = 2;
@@ -363,5 +371,55 @@ describe('Senses', () => {
     expect(sense(creatures, i)[ray(AHEAD) + Ray.Near]).toBe(0);
     creatures.sensorRange[i] = 2;
     expect(sense(creatures, i)[ray(AHEAD) + Ray.Near]).toBeCloseTo(0.25, 5);
+  });
+});
+
+describe('camouflage', () => {
+  // The ground in these tests is bare, so its hue is the bare-soil brown.
+  const far = config.senseRange * 0.8;
+  const near = config.senseRange * 0.2;
+
+  it('gives bare, grown, bloody and wet ground different hues', () => {
+    const { plants } = setup();
+    const bare = groundHue(plants, 0, config);
+    plants.energy[1] = config.plantCapacity;
+    const grown = groundHue(plants, 1, config);
+    plants.meat[2] = config.meatScale;
+    plants.water[3] = 1;
+    expect(grown).toBeGreaterThan(bare + 0.2);
+    expect(groundHue(plants, 2, config)).toBe(0);
+    expect(groundHue(plants, 3, config)).toBeGreaterThan(grown);
+  });
+
+  it('hides a matching creature fully and a clashing one not at all', () => {
+    expect(visibility(0.3, 0.3, 0.7)).toBeCloseTo(0.3, 6);
+    expect(visibility(0.8, 0.3, 0.7)).toBe(1);
+    // Hue is a circle: 0.98 and 0.02 are close.
+    expect(visibility(0.98, 0.02, 0.7)).toBeLessThan(0.5);
+    expect(visibility(0.3, 0.3, 0)).toBe(1);
+  });
+
+  it('hides a ground-coloured creature at a distance but not close up', () => {
+    const { plants, creatures, add, sense } = setup({ camouflage: 0.7 });
+    const soil = groundHue(plants, 0, config);
+    const i = add(200, 200, 0);
+    const other = add(200 + far, 200, 0, soil);
+    expect(sense(creatures, i)[ray(AHEAD) + Ray.Near]).toBe(0);
+    creatures.x[other] = 200 + near;
+    expect(sense(creatures, i)[ray(AHEAD) + Ray.Near]).toBeGreaterThan(0);
+  });
+
+  it('shows a creature that clashes with the ground at any distance in range', () => {
+    const { plants, creatures, add, sense } = setup({ camouflage: 0.7 });
+    const i = add(200, 200, 0);
+    add(200 + far, 200, 0, groundHue(plants, 0, config) + 0.5);
+    expect(sense(creatures, i)[ray(AHEAD) + Ray.Near]).toBeGreaterThan(0);
+  });
+
+  it('does nothing when switched off', () => {
+    const { plants, creatures, add, sense } = setup({ camouflage: 0 });
+    const i = add(200, 200, 0);
+    add(200 + far, 200, 0, groundHue(plants, 0, config));
+    expect(sense(creatures, i)[ray(AHEAD) + Ray.Near]).toBeGreaterThan(0);
   });
 });
