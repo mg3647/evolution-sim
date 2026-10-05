@@ -90,10 +90,11 @@
   let expandedSections = $state<Record<string, boolean>>({
     world: true,
     creature: true,
-    settings: true,
     evolution: true,
     charts: true,
   });
+  /** U5: Settings drawer state */
+  let showSettingsDrawer = $state(false);
 
   const populationData = $derived<uPlot.AlignedData | null>(
     history && [history.tick, history.population, history.plantPercent],
@@ -309,27 +310,29 @@
   </header>
 
   <div class="events">
-    <span class="label" title="Pick a tool, then click or drag on the world. Press Esc to put it down.">Tools</span>
-    <div class="group" role="group" aria-label="Tools">
-      <button
-        class:active={tool === null}
-        title="Drag to move the view, click a creature to inspect it"
-        onclick={() => pickTool(null)}
-      >
-        Select
-      </button>
-      {#each TOOLS as t (t.id)}
-        <button class:active={tool === t.id} title={t.hint} onclick={() => pickTool(t.id)} disabled={!snapshot}>
-          {t.label}
+    <details class="menu" open title="Pick a tool, then click or drag on the world. Press Esc to put it down.">
+      <summary class="label">Tools</summary>
+      <div class="group" role="group" aria-label="Tools" style="padding: 6px 0;">
+        <button
+          class:active={tool === null}
+          title="Drag to move the view, click a creature to inspect it"
+          onclick={() => pickTool(null)}
+        >
+          Select
         </button>
-      {/each}
-      <button title="Remove every wall" onclick={() => client?.clearWalls()} disabled={!snapshot}>
-        Clear walls
-      </button>
-    </div>
+        {#each TOOLS as t (t.id)}
+          <button class:active={tool === t.id} title={t.hint} onclick={() => pickTool(t.id)} disabled={!snapshot}>
+            {t.label}
+          </button>
+        {/each}
+        <button title="Remove every wall" onclick={() => client?.clearWalls()} disabled={!snapshot}>
+          Clear walls
+        </button>
+      </div>
+    </details>
 
     <details class="menu" open>
-      <summary class="label view">Climate</summary>
+      <summary class="label">Climate</summary>
       <div class="group" style="padding: 6px 0;">
         {#each CLIMATE_EVENTS as kind (kind)}
           <button title={EVENT_HINTS[kind]} onclick={() => client?.triggerEvent(kind)} disabled={!snapshot}>
@@ -349,7 +352,7 @@
     </details>
 
     <details class="menu" open>
-      <summary class="label view">View</summary>
+      <summary class="label">View</summary>
       <div style="padding: 6px 0;">
         <label title="Tint the ground purple where creatures have left scent">
           <input type="checkbox" bind:checked={showScent} onchange={applyViewOptions} />
@@ -365,12 +368,26 @@
         </label>
       </div>
     </details>
+
+    <button onclick={() => (showSettingsDrawer = true)} title="Open settings drawer">⚙️ Settings</button>
   </div>
 
   {#if errorMessage}
     <div class="error" role="alert">
       <span>{errorMessage}</span>
       <button onclick={() => (errorMessage = '')}>Dismiss</button>
+    </div>
+  {/if}
+
+  <!-- U5: Settings drawer -->
+  {#if showSettingsDrawer}
+    <button class="drawer-overlay" onclick={() => (showSettingsDrawer = false)} type="button" aria-label="Close settings"></button>
+    <div class="drawer">
+      <div class="drawer-header">
+        <h2>Settings</h2>
+        <button class="drawer-close" onclick={() => (showSettingsDrawer = false)} type="button" aria-label="Close settings">✕</button>
+      </div>
+      <SettingsPanel config={settings} onChange={changeSetting} onPreset={applyPreset} />
     </div>
   {/if}
 
@@ -505,16 +522,6 @@
         {/if}
       </div>
 
-      <!-- Settings Section -->
-      <div class="section">
-        <button class="section-header" onclick={() => toggleSection('settings')} type="button">
-          <span class="toggle">{expandedSections.settings ? '▼' : '▶'}</span> Settings
-        </button>
-        {#if expandedSections.settings}
-          <SettingsPanel config={settings} onChange={changeSetting} onPreset={applyPreset} />
-        {/if}
-      </div>
-
       <!-- Evolution Stats Section -->
       <div class="section">
         <button class="section-header" onclick={() => toggleSection('evolution')} type="button">
@@ -607,10 +614,6 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-  }
-
-  .label.view {
-    margin-left: 12px;
   }
 
   .events input,
@@ -780,6 +783,79 @@
 
   .creature-stats span {
     font-variant-numeric: tabular-nums;
+  }
+
+  .drawer-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+    background: rgba(0, 0, 0, 0.5);
+    border: none;
+    padding: 0;
+    margin: 0;
+    cursor: default;
+  }
+
+  .drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 400px;
+    height: 100%;
+    z-index: 11;
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    animation: slideIn 0.3s ease-out;
+  }
+
+  @keyframes slideIn {
+    from {
+      transform: translateX(100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+
+  .drawer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .drawer-header h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  .drawer-close {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 20px;
+    color: var(--muted);
+  }
+
+  .drawer-close:hover {
+    color: var(--text);
+  }
+
+  .menu summary {
+    cursor: pointer;
+    padding: 6px 0;
+    font-size: 12px;
   }
 
   .resize-handle {
