@@ -76,6 +76,23 @@ describe('brainProfile', () => {
 
   it('handles an empty group', () => {
     const profile = brainProfile(createCreatures(4), []);
-    expect(profile).toEqual({ count: 0, meanLinks: 0, meanHidden: 0, links: [] });
+    expect(profile).toEqual({
+      count: 0,
+      meanLinks: 0,
+      meanHidden: 0,
+      links: [],
+      inputUse: new Array(INPUT_COUNT).fill(0),
+    });
+  });
+
+  it('reports the share of members that use each input at all', () => {
+    const c = population([
+      { links: [link(0, Input.Bias, TURN, 1), link(1, Input.Bias, THRUST, 1)] },
+      { links: [link(2, Input.Energy, THRUST, 1)] },
+    ]);
+    const { inputUse } = brainProfile(c, [0, 1]);
+    expect(inputUse[Input.Bias]).toBe(0.5);
+    expect(inputUse[Input.Energy]).toBe(0.5);
+    expect(inputUse[Input.Health]).toBe(0);
   });
 });

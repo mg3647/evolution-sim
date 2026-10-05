@@ -7,11 +7,11 @@
   import { EVENT_LABELS, type TimedEventKind } from '../sim/environment';
   import type { ToolKind } from '../sim/world';
   import { SimClient } from '../worker/client';
-  import type { HistoryData, ProfileGroup, Snapshot, Speed, TreeData } from '../worker/protocol';
-  import BrainCompare from './BrainCompare.svelte';
+  import type { HistoryData, LabData, ProfileGroup, Snapshot, Speed, TreeData } from '../worker/protocol';
   import Chart, { type ChartSeries } from './Chart.svelte';
   import EnvironmentPanel from './EnvironmentPanel.svelte';
   import Inspector from './Inspector.svelte';
+  import LabView from './LabView.svelte';
   import LineageTree from './LineageTree.svelte';
   import SettingsPanel from './SettingsPanel.svelte';
   import SpeciesList from './SpeciesList.svelte';
@@ -69,6 +69,9 @@
   let history = $state.raw<HistoryData | null>(null);
   let tree = $state.raw<TreeData | null>(null);
   let profiles = $state.raw<ProfileGroup[]>([]);
+  let lab = $state.raw<LabData | null>(null);
+  /** Whether the full-screen Lab view is open. */
+  let showLab = $state(false);
   let seed = $state(defaultConfig.seed);
   /** The settings in force. Restart-only ones take effect at the next restart. */
   let settings = $state<SimConfig>({ ...defaultConfig });
@@ -137,6 +140,7 @@
         onHistory: (h) => (history = h),
         onTree: (t) => (tree = t),
         onProfiles: (groups) => (profiles = groups),
+        onLab: (data) => (lab = data),
         onSaved: download,
         onError: (message) => {
           adoptLoadedSettings = false;
@@ -148,7 +152,9 @@
       r.onTool = (kind, x, y, fromX, fromY) => client?.applyTool(kind, x, y, fromX, fromY);
     });
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') pickTool(null);
+      if (event.key !== 'Escape') return;
+      if (showLab) showLab = false;
+      else pickTool(null);
     };
     window.addEventListener('keydown', onKey);
     return () => {
@@ -307,6 +313,13 @@
     </div>
 
     <button onclick={() => renderer?.fitToView()} disabled={!snapshot}>Fit view</button>
+    <button
+      title="Open the Lab: full-screen charts and tables about how the population is evolving. The world keeps running."
+      onclick={() => (showLab = true)}
+      disabled={!snapshot}
+    >
+      Lab
+    </button>
   </header>
 
   <div class="events">
@@ -389,6 +402,10 @@
       </div>
       <SettingsPanel config={settings} onChange={changeSetting} onPreset={applyPreset} />
     </div>
+  {/if}
+
+  {#if showLab}
+    <LabView {history} {profiles} {lab} onClose={() => (showLab = false)} />
   {/if}
 
   <div class="main">
@@ -577,7 +594,7 @@
 
           <LineageTree {tree} bySpecies={colorBySpecies} />
           <SpeciesList species={snapshot?.species ?? []} tick={snapshot?.tick ?? 0} />
-          <BrainCompare groups={profiles} />
+          <p class="lab-hint">Brain comparisons and more are in the <button class="link" onclick={() => (showLab = true)}>Lab</button>.</p>
         {/if}
       </div>
 
@@ -1032,6 +1049,22 @@
 
   .section > :last-child:not(.section-header) {
     padding-bottom: 12px;
+  }
+
+  .lab-hint {
+    margin: 10px 0 0;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .link {
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--accent);
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
   }
 
   dl {

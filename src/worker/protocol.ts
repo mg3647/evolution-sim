@@ -171,6 +171,13 @@ export interface HistoryData {
   speciesCount: Float32Array;
   meanLinks: Float32Array;
   meanNeurons: Float32Array;
+  /** Mean genes of the creatures that had young in each sampling interval. */
+  parentSize: Float32Array;
+  parentSpeed: Float32Array;
+  parentSensorRange: Float32Array;
+  parentDiet: Float32Array;
+  /** How varied the body genes are: the mean of their standard deviations. */
+  diversity: Float32Array;
 }
 
 /**
@@ -199,7 +206,29 @@ export interface ProfileGroup {
   profile: BrainProfile;
 }
 
+/** One starting creature and the living creatures descended from it. */
+export interface FounderView {
+  id: number;
+  /** Living descendants, counting the founder itself if it is alive. */
+  count: number;
+  /** Mean hue and diet of those descendants. */
+  hue: number;
+  meanDiet: number;
+}
+
+/** Numbers only the Lab view shows. */
+export interface LabData {
+  tick: number;
+  population: number;
+  /** How many parentless creatures the world has had, and how many still have living descendants. */
+  foundersEver: number;
+  foundersLiving: number;
+  /** Founders with the most living descendants, most first. */
+  founders: FounderView[];
+}
+
 export type FromWorker =
+  | { type: 'lab'; lab: LabData }
   | { type: 'profiles'; groups: ProfileGroup[] }
   | { type: 'snapshot'; snapshot: Snapshot }
   | { type: 'history'; history: HistoryData }

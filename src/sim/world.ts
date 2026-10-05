@@ -66,7 +66,7 @@ import { Senses } from './senses';
 import { buildSound, createSoundField, type SoundField } from './sound';
 import { SpatialHash } from './spatialHash';
 import { classifySpecies, createSpeciesState, type SpeciesState } from './species';
-import { createHistory, meanOf, recordSample, type History } from './stats';
+import { createHistory, meanOf, recordSample, spreadOf, type History } from './stats';
 
 export interface World {
   config: SimConfig;
@@ -95,6 +95,8 @@ export interface World {
   /** Cumulative counts since the world was created. */
   births: number;
   reseeded: number;
+  /** Genes of every creature that gave birth since the last history sample, summed, with the number of births. */
+  parents: { count: number; size: number; speed: number; sensorRange: number; diet: number };
   /** Killed counts bites; disaster counts plagues and meteors. */
   deaths: { starved: number; oldAge: number; killed: number; disaster: number; thirst: number };
   environment: Environment;
@@ -160,6 +162,7 @@ export function createWorld(config: SimConfig): World {
     history: createHistory(config.statsInterval, config.statsCapacity),
     births: 0,
     reseeded: 0,
+    parents: { count: 0, size: 0, speed: 0, sensorRange: 0, diet: 0 },
     social: { calling: 0, calls: 0, given: 0, givenToKin: 0 },
     activity: 0,
     deaths: { starved: 0, oldAge: 0, killed: 0, disaster: 0, thirst: 0 },
@@ -517,12 +520,18 @@ function giveBirth(world: World, parent: number, energy: number): number {
     brain,
     parentId: creatures.id[parent]!,
     generation: creatures.generation[parent]! + 1,
+    founder: creatures.founder[parent]!,
     species: creatures.species[parent]!,
     // A child is born as well watered as its parent.
     hydration: creatures.hydration[parent]!,
   });
   world.lineage.born(creatures.id[child]!, creatures.id[parent]!, world.tick, genes.hue);
   world.births++;
+  world.parents.count++;
+  world.parents.size += parentGenes.size;
+  world.parents.speed += parentGenes.speed;
+  world.parents.sensorRange += parentGenes.sensorRange;
+  world.parents.diet += parentGenes.diet;
   return given;
 }
 
@@ -537,19 +546,37 @@ function sampleHistory(world: World): void {
     neurons += creatures.brain[i]!.hiddenIds.length;
   }
   const count = Math.max(1, creatures.count);
+  const meanSize = meanOf(creatures.size, creatures);
+  const meanSpeed = meanOf(creatures.speed, creatures);
+  const meanSensorRange = meanOf(creatures.sensorRange, creatures);
+  const meanDiet = meanOf(creatures.diet, creatures);
+  // With no births since the last sample there is nothing to compare, so parents read as average.
+  const parents = world.parents;
+  const had = parents.count;
   recordSample(world.history, {
     tick: world.tick,
     population: creatures.count,
     plantFill: world.plantCapacityTotal > 0 ? totalPlantEnergy(world.plants) / world.plantCapacityTotal : 0,
-    meanSize: meanOf(creatures.size, creatures),
-    meanSpeed: meanOf(creatures.speed, creatures),
-    meanSensorRange: meanOf(creatures.sensorRange, creatures),
-    meanDiet: meanOf(creatures.diet, creatures),
+    meanSize,
+    meanSpeed,
+    meanSensorRange,
+    meanDiet,
     meatEaters,
     speciesCount: world.species.species.length,
     meanLinks: links / count,
     meanNeurons: neurons / count,
+    parentSize: had > 0 ? parents.size / had : meanSize,
+    parentSpeed: had > 0 ? parents.speed / had : meanSpeed,
+    parentSensorRange: had > 0 ? parents.sensorRange / had : meanSensorRange,
+    parentDiet: had > 0 ? parents.diet / had : meanDiet,
+    diversity:
+      (spreadOf(creatures.size, creatures) +
+        spreadOf(creatures.speed, creatures) +
+        spreadOf(creatures.sensorRange, creatures) +
+        spreadOf(creatures.diet, creatures)) /
+      4,
   });
+  world.parents = { count: 0, size: 0, speed: 0, sensorRange: 0, diet: 0 };
 }
 
 /** Energy currently held by everything in the world: plants, meat, and creatures' stores and bodies. */
@@ -599,6 +626,7 @@ export function hashWorld(world: World): number {
     c.id,
     c.parentId,
     c.generation,
+    c.founder,
     c.species,
     c.x,
     c.y,

@@ -1,13 +1,14 @@
 import type { SimConfig } from '../sim/config';
 import type { EventKind } from '../sim/environment';
 import type { ToolKind } from '../sim/world';
-import type { FromWorker, HistoryData, ProfileGroup, Snapshot, Speed, ToWorker, TreeData } from './protocol';
+import type { FromWorker, HistoryData, LabData, ProfileGroup, Snapshot, Speed, ToWorker, TreeData } from './protocol';
 
 export interface SimClientHandlers {
   onSnapshot: (snapshot: Snapshot) => void;
   onHistory: (history: HistoryData) => void;
   onTree: (tree: TreeData) => void;
   onProfiles: (groups: ProfileGroup[]) => void;
+  onLab: (lab: LabData) => void;
   /** A save is ready: the world as JSON text, with the tick and seed it was taken at. */
   onSaved: (json: string, tick: number, seed: string) => void;
   onError: (message: string) => void;
@@ -25,6 +26,7 @@ export class SimClient {
       else if (message.type === 'history') handlers.onHistory(message.history);
       else if (message.type === 'tree') handlers.onTree(message.tree);
       else if (message.type === 'profiles') handlers.onProfiles(message.groups);
+      else if (message.type === 'lab') handlers.onLab(message.lab);
       else if (message.type === 'saved') handlers.onSaved(message.json, message.tick, message.seed);
       else handlers.onError(message.message);
     };

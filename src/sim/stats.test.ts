@@ -14,6 +14,11 @@ function sample(tick: number): Sample {
     speciesCount: 1,
     meanLinks: 4,
     meanNeurons: 0,
+    parentSize: 1,
+    parentSpeed: 1,
+    parentSensorRange: 1,
+    parentDiet: 0.2,
+    diversity: 0.1,
   };
 }
 

@@ -11,6 +11,7 @@ import {
   CREATURE_STRIDE,
   type FromWorker,
   type HistoryData,
+  type LabData,
   type Inspection,
   type ProfileGroup,
   type Snapshot,
@@ -31,6 +32,8 @@ const TREE_INTERVAL_MS = 1000;
 const TPS_WINDOW_MS = 500;
 /** Species listed in a snapshot. */
 const SPECIES_SHOWN = 8;
+/** Founders listed in the Lab view. */
+const FOUNDERS_SHOWN = 12;
 
 let runner: SimRunner | null = null;
 let loopTimer: ReturnType<typeof setTimeout> | null = null;
@@ -249,6 +252,11 @@ function sendHistory(now: number): void {
     speciesCount: h.speciesCount.slice(0, h.count),
     meanLinks: h.meanLinks.slice(0, h.count),
     meanNeurons: h.meanNeurons.slice(0, h.count),
+    parentSize: h.parentSize.slice(0, h.count),
+    parentSpeed: h.parentSpeed.slice(0, h.count),
+    parentSensorRange: h.parentSensorRange.slice(0, h.count),
+    parentDiet: h.parentDiet.slice(0, h.count),
+    diversity: h.diversity.slice(0, h.count),
   };
   post(
     { type: 'history', history },
@@ -317,6 +325,43 @@ function sendProfiles(): void {
     })),
   ];
   post({ type: 'profiles', groups });
+  sendLab();
+}
+
+/** Send the numbers only the Lab view shows: which founders' descendants are alive. */
+function sendLab(): void {
+  if (!runner) return;
+  const { world } = runner;
+  const { creatures: c } = world;
+  const tallies = new Map<number, { count: number; hueX: number; hueY: number; diet: number }>();
+  for (let i = 0; i < c.count; i++) {
+    let tally = tallies.get(c.founder[i]!);
+    if (!tally) {
+      tally = { count: 0, hueX: 0, hueY: 0, diet: 0 };
+      tallies.set(c.founder[i]!, tally);
+    }
+    tally.count++;
+    // Hue is a circle, so it is averaged as a direction.
+    tally.hueX += Math.cos(c.hue[i]! * Math.PI * 2);
+    tally.hueY += Math.sin(c.hue[i]! * Math.PI * 2);
+    tally.diet += c.diet[i]!;
+  }
+  const lab: LabData = {
+    tick: world.tick,
+    population: c.count,
+    foundersEver: world.config.initialCreatures + world.reseeded,
+    foundersLiving: tallies.size,
+    founders: [...tallies]
+      .sort((a, b) => b[1].count - a[1].count || a[0] - b[0])
+      .slice(0, FOUNDERS_SHOWN)
+      .map(([id, tally]) => ({
+        id,
+        count: tally.count,
+        hue: (Math.atan2(tally.hueY, tally.hueX) / (Math.PI * 2) + 1) % 1,
+        meanDiet: tally.diet / tally.count,
+      })),
+  };
+  post({ type: 'lab', lab });
 }
 
 function loop(): void {

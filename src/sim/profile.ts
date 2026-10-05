@@ -26,6 +26,8 @@ export interface BrainProfile {
   meanHidden: number;
   /** Links at least `minShare` of members have, most common first. */
   links: ProfileLink[];
+  /** Per input, the share of members whose brain has any link leading out of it. */
+  inputUse: number[];
 }
 
 /**
@@ -41,6 +43,9 @@ export function brainProfile(c: Creatures, indices: readonly number[], minShare 
   const seen = new Uint32Array(nodes * nodes);
   let linkTotal = 0;
   let hiddenTotal = 0;
+  const inputMembers = new Uint32Array(INPUT_COUNT);
+  /** Marks the inputs already counted for the current member, by its position + 1. */
+  const inputSeen = new Uint32Array(INPUT_COUNT);
 
   indices.forEach((i, position) => {
     const brain = c.brain[i]!;
@@ -50,6 +55,10 @@ export function brainProfile(c: Creatures, indices: readonly number[], minShare 
       const from = Math.min(brain.linkFrom[k]!, HIDDEN_NODE);
       const to = Math.min(brain.linkTo[k]!, HIDDEN_NODE);
       const key = from * nodes + to;
+      if (from < INPUT_COUNT && inputSeen[from] !== position + 1) {
+        inputSeen[from] = position + 1;
+        inputMembers[from]!++;
+      }
       weights[key]! += brain.linkWeight[k]!;
       if (seen[key] !== position + 1) {
         seen[key] = position + 1;
@@ -75,5 +84,6 @@ export function brainProfile(c: Creatures, indices: readonly number[], minShare 
     meanLinks: count > 0 ? linkTotal / count : 0,
     meanHidden: count > 0 ? hiddenTotal / count : 0,
     links,
+    inputUse: Array.from(inputMembers, (members) => (count > 0 ? members / count : 0)),
   };
 }

@@ -251,6 +251,30 @@ describe('reseeding', () => {
 });
 
 describe('history', () => {
+  it('gives every creature the founder its family began with', () => {
+    const world = runWorld({}, 2000);
+    const { creatures: c } = world;
+    expect(world.births).toBeGreaterThan(0);
+    const founders = smallConfig.initialCreatures + world.reseeded;
+    for (let i = 0; i < c.count; i++) {
+      expect(c.founder[i]).toBeGreaterThan(0);
+      // Parentless creatures are their own founder; everyone else carries an older id.
+      if (c.parentId[i] === 0) expect(c.founder[i]).toBe(c.id[i]);
+      else expect(c.founder[i]).toBeLessThan(c.id[i]!);
+    }
+    expect(new Set(c.founder.subarray(0, c.count)).size).toBeLessThanOrEqual(founders);
+  });
+
+  it('records the genes of creatures that had young, and how varied genes are', () => {
+    const { history: h } = runWorld({}, 2000);
+    const last = h.count - 1;
+    expect(h.parentSize[last]).toBeGreaterThan(0.3);
+    expect(h.parentSize[last]).toBeLessThan(3);
+    expect(h.parentDiet[last]).toBeGreaterThanOrEqual(0);
+    expect(h.parentDiet[last]).toBeLessThanOrEqual(1);
+    expect(h.diversity[last]).toBeGreaterThan(0);
+  });
+
   it('samples the population at the configured interval', () => {
     const world = runWorld({ statsInterval: 50 }, 500);
     expect(world.history.count).toBe(11);

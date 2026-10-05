@@ -25,6 +25,13 @@ export interface History {
   /** Mean number of enabled links and of hidden neurons per brain. */
   meanLinks: Float32Array;
   meanNeurons: Float32Array;
+  /** Mean genes of the creatures that had young since the last sample, weighted by births. */
+  parentSize: Float32Array;
+  parentSpeed: Float32Array;
+  parentSensorRange: Float32Array;
+  parentDiet: Float32Array;
+  /** How varied the body genes are: the mean of their standard deviations. */
+  diversity: Float32Array;
 }
 
 /** Names of every series, in a fixed order. */
@@ -40,6 +47,11 @@ export const HISTORY_SERIES = [
   'speciesCount',
   'meanLinks',
   'meanNeurons',
+  'parentSize',
+  'parentSpeed',
+  'parentSensorRange',
+  'parentDiet',
+  'diversity',
 ] as const;
 
 export interface Sample {
@@ -54,6 +66,11 @@ export interface Sample {
   speciesCount: number;
   meanLinks: number;
   meanNeurons: number;
+  parentSize: number;
+  parentSpeed: number;
+  parentSensorRange: number;
+  parentDiet: number;
+  diversity: number;
 }
 
 export function createHistory(interval: number, capacity: number): History {
@@ -72,6 +89,11 @@ export function createHistory(interval: number, capacity: number): History {
     speciesCount: new Float32Array(capacity),
     meanLinks: new Float32Array(capacity),
     meanNeurons: new Float32Array(capacity),
+    parentSize: new Float32Array(capacity),
+    parentSpeed: new Float32Array(capacity),
+    parentSensorRange: new Float32Array(capacity),
+    parentDiet: new Float32Array(capacity),
+    diversity: new Float32Array(capacity),
   };
 }
 
@@ -96,4 +118,13 @@ export function meanOf(values: Float32Array, creatures: Creatures): number {
   let total = 0;
   for (let i = 0; i < creatures.count; i++) total += values[i]!;
   return total / creatures.count;
+}
+
+/** Standard deviation of a gene across living creatures, or 0 when there are none. */
+export function spreadOf(values: Float32Array, creatures: Creatures): number {
+  if (creatures.count === 0) return 0;
+  const mean = meanOf(values, creatures);
+  let total = 0;
+  for (let i = 0; i < creatures.count; i++) total += (values[i]! - mean) ** 2;
+  return Math.sqrt(total / creatures.count);
 }
