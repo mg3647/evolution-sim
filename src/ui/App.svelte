@@ -379,6 +379,64 @@
       {#if !drawWorld}
         <div class="notice">Drawing is off. The world is still running; tick "Draw world" to see it.</div>
       {/if}
+      <!-- U4: Floating creature card -->
+      {#if snapshot?.selected}
+        <div class="floating-card">
+          <div class="creature-info">
+            <div class="creature-name">Creature #{snapshot.selected.id}</div>
+            <div class="creature-stats">
+              <div><span class="label">Gen:</span> <span>{snapshot.selected.generation}</span></div>
+              <div><span class="label">Age:</span> <span>{snapshot.selected.age}</span></div>
+              <div><span class="label">Energy:</span> <span>{Math.round((snapshot.selected.energy / snapshot.selected.maxEnergy) * 100)}%</span></div>
+              <div><span class="label">Health:</span> <span>{Math.round(snapshot.selected.health * 100)}%</span></div>
+            </div>
+          </div>
+        </div>
+      {/if}
+
+      <!-- U3: Stats overlay on map -->
+      <div class="stats-overlay">
+        <div class="stat-item">
+          <span class="stat-label">Creatures</span>
+          <span class="stat-value">{count(snapshot?.population)}</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Hunters</span>
+          <span class="stat-value">{count(snapshot?.meatEaters)}</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Species</span>
+          <span class="stat-value">{count(history?.speciesCount.at(-1))}</span>
+        </div>
+        {#if snapshot?.environment}
+          <div class="stat-item">
+            <span class="stat-label">Season</span>
+            <span class="stat-value">
+              {#if snapshot.environment.yearFraction < 0.125 || snapshot.environment.yearFraction >= 0.875}
+                🌱 Spring
+              {:else if snapshot.environment.yearFraction < 0.375}
+                ☀️ Summer
+              {:else if snapshot.environment.yearFraction < 0.625}
+                🍂 Autumn
+              {:else}
+                ❄️ Winter
+              {/if}
+            </span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Time</span>
+            <span class="stat-value">
+              {#if snapshot.environment.daylight > 0.7}
+                🌞 Day
+              {:else if snapshot.environment.daylight < 0.3}
+                🌙 Night
+              {:else}
+                🌅 Twilight
+              {/if}
+            </span>
+          </div>
+        {/if}
+      </div>
     </div>
 
     <button class="resize-handle" onmousedown={startResizing} type="button" title="Drag to resize the panel" aria-label="Resize panel"></button>
@@ -646,6 +704,82 @@
     border-radius: 4px;
     color: var(--text);
     pointer-events: none;
+  }
+
+  .stats-overlay {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    z-index: 1;
+    display: flex;
+    gap: 12px;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 13px;
+    pointer-events: none;
+  }
+
+  .stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .stat-label {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .stat-value {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .floating-card {
+    position: absolute;
+    bottom: 16px;
+    left: 16px;
+    z-index: 2;
+    width: 200px;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.85);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 12px;
+    pointer-events: auto;
+  }
+
+  .creature-name {
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+
+  .creature-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .creature-stats div {
+    display: flex;
+    justify-content: space-between;
+    gap: 4px;
+  }
+
+  .creature-stats .label {
+    color: var(--muted);
+  }
+
+  .creature-stats span {
+    font-variant-numeric: tabular-nums;
   }
 
   .resize-handle {
