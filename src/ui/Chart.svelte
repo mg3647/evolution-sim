@@ -21,12 +21,15 @@
     note,
     series,
     data,
+    events = [],
   }: {
     title: string;
     /** Optional line under the title explaining what the chart shows. */
     note?: string;
     series: ChartSeries[];
     data: uPlot.AlignedData | null;
+    /** Event marks to draw on the chart (tick position and label). */
+    events?: Array<{ tick: number; label: string; color?: string }>;
   } = $props();
 
   let host: HTMLDivElement;
@@ -48,7 +51,7 @@
         width: host.clientWidth,
         height: HEIGHT,
         scales: { x: { time: false } },
-        legend: { live: false },
+        legend: { live: true },
         cursor: { drag: { x: false, y: false } },
         series: [
           { label: 'Tick' },
@@ -63,6 +66,36 @@
           axis({ size: 28 }),
           axis(),
           ...(hasRight ? [axis({ scale: 'right', side: 1, grid: { show: false } })] : []),
+        ],
+        plugins: [
+          {
+            hooks: {
+              drawClear: (u) => {
+                // Draw event lines
+                if (!data || !data[0] || data[0].length === 0) return;
+                const xMin = (data[0][0] as number) ?? 0;
+                const xMax = (data[0][data[0].length - 1] as number) ?? 0;
+
+                for (const event of events) {
+                  if (event.tick < xMin || event.tick > xMax) continue;
+
+                  const xPos = u.valToPos(event.tick, 'x');
+                  const color = event.color || '#8a9aa9';
+
+                  const ctx = u.ctx;
+                  ctx.save();
+                  ctx.strokeStyle = color;
+                  ctx.lineWidth = 1;
+                  ctx.setLineDash([4, 4]);
+                  ctx.beginPath();
+                  ctx.moveTo(xPos, 0);
+                  ctx.lineTo(xPos, u.bbox.height);
+                  ctx.stroke();
+                  ctx.restore();
+                }
+              },
+            },
+          },
         ],
       },
       data ?? [[]],

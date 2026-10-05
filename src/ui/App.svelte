@@ -411,6 +411,43 @@
         </div>
       {/if}
 
+      <!-- U6: Map legend -->
+      <details class="map-legend" open title="Click to toggle the map legend">
+        <summary>Map Key</summary>
+        <div class="legend-items">
+          <div class="legend-item">
+            <svg width="20" height="20" viewBox="0 0 20 20">
+              <circle cx="10" cy="10" r="6" fill="#e8c468" opacity="0.8"/>
+            </svg>
+            <span>Plant-eaters</span>
+          </div>
+          <div class="legend-item">
+            <svg width="20" height="20" viewBox="0 0 20 20">
+              <polygon points="10,4 16,16 4,16" fill="#e8c468" opacity="0.8"/>
+            </svg>
+            <span>Meat-eaters</span>
+          </div>
+          <div class="legend-item">
+            <svg width="20" height="20" viewBox="0 0 20 20">
+              <circle cx="10" cy="10" r="6" fill="none" stroke="#6db3ff" stroke-width="2"/>
+            </svg>
+            <span>Calling</span>
+          </div>
+          <div class="legend-item">
+            <svg width="20" height="20" viewBox="0 0 20 20">
+              <rect width="20" height="20" fill="#8b4444"/>
+            </svg>
+            <span>Meat (food)</span>
+          </div>
+          <div class="legend-item">
+            <svg width="20" height="20" viewBox="0 0 20 20">
+              <rect width="20" height="20" fill="#7b4a7b" opacity="0.6"/>
+            </svg>
+            <span>Scent mark</span>
+          </div>
+        </div>
+      </details>
+
       <!-- U3: Stats overlay on map -->
       <div class="stats-overlay">
         <div class="stat-item">
@@ -742,6 +779,59 @@
   .stat-value {
     font-weight: 600;
     font-variant-numeric: tabular-nums;
+  }
+
+  .map-legend {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    z-index: 1;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 12px;
+  }
+
+  .map-legend summary {
+    cursor: pointer;
+    padding: 4px;
+    font-weight: 600;
+    user-select: none;
+    list-style: none;
+  }
+
+  .map-legend summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .map-legend summary::before {
+    content: '▼ ';
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  .map-legend[open] summary::before {
+    content: '▲ ';
+  }
+
+  .legend-items {
+    margin-top: 8px;
+    padding-left: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .legend-item svg {
+    flex-shrink: 0;
   }
 
   .floating-card {
