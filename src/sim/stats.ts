@@ -20,6 +20,7 @@ export interface History {
   meanSensorRange: Float32Array;
   meanDiet: Float32Array;
   meanFur: Float32Array;
+  meanDefense: Float32Array;
   /** Creatures whose diet gene is above one half. */
   meatEaters: Float32Array;
   speciesCount: Float32Array;
@@ -45,6 +46,7 @@ export const HISTORY_SERIES = [
   'meanSensorRange',
   'meanDiet',
   'meanFur',
+  'meanDefense',
   'meatEaters',
   'speciesCount',
   'meanLinks',
@@ -65,6 +67,7 @@ export interface Sample {
   meanSensorRange: number;
   meanDiet: number;
   meanFur: number;
+  meanDefense: number;
   meatEaters: number;
   speciesCount: number;
   meanLinks: number;
@@ -89,6 +92,7 @@ export function createHistory(interval: number, capacity: number): History {
     meanSensorRange: new Float32Array(capacity),
     meanDiet: new Float32Array(capacity),
     meanFur: new Float32Array(capacity),
+    meanDefense: new Float32Array(capacity),
     meatEaters: new Float32Array(capacity),
     speciesCount: new Float32Array(capacity),
     meanLinks: new Float32Array(capacity),

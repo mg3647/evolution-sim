@@ -96,6 +96,7 @@ function inspect(world: World, i: number): Inspection {
     sick: c.sick[i]!,
     hue: c.hue[i]!,
     fur: c.fur[i]!,
+    defense: c.defense[i]!,
     temperature,
     temperatureStress: temperatureStress(temperature, c.size[i]!, c.fur[i]!, config),
     biome: world.plants.biome[cell]!,
@@ -155,6 +156,7 @@ function sendSnapshot(now: number): void {
   let senseTotal = 0;
   let dietTotal = 0;
   let furTotal = 0;
+  let defenseTotal = 0;
   let meatEaters = 0;
   let infected = 0;
   let maxGeneration = 0;
@@ -173,10 +175,12 @@ function sendSnapshot(now: number): void {
       creatures[o + 7] = Math.sign(c.sick[i]!);
       creatures[o + 8] = c.species[i]!;
       creatures[o + 9] = c.calling[i]!;
+      creatures[o + 10] = c.defense[i]!;
     }
     if (c.sick[i]! > 0) infected++;
     dietTotal += c.diet[i]!;
     furTotal += c.fur[i]!;
+    defenseTotal += c.defense[i]!;
     if (c.diet[i]! > 0.5) meatEaters++;
     sizeTotal += size;
     speedTotal += c.speed[i]!;
@@ -214,6 +218,7 @@ function sendSnapshot(now: number): void {
     meanSensorRange: c.count > 0 ? senseTotal / c.count : 0,
     meanDiet: c.count > 0 ? dietTotal / c.count : 0,
     meanFur: c.count > 0 ? furTotal / c.count : 0,
+    meanDefense: c.count > 0 ? defenseTotal / c.count : 0,
     meatEaters,
     maxGeneration,
     plantCols: p.cols,
@@ -267,6 +272,7 @@ function sendHistory(now: number): void {
     meanSensorRange: h.meanSensorRange.slice(0, h.count),
     meanDiet: h.meanDiet.slice(0, h.count),
     meanFur: h.meanFur.slice(0, h.count),
+    meanDefense: h.meanDefense.slice(0, h.count),
     meatEaters: h.meatEaters.slice(0, h.count),
     speciesCount: h.speciesCount.slice(0, h.count),
     meanLinks: h.meanLinks.slice(0, h.count),
@@ -375,6 +381,7 @@ function sendLab(): void {
     meanSize: 0,
     meanSpeed: 0,
     meanFur: 0,
+    meanDefense: 0,
     meanDiet: 0,
   }));
   for (let i = 0; i < c.count; i++) {
@@ -383,6 +390,7 @@ function sendLab(): void {
     biome.meanSize += c.size[i]!;
     biome.meanSpeed += c.speed[i]!;
     biome.meanFur += c.fur[i]!;
+    biome.meanDefense += c.defense[i]!;
     biome.meanDiet += c.diet[i]!;
   }
   for (const biome of biomes) {
@@ -390,6 +398,7 @@ function sendLab(): void {
     biome.meanSize /= count;
     biome.meanSpeed /= count;
     biome.meanFur /= count;
+    biome.meanDefense /= count;
     biome.meanDiet /= count;
   }
   const lab: LabData = {

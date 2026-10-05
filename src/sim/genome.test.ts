@@ -14,7 +14,7 @@ import {
 import { Rng } from './rng';
 
 const config = defaultConfig;
-const base: Genes = { size: 1, speed: 1, sensorRange: 1, diet: 0.5, hue: 0.5, fur: 0.5, mutationRate: 0.1 };
+const base: Genes = { size: 1, speed: 1, sensorRange: 1, diet: 0.5, hue: 0.5, fur: 0.5, defense: 0.5, mutationRate: 0.1 };
 
 describe('mutateGenes', () => {
   it('is repeatable for a seed and leaves the parent untouched', () => {

@@ -42,6 +42,7 @@ export interface Creatures {
   diet: Float32Array;
   hue: Float32Array;
   fur: Float32Array;
+  defense: Float32Array;
   mutationRate: Float32Array;
   /** One brain per creature, parallel to the arrays above. */
   brain: Brain[];
@@ -70,6 +71,7 @@ const FIELDS = [
   'diet',
   'hue',
   'fur',
+  'defense',
   'mutationRate',
 ] as const satisfies readonly (keyof Creatures)[];
 
@@ -116,6 +118,7 @@ export function createCreatures(capacity: number): Creatures {
     diet: new Float32Array(capacity),
     hue: new Float32Array(capacity),
     fur: new Float32Array(capacity),
+    defense: new Float32Array(capacity),
     mutationRate: new Float32Array(capacity),
     brain: [],
   };
@@ -161,6 +164,7 @@ export function spawnCreature(c: Creatures, options: SpawnOptions): number {
   c.diet[i] = options.genes.diet;
   c.hue[i] = options.genes.hue;
   c.fur[i] = options.genes.fur;
+  c.defense[i] = options.genes.defense;
   c.mutationRate[i] = options.genes.mutationRate;
   c.brain[i] = options.brain;
   return i;
@@ -184,6 +188,7 @@ export function genesOf(c: Creatures, i: number): Genes {
     diet: c.diet[i]!,
     hue: c.hue[i]!,
     fur: c.fur[i]!,
+    defense: c.defense[i]!,
     mutationRate: c.mutationRate[i]!,
   };
 }

@@ -16,6 +16,7 @@ const SPEED_SCALE = 0.2;
 const SENSOR_SCALE = 0.35;
 const DIET_SCALE = 0.15;
 const FUR_SCALE = 0.25;
+const DEFENSE_SCALE = 0.25;
 
 export interface SpeciesRecord {
   id: number;
@@ -42,10 +43,11 @@ interface Tally {
   sensor: number;
   diet: number;
   fur: number;
+  defense: number;
 }
 
 function emptyTally(): Tally {
-  return { count: 0, size: 0, speed: 0, sensor: 0, diet: 0, fur: 0 };
+  return { count: 0, size: 0, speed: 0, sensor: 0, diet: 0, fur: 0, defense: 0 };
 }
 
 function add(into: Tally, from: Tally, sign = 1): void {
@@ -55,6 +57,7 @@ function add(into: Tally, from: Tally, sign = 1): void {
   into.sensor += sign * from.sensor;
   into.diet += sign * from.diet;
   into.fur += sign * from.fur;
+  into.defense += sign * from.defense;
 }
 
 /** How different the average members of two groups are: 1 or more is a clear difference. */
@@ -64,7 +67,8 @@ function difference(a: Tally, b: Tally): number {
     Math.abs(a.speed / a.count - b.speed / b.count) / SPEED_SCALE +
     Math.abs(a.sensor / a.count - b.sensor / b.count) / SENSOR_SCALE +
     Math.abs(a.diet / a.count - b.diet / b.count) / DIET_SCALE +
-    Math.abs(a.fur / a.count - b.fur / b.count) / FUR_SCALE
+    Math.abs(a.fur / a.count - b.fur / b.count) / FUR_SCALE +
+    Math.abs(a.defense / a.count - b.defense / b.count) / DEFENSE_SCALE
   );
 }
 
@@ -114,6 +118,7 @@ export function classifySpecies(
       tally.sensor = Math.log(c.sensorRange[i]!);
       tally.diet = c.diet[i]!;
       tally.fur = c.fur[i]!;
+      tally.defense = c.defense[i]!;
     }
     for (const child of node.children) add(tally, tallies.get(child)!);
     tallies.set(node.id, tally);

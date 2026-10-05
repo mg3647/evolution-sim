@@ -17,7 +17,8 @@ actual colours. The map has hot and cold regions that warm and cool with the
 seasons and the hour: being too hot or too cold costs energy, big bodies and
 fur hold heat in, and creatures can feel the temperature. Heat and wetness
 divide the 4,000 by 4,000 map into five biomes (grassland, forest, rainforest,
-desert, tundra), each with a perk and a drawback. The world has lakes and a river: land beside water is
+desert, tundra), each with a perk and a drawback. A defense gene (spines or
+poison) hurts whatever bites its owner, at a cost in energy. The world has lakes and a river: land beside water is
 richer, and creatures must drink and can swim. It has seasons and slowly
 drifting fertility. You
 can trigger droughts, ice ages and food booms, and use hand tools to place

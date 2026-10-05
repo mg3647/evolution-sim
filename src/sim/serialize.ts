@@ -19,7 +19,7 @@ import type { World } from './world';
  */
 
 /** Bumped whenever the saved layout changes; older files are refused. */
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 10;
 
 /** Per-creature number arrays, saved up to the live count. */
 const CREATURE_FIELDS = [
@@ -44,6 +44,7 @@ const CREATURE_FIELDS = [
   'diet',
   'hue',
   'fur',
+  'defense',
   'mutationRate',
 ] as const;
 
@@ -71,6 +72,7 @@ export interface SavedWorld {
   history: { interval: number; count: number } & Record<(typeof HISTORY_SERIES)[number], number[]>;
   births: number;
   reseeded: number;
+  defended: number;
   parents: World['parents'];
   social: World['social'];
   deaths: World['deaths'];
@@ -119,6 +121,7 @@ export function saveWorld(world: World): SavedWorld {
     history: savedHistory,
     births: world.births,
     reseeded: world.reseeded,
+    defended: world.defended,
     parents: { ...world.parents },
     social: { ...world.social },
     deaths: { ...world.deaths },
@@ -215,6 +218,7 @@ export function loadWorld(saved: SavedWorld): World {
     history,
     births: saved.births,
     reseeded: saved.reseeded,
+    defended: saved.defended,
     parents: { ...saved.parents },
     deaths: { ...saved.deaths },
     infected: saved.infected,

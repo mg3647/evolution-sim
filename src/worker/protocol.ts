@@ -27,7 +27,7 @@ export type ToWorker =
   | { type: 'load'; json: string };
 
 /** Number of floats per creature in `Snapshot.creatures`. */
-export const CREATURE_STRIDE = 10;
+export const CREATURE_STRIDE = 11;
 
 /** Everything shown about the selected creature. */
 export interface Inspection {
@@ -53,6 +53,8 @@ export interface Inspection {
   hue: number;
   // Thickness of its coat, from 0 to 1.
   fur: number;
+  // Spines or poison, from 0 to 1.
+  defense: number;
   /** How hot it is where the creature stands, and how far beyond its comfort that is. */
   temperature: number;
   temperatureStress: number;
@@ -124,13 +126,14 @@ export interface Snapshot {
 
   population: number;
   /** Per creature: x, y, heading, energy as a fraction of its maximum, radius, hue, diet,
-   * 1 if sick, -1 if immune, 0 otherwise, species id, and 1 if calling. Empty when drawing is off. */
+   * 1 if sick, -1 if immune, 0 otherwise, species id, 1 if calling, and defenses. Empty when drawing is off. */
   creatures: Float32Array;
   meanSize: number;
   meanSpeed: number;
   meanSensorRange: number;
   meanDiet: number;
   meanFur: number;
+  meanDefense: number;
   // Creatures whose diet gene is above one half.
   meatEaters: number;
   /** Highest generation among living creatures. */
@@ -182,6 +185,7 @@ export interface HistoryData {
   meanSensorRange: Float32Array;
   meanDiet: Float32Array;
   meanFur: Float32Array;
+  meanDefense: Float32Array;
   meatEaters: Float32Array;
   speciesCount: Float32Array;
   meanLinks: Float32Array;
@@ -239,6 +243,7 @@ export interface BiomeView {
   meanSize: number;
   meanSpeed: number;
   meanFur: number;
+  meanDefense: number;
   meanDiet: number;
 }
 

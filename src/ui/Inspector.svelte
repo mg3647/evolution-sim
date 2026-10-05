@@ -59,6 +59,10 @@
         <dt>Fur</dt>
         <dd>{creature.fur.toFixed(2)}</dd>
       </div>
+      <div title="Spines or poison, from 0 to 1. Whatever bites it loses health in return. Costs energy to keep.">
+        <dt>Defenses</dt>
+        <dd>{creature.defense.toFixed(2)}</dd>
+      </div>
       <div title="The kind of land it is standing on"><dt>Biome</dt><dd>{BIOME_LABELS[creature.biome]}</dd></div>
       <div title="How hot it is where it stands: -1 is freezing, 1 is scorching. It pays extra energy when this is beyond what its size and fur can bear.">
         <dt>Temperature</dt>

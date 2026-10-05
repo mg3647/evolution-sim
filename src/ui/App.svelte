@@ -61,6 +61,7 @@
     { label: 'Mean speed', color: '#ff8f6b' },
     { label: 'Mean sensor range', color: '#b08cff' },
     { label: 'Mean fur', color: '#f2f2f2' },
+    { label: 'Mean defenses', color: '#e0566a' },
   ];
   const DIET_SERIES: ChartSeries[] = [
     { label: 'Plant-eaters', color: '#4caf50' },
@@ -115,7 +116,7 @@
     history && [history.tick, history.population, history.plantPercent],
   );
   const traitData = $derived<uPlot.AlignedData | null>(
-    history && [history.tick, history.meanSize, history.meanSpeed, history.meanSensorRange, history.meanFur],
+    history && [history.tick, history.meanSize, history.meanSpeed, history.meanSensorRange, history.meanFur, history.meanDefense],
   );
   const dietData = $derived.by<uPlot.AlignedData | null>(() => {
     if (!history) return null;
@@ -469,6 +470,13 @@
           </div>
           <div class="legend-item">
             <svg width="20" height="20" viewBox="0 0 20 20">
+              <circle cx="10" cy="10" r="5" fill="#e8c468" opacity="0.8"/>
+              <circle cx="10" cy="10" r="8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+            </svg>
+            <span>Has defenses</span>
+          </div>
+          <div class="legend-item">
+            <svg width="20" height="20" viewBox="0 0 20 20">
               <rect width="20" height="20" fill="#8b4444"/>
             </svg>
             <span>Meat (food)</span>
@@ -619,6 +627,10 @@
             <dt>Mean fur</dt>
             <dd>{decimal(snapshot?.meanFur)}</dd>
           </div>
+          <div title="Average spines or poison, from 0 (none) to 1. Whatever bites a defended creature is hurt in return. Defended creatures are drawn with a white ring.">
+            <dt>Mean defenses</dt>
+            <dd>{decimal(snapshot?.meanDefense)}</dd>
+          </div>
           <div title="Creatures that digest plants better than meat">
             <dt>Plant-eaters</dt>
             <dd>{count(snapshot ? snapshot.population - snapshot.meatEaters : undefined)}</dd>
@@ -652,7 +664,7 @@
           />
           <Chart
             title="Traits"
-            note="Average body genes. 1 is what the first generation starts with, except fur, which starts at 0 and can reach 1."
+            note="Average body genes. 1 is what the first generation starts with, except fur and defenses, which start at 0 and can reach 1."
             series={TRAIT_SERIES}
             data={traitData}
           />

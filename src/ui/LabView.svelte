@@ -163,7 +163,7 @@
           <thead>
             <tr>
               <th>Biome</th><th>Land</th><th>Creatures</th><th>Share</th><th></th>
-              <th>Size</th><th>Fur</th><th>Speed</th><th>Diet</th>
+              <th>Size</th><th>Fur</th><th>Defenses</th><th>Speed</th><th>Diet</th>
             </tr>
           </thead>
           <tbody>
@@ -180,6 +180,7 @@
                 <td class="bar"><span style="width: {share * 100}%"></span></td>
                 <td>{biome.count > 0 ? biome.meanSize.toFixed(2) : '-'}</td>
                 <td>{biome.count > 0 ? biome.meanFur.toFixed(2) : '-'}</td>
+                <td>{biome.count > 0 ? biome.meanDefense.toFixed(2) : '-'}</td>
                 <td>{biome.count > 0 ? biome.meanSpeed.toFixed(2) : '-'}</td>
                 <td>{biome.count > 0 ? biome.meanDiet.toFixed(2) : '-'}</td>
               </tr>

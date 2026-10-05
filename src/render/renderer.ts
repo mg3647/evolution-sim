@@ -93,6 +93,9 @@ const TOOL_COLORS: Record<ToolKind, number> = {
 const SICK_COLOR = 0xb6ff3c;
 /** Ring drawn around creatures that are calling. */
 const CALL_COLOR = 0x9fd8ff;
+/** Ring drawn around creatures with defenses, and the least defense that shows one. */
+const DEFENSE_COLOR = 0xffffff;
+const DEFENSE_SHOWN = 0.25;
 /** Smallest radius a creature is drawn at, in screen pixels. */
 const MIN_SCREEN_RADIUS = 2.5;
 
@@ -396,6 +399,17 @@ export class WorldRenderer {
       anySick = true;
     }
     if (anySick) ring.stroke({ color: SICK_COLOR, pixelLine: true });
+
+    // A close white ring around each creature with defenses worth noticing.
+    let anyDefended = false;
+    for (let i = 0; i < population; i++) {
+      const o = i * CREATURE_STRIDE;
+      if (creatures[o + 10]! < DEFENSE_SHOWN) continue;
+      const radius = Math.max(creatures[o + 4]!, minRadius) * 1.25;
+      ring.circle(creatures[o]!, creatures[o + 1]!, radius);
+      anyDefended = true;
+    }
+    if (anyDefended) ring.stroke({ color: DEFENSE_COLOR, alpha: 0.8, pixelLine: true });
 
     // A wider, fainter ring around each creature that is calling.
     let anyCalling = false;

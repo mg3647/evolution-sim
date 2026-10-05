@@ -93,8 +93,10 @@ export const SETTING_GROUPS: SettingGroup[] = [
   {
     title: 'Hunting',
     settings: [
-      { key: 'attackDamage', label: 'Bite strength', hint: 'Health a full meat-eater takes per bite from a same-size victim; 0 turns fighting off', min: 0, max: 0.6, step: 0.01 },
+      { key: 'attackDamage', label: 'Bite strength', hint: 'Health a full meat-eater takes per bite from a same-size victim; 0 turns fighting off', min: 0, max: 1, step: 0.01 },
       { key: 'camouflage', label: 'Camouflage', hint: 'How much shorter the distance a creature can be seen from when it is the colour of the ground under it; 0 turns it off', min: 0, max: 0.95, step: 0.05 },
+      { key: 'defenseDamage', label: 'Defenses bite back', hint: 'Health a biter loses per bite on a fully defended victim of its own size; 0 turns defenses off', min: 0, max: 1, step: 0.05 },
+      { key: 'defenseCost', label: 'Cost of defenses', hint: 'Energy full defenses cost, as a share of upkeep', min: 0, max: 1, step: 0.05 },
       { key: 'woundSlow', label: 'Wounds slow the victim', hint: 'How much a wounded creature is slowed; 0 is not at all', min: 0, max: 0.9, step: 0.05 },
       { key: 'attackReach', label: 'Bite reach', hint: 'How close an attacker must be for a bite to land', min: 1, max: 15, step: 1 },
       { key: 'bodyEnergy', label: 'Meat in a body', hint: 'Energy a body of size 1 leaves as meat when it dies', min: 5, max: 60, step: 1 },

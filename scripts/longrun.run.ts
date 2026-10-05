@@ -68,8 +68,9 @@ interface Summary {
    * all match exactly. Random colours score about 0.2.
    */
   hidden: number;
-  /** Mean fur gene overall. */
+  /** Mean fur and defense genes overall. */
   meanFur: number;
+  meanDefense: number;
   /**
    * Per biome: its share of the land, the share of the population standing
    * in it, the share of samples in which it held at least a few creatures,
@@ -95,6 +96,7 @@ function run(seed: string): Summary {
   let dietSum = 0;
   let hiddenSum = 0;
   let furSum = 0;
+  let defenseSum = 0;
   const zero = () => new Array<number>(BIOME_COUNT).fill(0);
   const biomeCount = zero();
   const biomeOccupied = zero();
@@ -142,6 +144,7 @@ function run(seed: string): Summary {
     let diet = 0;
     let hidden = 0;
     let fur = 0;
+    let defense = 0;
     const here = zero();
     for (let cell = 0; cell < world.plants.biome.length; cell++) {
       if (world.plants.water[cell] === 0) biomeLand[world.plants.biome[cell]!]!++;
@@ -156,6 +159,7 @@ function run(seed: string): Summary {
       biomeSpeed[biome]! += c.speed[i]!;
       biomeDiet[biome]! += c.diet[i]!;
       fur += c.fur[i]!;
+      defense += c.defense[i]!;
       hidden += 1 - visibility(c.hue[i]!, ground, 1);
       if (c.diet[i]! > 0.5) hunters++;
       size += c.size[i]!;
@@ -170,6 +174,7 @@ function run(seed: string): Summary {
     dietSum += diet / Math.max(1, c.count);
     hiddenSum += hidden / Math.max(1, c.count);
     furSum += fur / Math.max(1, c.count);
+    defenseSum += defense / Math.max(1, c.count);
     for (let biome = 0; biome < BIOME_COUNT; biome++) {
       biomeCount[biome]! += here[biome]!;
       if (here[biome]! >= BIOME_QUORUM) biomeOccupied[biome]!++;
@@ -206,6 +211,7 @@ function run(seed: string): Summary {
     meanDiet: dietSum / samples,
     hidden: hiddenSum / samples,
     meanFur: furSum / samples,
+    meanDefense: defenseSum / samples,
     biomes: biomeCount.map((count, biome) => ({
       land: biomeLand[biome]! / Math.max(1, biomeLand.reduce((a, b) => a + b, 0)),
       share: count / Math.max(1, biomeCount.reduce((a, b) => a + b, 0)),
@@ -245,6 +251,7 @@ it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
         `diet=${s.meanDiet.toFixed(2)}`,
         `hidden=${s.hidden.toFixed(2)}`,
         `fur=${s.meanFur.toFixed(2)}`,
+        `defense=${s.meanDefense.toFixed(2)}`,
 
         `tps=${Math.round(s.ticksPerSecond)}`,
       ].join(' '),

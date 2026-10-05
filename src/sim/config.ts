@@ -274,6 +274,14 @@ export interface SimConfig {
   biomeTempThreshold: number;
   /** Soil wetter than this grows forest (or rainforest where hot) instead of grassland (or desert). */
   biomeWetThreshold: number;
+
+  /**
+   * Health a creature loses each time it bites a same-size victim with full
+   * defenses (spines or poison). 0 turns defenses off.
+   */
+  defenseDamage: number;
+  /** Energy per tick that full defenses cost, as a share of the body's upkeep. */
+  defenseCost: number;
 }
 
 export const defaultConfig: SimConfig = {
@@ -422,4 +430,7 @@ export const defaultConfig: SimConfig = {
   climateShift: 0,
   biomeTempThreshold: 0.35,
   biomeWetThreshold: 0.55,
+
+  defenseDamage: 0.3,
+  defenseCost: 0.2,
 };

@@ -16,6 +16,8 @@ export interface Genes {
   hue: number;
   /** Thickness of its coat, from 0 (none) to 1: keeps cold out, makes heat worse, and costs a little to grow. */
   fur: number;
+  /** Spines or poison, from 0 (none) to 1: whatever bites it is hurt in return. Costs energy to keep. */
+  defense: number;
   /** Standard deviation of the changes applied to each gene at birth. */
   mutationRate: number;
 }
@@ -32,7 +34,7 @@ function clamp(value: number, min: number, max: number): number {
   return Math.fround(Math.min(max, Math.max(min, value)));
 }
 
-/** Genes for a creature with no parent: average traits, no fur, a random diet and a random colour. */
+/** Genes for a creature with no parent: average traits, no fur or defenses, a random diet and a random colour. */
 export function founderGenes(rng: Rng, config: SimConfig): Genes {
   return mutateGenes(
     {
@@ -42,6 +44,7 @@ export function founderGenes(rng: Rng, config: SimConfig): Genes {
       diet: rng.float() * config.founderDietMax,
       hue: rng.float(),
       fur: 0,
+      defense: 0,
       mutationRate: config.initialMutationRate,
     },
     rng,
@@ -69,6 +72,7 @@ export function mutateGenes(parent: Genes, rng: Rng, config: SimConfig): Genes {
     hue: Math.fround(hue - Math.floor(hue)) % 1,
     // Like diet, fur shifts by a fixed step so it can grow from nothing.
     fur: clamp(parent.fur + rng.gaussian() * rate, 0, 1),
+    defense: clamp(parent.defense + rng.gaussian() * rate, 0, 1),
     mutationRate: clamp(
       rate * Math.exp(rng.gaussian() * rate),
       config.minMutationRate,
@@ -145,6 +149,11 @@ export function climateCostFor(temperature: number, size: number, fur: number, c
     upkeepFor(size, config) *
     (config.temperatureCost * temperatureStress(temperature, size, fur, config) + config.furCost * fur)
   );
+}
+
+/** Energy per tick that keeping up defenses costs a body. */
+export function defenseCostFor(size: number, defense: number, config: SimConfig): number {
+  return upkeepFor(size, config) * config.defenseCost * defense;
 }
 
 /**

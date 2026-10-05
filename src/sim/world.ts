@@ -22,6 +22,7 @@ import {
   biteFor,
   bodyEnergyFor,
   climateCostFor,
+  defenseCostFor,
   founderGenes,
   maxEnergyFor,
   meatDigestion,
@@ -101,7 +102,9 @@ export interface World {
   reseeded: number;
   /** Genes of every creature that gave birth since the last history sample, summed, with the number of births. */
   parents: { count: number; size: number; speed: number; sensorRange: number; diet: number };
-  /** Killed counts bites; disaster counts plagues and meteors. */
+  /** Health that biters have lost to their victims' defenses since the world was created. */
+  defended: number;
+  /** Killed counts bites and biters felled by defenses; disaster counts plagues and meteors. */
   deaths: { starved: number; oldAge: number; killed: number; disaster: number; thirst: number };
   environment: Environment;
   /** Family tree of the living population. */
@@ -166,6 +169,7 @@ export function createWorld(config: SimConfig): World {
     history: createHistory(config.statsInterval, config.statsCapacity),
     births: 0,
     reseeded: 0,
+    defended: 0,
     parents: { count: 0, size: 0, speed: 0, sensorRange: 0, diet: 0 },
     social: { calling: 0, calls: 0, given: 0, givenToKin: 0 },
     activity: 0,
@@ -246,6 +250,14 @@ export function step(world: World): void {
       const damage = config.attackDamage * teeth * ratio;
       creatures.health[victim]! -= damage;
       creatures.pain[victim]! += damage;
+      // Spines and poison bite back at a bite that lands: the biter is hurt,
+      // the more so the smaller it is.
+      const harm = damage > 0 ? (config.defenseDamage * creatures.defense[victim]!) / ratio : 0;
+      if (harm > 0) {
+        creatures.health[i]! -= harm;
+        creatures.pain[i]! += harm;
+        world.defended += harm;
+      }
     }
 
     // Illness and wounds sap strength.
@@ -315,6 +327,7 @@ export function step(world: World): void {
         (calling ? config.callCost : 0) +
         (land.moveCost - 1) * moveCostFor(size, speed, thrust, config) +
         climateCostFor(felt, size, creatures.fur[i]!, config) +
+        defenseCostFor(size, creatures.defense[i]!, config) +
         senseCostFor(creatures.sensorRange[i]!, config) +
         brainCost(brain, config));
     const paid = Math.min(cost, energy);
@@ -576,6 +589,7 @@ function sampleHistory(world: World): void {
     meanSensorRange,
     meanDiet,
     meanFur: meanOf(creatures.fur, creatures),
+    meanDefense: meanOf(creatures.defense, creatures),
     meatEaters,
     speciesCount: world.species.species.length,
     meanLinks: links / count,
@@ -659,6 +673,7 @@ export function hashWorld(world: World): number {
     c.diet,
     c.hue,
     c.fur,
+    c.defense,
     c.mutationRate,
   ]) {
     h = hashBytes(h, bytesOf(field, c.count));
