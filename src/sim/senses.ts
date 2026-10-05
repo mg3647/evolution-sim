@@ -3,7 +3,7 @@ import type { SimConfig } from './config';
 import type { Creatures } from './creatures';
 import { daylightAt, seasonAt } from './environment';
 import { maxEnergyFor } from './genome';
-import { cellIndexAt, groundHue, visibility, type PlantField } from './plants';
+import { cellIndexAt, groundHue, temperatureAt, visibility, type PlantField } from './plants';
 import { soundCellAt, type SoundField } from './sound';
 import type { SpatialHash } from './spatialHash';
 
@@ -14,20 +14,25 @@ const TWO_PI = Math.PI * 2;
 const CROWD_FULL = 8;
 /** Health lost since its last turn that reads as full pain: about one hard bite. */
 const PAIN_FULL = 0.3;
+/** A temperature difference of a tenth between here and the end of sight reads as fully warmer or colder. */
+const WARMER_GAIN = 10;
 
 /**
  * Fills a brain's inputs with what a creature perceives. Vision is three
  * rays (left, ahead, right). Each reports the ground along it (plants, meat,
  * water, wall) and, for the closest creature in its direction, how near it
  * is, how alike its colour is, whether it is bigger, what it eats, whether
- * it is coming this way, and whether it is hurt. A creature the colour of the
+ * it is coming this way, whether it is hurt, and its actual colour. A creature the colour of the
  * ground under it can only be seen from closer. Beyond vision a creature
- * feels what is behind it, how crowded it is, scent, and its own body.
+ * feels what is behind it, how crowded it is, scent, the temperature, and
+ * its own body.
  */
 export class Senses {
   /** After sense(): index of the closest creature in view, or -1, and the gap to its edge. */
   targetIndex = -1;
   targetGap = Infinity;
+  /** The warmth of the season and hour, set by the world each tick; see Climate. */
+  warmth = 0;
 
   // State for the neighbor visit, kept on the instance to avoid a closure per creature.
   private self = 0;
@@ -133,6 +138,8 @@ export class Senses {
       inputs[o + Ray.MeatEater] = 0;
       inputs[o + Ray.Approaching] = 0;
       inputs[o + Ray.Hurt] = 0;
+      inputs[o + Ray.ColourWarm] = 0;
+      inputs[o + Ray.ColourGreen] = 0;
       this.nearest[ray] = Infinity;
     }
 
@@ -189,6 +196,19 @@ export class Senses {
     inputs[Input.Clock] = this.clock;
     inputs[Input.Season] = this.season;
     inputs[Input.Daylight] = this.daylight;
+    if (config.temperatureStrength > 0) {
+      const here = temperatureAt(field, cell, this.warmth, config);
+      let aheadX = x + cosHeading * range;
+      let aheadY = y + sinHeading * range;
+      aheadX -= Math.floor(aheadX / worldWidth) * worldWidth;
+      aheadY -= Math.floor(aheadY / worldHeight) * worldHeight;
+      const ahead = temperatureAt(field, cellIndexAt(field, aheadX, aheadY), this.warmth, config);
+      inputs[Input.Temperature] = Math.max(-1, Math.min(1, here));
+      inputs[Input.WarmerAhead] = Math.max(-1, Math.min(1, (ahead - here) * WARMER_GAIN));
+    } else {
+      inputs[Input.Temperature] = 0;
+      inputs[Input.WarmerAhead] = 0;
+    }
     inputs[Input.Bias] = 1;
   }
 
@@ -251,6 +271,9 @@ export class Senses {
     inputs[o + Ray.Near] = 1 - distance / this.range;
     inputs[o + Ray.Kin] = Math.cos(TWO_PI * (creatures.hue[j]! - creatures.hue[this.self]!));
     inputs[o + Ray.Bigger] = (theirSize - mySize) / (theirSize + mySize);
+    const colour = TWO_PI * creatures.hue[j]!;
+    inputs[o + Ray.ColourWarm] = Math.cos(colour);
+    inputs[o + Ray.ColourGreen] = Math.sin(colour);
     if (!config.socialSenses) return;
     // Plant-eaters read below zero and meat-eaters above, so neither looks like "nobody there".
     inputs[o + Ray.MeatEater] = creatures.diet[j]! * 2 - 1;

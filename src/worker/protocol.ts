@@ -51,6 +51,11 @@ export interface Inspection {
   // Above zero: ticks of infection left. Below zero: ticks of immunity left.
   sick: number;
   hue: number;
+  // Thickness of its coat, from 0 to 1.
+  fur: number;
+  /** How hot it is where the creature stands, and how far beyond its comfort that is. */
+  temperature: number;
+  temperatureStress: number;
   mutationRate: number;
   hiddenNeurons: number;
   links: number;
@@ -96,6 +101,8 @@ export interface EnvironmentView {
   growth: number;
   /** Multiplier on creatures' energy costs. */
   cost: number;
+  /** Added to every place's own temperature by the season, the hour and any ice age. */
+  warmth: number;
   active: { kind: TimedEventKind; remaining: number }[];
   randomEvents: boolean;
   /** Creatures infected with the plague right now. */
@@ -121,6 +128,7 @@ export interface Snapshot {
   meanSpeed: number;
   meanSensorRange: number;
   meanDiet: number;
+  meanFur: number;
   // Creatures whose diet gene is above one half.
   meatEaters: number;
   /** Highest generation among living creatures. */
@@ -140,6 +148,8 @@ export interface Snapshot {
   walls: Uint8Array;
   // Per cell: 1 where there is water.
   water: Uint8Array;
+  // Per cell: how hot it is now, as 0..255 across temperatures -1.5 to 1.5.
+  temperature: Uint8Array;
   environment: EnvironmentView;
 
   births: number;
@@ -167,6 +177,7 @@ export interface HistoryData {
   meanSpeed: Float32Array;
   meanSensorRange: Float32Array;
   meanDiet: Float32Array;
+  meanFur: Float32Array;
   meatEaters: Float32Array;
   speciesCount: Float32Array;
   meanLinks: Float32Array;

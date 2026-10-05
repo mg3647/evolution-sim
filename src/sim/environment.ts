@@ -67,6 +67,8 @@ export interface Climate {
   growth: number;
   /** Multiplier on creatures' per-tick energy cost. */
   cost: number;
+  /** Added to every cell's own temperature: the season, the time of day, and any ice age. */
+  warmth: number;
 }
 
 export function createEnvironment(config: SimConfig, rng: Rng, field: PlantField): Environment {
@@ -112,15 +114,19 @@ export function climateAt(env: Environment, tick: number, config: SimConfig): Cl
   const season = seasonAt(tick, config);
   let growth = season;
   let cost = 1;
+  // Summer and noon are warm; winter and midnight are cold.
+  let warmth = config.dayTempSwing * (daylightAt(tick, config) * 2 - 1);
+  if (config.seasonLength > 0) warmth += config.seasonTempSwing * Math.sin((TWO_PI * tick) / config.seasonLength);
   for (const event of env.active) {
     if (event.kind === 'drought') growth *= config.droughtGrowth;
     else if (event.kind === 'foodBoom') growth *= config.foodBoomGrowth;
     else {
       growth *= config.iceAgeGrowth;
       cost *= config.iceAgeCost;
+      warmth -= config.iceAgeChill;
     }
   }
-  return { season, growth, cost };
+  return { season, growth, cost, warmth };
 }
 
 /** Record the end of an outbreak once the last infection has cleared. */

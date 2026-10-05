@@ -14,6 +14,7 @@ export const RESTART_KEYS: ReadonlySet<keyof SimConfig> = new Set<keyof SimConfi
   'plantCellSize',
   'fertilityFloor',
   'waterShare',
+  'biomeSize',
   'riverWidth',
   'moistureReach',
   'initialCreatures',
@@ -64,6 +65,18 @@ export const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
   {
+    title: 'Temperature',
+    settings: [
+      { key: 'temperatureStrength', label: 'Temperature strength', hint: 'How far hot and cold places, seasons and nights differ; 0 turns temperature off', min: 0, max: 2, step: 0.1 },
+      { key: 'temperatureCost', label: 'Cost of heat and cold', hint: 'Extra energy a creature burns when too hot or too cold, as a multiple of its upkeep', min: 0, max: 5, step: 0.1 },
+      { key: 'comfortBand', label: 'Comfort range', hint: 'How far from mild a plain creature can be before the temperature costs it anything', min: 0, max: 1, step: 0.05 },
+      { key: 'furWarmth', label: 'Warmth of fur', hint: 'How much cold a full coat keeps out', min: 0, max: 1.5, step: 0.05 },
+      { key: 'furCost', label: 'Cost of fur', hint: 'Energy a full coat costs, as a share of upkeep', min: 0, max: 1, step: 0.05 },
+      { key: 'seasonTempSwing', label: 'Seasonal swing', hint: 'How much hotter summer is, and colder winter', min: 0, max: 1, step: 0.05 },
+      { key: 'dayTempSwing', label: 'Day and night swing', hint: 'How much hotter noon is, and colder midnight', min: 0, max: 1, step: 0.05 },
+    ],
+  },
+  {
     title: 'Cost of living',
     settings: [
       { key: 'upkeepCost', label: 'Upkeep', hint: 'Energy a body burns each tick just staying alive', min: 0.02, max: 0.4, step: 0.01 },
@@ -111,6 +124,7 @@ export const SETTING_GROUPS: SettingGroup[] = [
       { key: 'worldWidth', label: 'World width', hint: 'Width of the world', min: 600, max: 6000, step: 200 },
       { key: 'worldHeight', label: 'World height', hint: 'Height of the world', min: 600, max: 6000, step: 200 },
       { key: 'fertilityFloor', label: 'Barren land', hint: 'Higher leaves more of the map barren', min: 0, max: 0.7, step: 0.05 },
+      { key: 'biomeSize', label: 'Size of hot and cold regions', hint: 'Rough width of each region, in world units', min: 300, max: 3000, step: 100 },
       { key: 'waterShare', label: 'Water', hint: 'Share of the map that is lake or river; 0 means no water and no thirst', min: 0, max: 0.4, step: 0.01 },
     ],
   },

@@ -54,6 +54,17 @@
         <dd>{creature.diet.toFixed(2)} ({dietName(creature.diet)})</dd>
       </div>
       <div><dt>Sensor range</dt><dd>{creature.sensorRange.toFixed(2)}</dd></div>
+      <div title="Thickness of its coat, from 0 to 1. Fur keeps cold out, makes heat worse, and costs energy to grow.">
+        <dt>Fur</dt>
+        <dd>{creature.fur.toFixed(2)}</dd>
+      </div>
+      <div title="How hot it is where it stands: -1 is freezing, 1 is scorching. It pays extra energy when this is beyond what its size and fur can bear.">
+        <dt>Temperature</dt>
+        <dd>
+          {creature.temperature.toFixed(2)}
+          ({creature.temperatureStress <= 0 ? 'comfortable' : creature.temperature < 0 ? 'too cold' : 'too hot'})
+        </dd>
+      </div>
       <div><dt>Mutation rate</dt><dd>{creature.mutationRate.toFixed(3)}</dd></div>
     </dl>
 
@@ -96,13 +107,17 @@
       is. &ldquo;Kin&rdquo; is how closely its colour matches, so relatives read high. &ldquo;Bigger&rdquo;
       is right of centre if it is larger. &ldquo;Meat-eater&rdquo; is right of centre for a meat-eater
       and left for a plant-eater. &ldquo;Coming&rdquo; is right of centre if it is facing this way.
-      &ldquo;Hurt&rdquo; rises as it is wounded or sick. All read zero when no creature is there.
+      &ldquo;Hurt&rdquo; rises as it is wounded or sick. The two colour senses give its actual colour:
+      &ldquo;Red or cyan&rdquo; is right of centre for red, left for cyan; &ldquo;Green or violet&rdquo; is
+      right for yellow-green, left for violet. All read zero when no creature is there.
     </p>
     <p class="note">
       &ldquo;Creature behind&rdquo; is how close the nearest creature out of sight is. &ldquo;Crowding&rdquo;
       counts creatures all around. &ldquo;Pain&rdquo; is how hard it was just bitten. &ldquo;Scent to the
       right&rdquo; is right of centre when scent is stronger on that side. &ldquo;Calls on the left&rdquo;
       and &ldquo;on the right&rdquo; are how loud other creatures' calls are on each side.
+      &ldquo;Temperature&rdquo; is left of centre when cold and right when hot. &ldquo;Warmer ahead&rdquo; is
+      right of centre if it is warmer straight ahead.
     </p>
     <ul>
       {#each INPUT_LABELS as label, k (label)}

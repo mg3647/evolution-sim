@@ -1,7 +1,8 @@
 import { enabledLinks, INPUT_COUNT, OUTPUT_COUNT } from '../sim/brain';
 import type { SimConfig } from '../sim/config';
 import { daylightAt } from '../sim/environment';
-import { maxEnergyFor } from '../sim/genome';
+import { maxEnergyFor, temperatureStress } from '../sim/genome';
+import { cellIndexAt, temperatureAt } from '../sim/plants';
 import { RESTART_KEYS } from '../sim/presets';
 import { brainProfile } from '../sim/profile';
 import { wrappedDelta } from '../sim/geometry';
@@ -75,6 +76,12 @@ function pick(world: World, x: number, y: number, radius: number): void {
 function inspect(world: World, i: number): Inspection {
   const { creatures: c, config } = world;
   const brain = c.brain[i]!;
+  const temperature = temperatureAt(
+    world.plants,
+    cellIndexAt(world.plants, c.x[i]!, c.y[i]!),
+    world.climate.warmth,
+    config,
+  );
   return {
     index: i,
     id: c.id[i]!,
@@ -91,6 +98,9 @@ function inspect(world: World, i: number): Inspection {
     hydration: c.hydration[i]!,
     sick: c.sick[i]!,
     hue: c.hue[i]!,
+    fur: c.fur[i]!,
+    temperature,
+    temperatureStress: temperatureStress(temperature, c.size[i]!, c.fur[i]!, config),
     mutationRate: c.mutationRate[i]!,
     hiddenNeurons: brain.hiddenIds.length,
     links: enabledLinks(brain),
@@ -146,6 +156,7 @@ function sendSnapshot(now: number): void {
   let speedTotal = 0;
   let senseTotal = 0;
   let dietTotal = 0;
+  let furTotal = 0;
   let meatEaters = 0;
   let infected = 0;
   let maxGeneration = 0;
@@ -167,6 +178,7 @@ function sendSnapshot(now: number): void {
     }
     if (c.sick[i]! > 0) infected++;
     dietTotal += c.diet[i]!;
+    furTotal += c.fur[i]!;
     if (c.diet[i]! > 0.5) meatEaters++;
     sizeTotal += size;
     speedTotal += c.speed[i]!;
@@ -179,7 +191,10 @@ function sendSnapshot(now: number): void {
   const plants = new Uint8Array(cells);
   const meat = new Uint8Array(cells);
   const scent = new Uint8Array(cells);
+  const temperature = new Uint8Array(cells);
   for (let i = 0; i < cells; i++) {
+    const heat = temperatureAt(p, i, world.climate.warmth, config);
+    temperature[i] = Math.max(0, Math.min(1, (heat + 1.5) / 3)) * 255;
     plants[i] = (p.energy[i]! / config.plantCapacity) * 255;
     meat[i] = Math.min(1, p.meat[i]! / config.meatScale) * 255;
     scent[i] = Math.min(1, p.scent[i]!) * 255;
@@ -199,6 +214,7 @@ function sendSnapshot(now: number): void {
     meanSpeed: c.count > 0 ? speedTotal / c.count : 0,
     meanSensorRange: c.count > 0 ? senseTotal / c.count : 0,
     meanDiet: c.count > 0 ? dietTotal / c.count : 0,
+    meanFur: c.count > 0 ? furTotal / c.count : 0,
     meatEaters,
     maxGeneration,
     plantCols: p.cols,
@@ -209,12 +225,14 @@ function sendSnapshot(now: number): void {
     scent,
     walls: rendering ? p.walls.slice() : new Uint8Array(0),
     water: rendering ? p.water.slice() : new Uint8Array(0),
+    temperature,
     environment: {
       season: world.climate.season,
       yearFraction: config.seasonLength > 0 ? (world.tick % config.seasonLength) / config.seasonLength : 0,
       daylight: daylightAt(world.tick, config),
       growth: world.climate.growth,
       cost: world.climate.cost,
+      warmth: world.climate.warmth,
       active: world.environment.active.map((event) => ({
         kind: event.kind,
         remaining: event.endTick - world.tick,
@@ -231,7 +249,7 @@ function sendSnapshot(now: number): void {
     rendered: rendering,
     species: speciesViews(world),
   };
-  post({ type: 'snapshot', snapshot }, [creatures.buffer, plants.buffer, meat.buffer, scent.buffer]);
+  post({ type: 'snapshot', snapshot }, [creatures.buffer, plants.buffer, meat.buffer, scent.buffer, temperature.buffer]);
   lastSnapshotTime = now;
 }
 
@@ -248,6 +266,7 @@ function sendHistory(now: number): void {
     meanSpeed: h.meanSpeed.slice(0, h.count),
     meanSensorRange: h.meanSensorRange.slice(0, h.count),
     meanDiet: h.meanDiet.slice(0, h.count),
+    meanFur: h.meanFur.slice(0, h.count),
     meatEaters: h.meatEaters.slice(0, h.count),
     speciesCount: h.speciesCount.slice(0, h.count),
     meanLinks: h.meanLinks.slice(0, h.count),

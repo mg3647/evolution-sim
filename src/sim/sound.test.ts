@@ -7,7 +7,7 @@ import { buildSound, createSoundField, soundCellAt } from './sound';
 import { createWorld, hashWorld, step, totalEnergy, type World } from './world';
 
 const config: SimConfig = { ...defaultConfig, worldWidth: 500, worldHeight: 500, waterShare: 0 };
-const genes = { size: 1, speed: 1, sensorRange: 1, diet: 0.1, hue: 0.5, mutationRate: 0.05 };
+const genes = { size: 1, speed: 1, sensorRange: 1, diet: 0.1, hue: 0.5, fur: 0, mutationRate: 0.05 };
 
 function creaturesAt(points: [number, number, boolean][]) {
   const c = createCreatures(8);

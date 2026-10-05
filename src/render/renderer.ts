@@ -48,6 +48,10 @@ const NIGHT_DIMMING = 0.55;
 /** Darkness shown when days pass too fast to draw one by one. */
 const STEADY_DARK = 0.2;
 const SCENT_COLOR = [170, 120, 255] as const;
+/** Tints of the temperature overlay, and how strongly the hottest and coldest places are covered. */
+const HOT_COLOR = [255, 96, 48] as const;
+const COLD_COLOR = [96, 176, 255] as const;
+const TEMPERATURE_OPACITY = 0.75;
 /** How strongly full scent covers the ground when the scent overlay is on. */
 const SCENT_OPACITY = 0.7;
 /** How strongly a cell full of meat covers the ground colour. */
@@ -132,6 +136,8 @@ export class WorldRenderer {
   onTool: ((tool: ToolKind, x: number, y: number, fromX: number, fromY: number) => void) | null = null;
   /** Whether to tint the ground with the scent creatures have left. */
   showScent = false;
+  /** Whether to tint the ground blue where it is cold and red where it is hot. */
+  showTemperature = false;
   /** Colour creatures by their inherited hue, or by the species they are grouped into. */
   colorBy: 'family' | 'species' = 'family';
   /** Keep the selected creature in the middle of the view. */
@@ -265,7 +271,7 @@ export class WorldRenderer {
 
   /** One pixel per plant cell, stretched over the world. */
   private drawPlants(snapshot: Snapshot): void {
-    const { plantCols: cols, plantRows: rows, plants, meat, scent, walls, water } = snapshot;
+    const { plantCols: cols, plantRows: rows, plants, meat, scent, walls, water, temperature } = snapshot;
     const scentOpacity = this.showScent ? SCENT_OPACITY / 255 : 0;
     const canvas = this.plantCanvas;
     const ctx = canvas.getContext('2d')!;
@@ -299,9 +305,19 @@ export class WorldRenderer {
       const m = (meat[i]! / 255) * MEAT_OPACITY;
       const o = i * 4;
       const s = scent[i]! * scentOpacity;
+      // The overlay reads -1 where it is coldest and 1 where it is hottest.
+      const heat = this.showTemperature ? Math.max(-1, Math.min(1, ((temperature[i]! / 255) * 3 - 1.5) / 1.2)) : 0;
+      const tint = heat > 0 ? HOT_COLOR : COLD_COLOR;
+      const tintOpacity = Math.abs(heat) * TEMPERATURE_OPACITY;
       for (let c = 0; c < 3; c++) {
         if (walls[i]) {
           pixels[o + c] = WALL_COLOR[c]!;
+          continue;
+        }
+        if (tintOpacity > 0) {
+          // The overlay replaces the ground's colour but keeps water a little darker, so lakes still show.
+          const base = water[i] ? WATER_COLOR[c]! : soil[c]! + (plant[c]! - soil[c]!) * t * 0.5;
+          pixels[o + c] = base + (tint[c]! - base) * tintOpacity;
           continue;
         }
         if (water[i]) {

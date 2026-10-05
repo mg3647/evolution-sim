@@ -236,6 +236,31 @@ export interface SimConfig {
    * cut from the distance it can be seen at. 0 turns camouflage off.
    */
   camouflage: number;
+
+  /**
+   * How strongly temperature varies across the map and through the year and
+   * day. 0 turns temperature off: no heat or cold costs, and the temperature
+   * senses read zero.
+   */
+  temperatureStrength: number;
+  /** Rough width of the map's hot and cold regions, in world units. */
+  biomeSize: number;
+  /** How far the seasons, and day and night, move the temperature. A region's own range is -1 (coldest) to 1 (hottest). */
+  seasonTempSwing: number;
+  dayTempSwing: number;
+  /** How much colder an ice age makes everywhere. */
+  iceAgeChill: number;
+  /** Temperatures this close to zero cost a plain creature of size 1 nothing. */
+  comfortBand: number;
+  /** Extra energy per tick for each unit of temperature beyond comfort, as a multiple of the body's upkeep. */
+  temperatureCost: number;
+  /** How much cold a full coat of fur keeps out, and how much worse it makes heat. */
+  furWarmth: number;
+  furHeat: number;
+  /** How much better a body twice the standard size holds heat: good in cold, bad in heat. */
+  sizeWarmth: number;
+  /** Energy per tick a full coat of fur costs, as a share of the body's upkeep. */
+  furCost: number;
 }
 
 export const defaultConfig: SimConfig = {
@@ -367,4 +392,16 @@ export const defaultConfig: SimConfig = {
   statsCapacity: 1000,
 
   camouflage: 0.7,
+
+  temperatureStrength: 1,
+  biomeSize: 1000,
+  seasonTempSwing: 0.25,
+  dayTempSwing: 0.15,
+  iceAgeChill: 0.4,
+  comfortBand: 0.35,
+  temperatureCost: 1.5,
+  furWarmth: 0.6,
+  furHeat: 0.4,
+  sizeWarmth: 0.3,
+  furCost: 0.15,
 };

@@ -65,6 +65,14 @@ interface Summary {
    * all match exactly. Random colours score about 0.2.
    */
   hidden: number;
+  /** Mean fur gene overall. */
+  meanFur: number;
+  /**
+   * Creatures standing in cold, mild and hot regions (a region's own
+   * temperature below -1/3, between, and above 1/3): the share of the
+   * population there, and their mean fur and size.
+   */
+  zones: { share: number; fur: number; size: number }[];
   ticksPerSecond: number;
 }
 
@@ -83,6 +91,10 @@ function run(seed: string): Summary {
   let sizeSum = 0;
   let dietSum = 0;
   let hiddenSum = 0;
+  let furSum = 0;
+  const zoneCount = [0, 0, 0];
+  const zoneFur = [0, 0, 0];
+  const zoneSize = [0, 0, 0];
   const started = performance.now();
 
   let callerSum = 0;
@@ -121,8 +133,16 @@ function run(seed: string): Summary {
     let size = 0;
     let diet = 0;
     let hidden = 0;
+    let fur = 0;
     for (let i = 0; i < c.count; i++) {
-      const ground = groundHue(world.plants, cellIndexAt(world.plants, c.x[i]!, c.y[i]!), world.config);
+      const cell = cellIndexAt(world.plants, c.x[i]!, c.y[i]!);
+      const ground = groundHue(world.plants, cell, world.config);
+      const heat = world.plants.temperature[cell]!;
+      const zone = heat < -1 / 3 ? 0 : heat > 1 / 3 ? 2 : 1;
+      zoneCount[zone]!++;
+      zoneFur[zone]! += c.fur[i]!;
+      zoneSize[zone]! += c.size[i]!;
+      fur += c.fur[i]!;
       hidden += 1 - visibility(c.hue[i]!, ground, 1);
       if (c.diet[i]! > 0.5) hunters++;
       size += c.size[i]!;
@@ -136,6 +156,7 @@ function run(seed: string): Summary {
     sizeSum += size / Math.max(1, c.count);
     dietSum += diet / Math.max(1, c.count);
     hiddenSum += hidden / Math.max(1, c.count);
+    furSum += fur / Math.max(1, c.count);
     if (trace > 0 && tick % trace === 0) {
       console.log(
         `  ${seed} t=${tick} pop=${c.count} hunters=${hunters} species=${world.species.species.length} killed=${world.deaths.killed}`,
@@ -167,6 +188,12 @@ function run(seed: string): Summary {
     meanSize: sizeSum / samples,
     meanDiet: dietSum / samples,
     hidden: hiddenSum / samples,
+    meanFur: furSum / samples,
+    zones: zoneCount.map((count, zone) => ({
+      share: count / Math.max(1, zoneCount[0]! + zoneCount[1]! + zoneCount[2]!),
+      fur: zoneFur[zone]! / Math.max(1, count),
+      size: zoneSize[zone]! / Math.max(1, count),
+    })),
     ticksPerSecond: (ticks * 1000) / (performance.now() - started),
   };
 }
@@ -196,6 +223,8 @@ it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
         `size=${s.meanSize.toFixed(2)}`,
         `diet=${s.meanDiet.toFixed(2)}`,
         `hidden=${s.hidden.toFixed(2)}`,
+        `fur=${s.meanFur.toFixed(2)}`,
+        `cold/mild/hot share=${s.zones.map((z) => percent(z.share)).join('/')} fur=${s.zones.map((z) => z.fur.toFixed(2)).join('/')} size=${s.zones.map((z) => z.size.toFixed(2)).join('/')}`,
         `tps=${Math.round(s.ticksPerSecond)}`,
       ].join(' '),
     );

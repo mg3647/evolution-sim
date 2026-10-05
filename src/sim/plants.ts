@@ -36,6 +36,8 @@ export interface PlantField {
   shore: Uint8Array;
   /** How much nearby water enriches the soil: 1 at the water's edge, fading to 0. */
   moisture: Float32Array;
+  /** How hot each cell is on average: -1 the coldest regions, 1 the hottest. Fixed for the life of the world. */
+  temperature: Float32Array;
 }
 
 /**
@@ -85,6 +87,29 @@ export function waterDerived(
   return { water, hasWater: water.includes(1), shore, moisture };
 }
 
+/**
+ * A map of hot and cold regions: seeded noise stretched to fill [-1, 1]. It
+ * tiles across the wrapped edges, so there is no seam where hot meets cold.
+ */
+export function generateTemperature(config: SimConfig, rng: Rng, cols: number, rows: number): Float32Array {
+  const regions = Math.max(2, Math.round(config.worldWidth / Math.max(1, config.biomeSize)));
+  const temperature = tileableNoise(rng, cols, rows, [regions, regions * 2]);
+  let low = Infinity;
+  let high = -Infinity;
+  for (const value of temperature) {
+    low = Math.min(low, value);
+    high = Math.max(high, value);
+  }
+  const spread = high > low ? high - low : 1;
+  for (let i = 0; i < temperature.length; i++) temperature[i] = ((temperature[i]! - low) / spread) * 2 - 1;
+  return temperature;
+}
+
+/** How hot a cell is right now: its own temperature plus the warmth of the season and hour. */
+export function temperatureAt(field: PlantField, cell: number, warmth: number, config: SimConfig): number {
+  return config.temperatureStrength * (field.temperature[cell]! + warmth);
+}
+
 /** Most plant energy a cell can hold: none under water, more on moist ground near it. */
 export function cellCapacity(field: PlantField, cell: number, config: SimConfig): number {
   if (field.water[cell] === 1) return 0;
@@ -109,6 +134,7 @@ export function createPlantField(config: SimConfig, rng: Rng): PlantField {
     scent: new Float32Array(cols * rows),
     walls: new Uint8Array(cols * rows),
     ...waterDerived(generateWater(config, rng, cols, rows), cols, rows, config),
+    temperature: generateTemperature(config, rng, cols, rows),
   };
   for (let i = 0; i < fertility.length; i++) field.capacity[i] = cellCapacity(field, i, config);
   field.energy.set(field.capacity);

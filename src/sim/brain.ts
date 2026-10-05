@@ -28,8 +28,14 @@ export const Ray = {
   Approaching: 8,
   /** 0 healthy, 1 nearly dead or sick. */
   Hurt: 9,
+  /**
+   * Its actual colour, as a point on the colour wheel: Warm is 1 for red and
+   * -1 for cyan; Green is 1 for yellow-green and -1 for violet.
+   */
+  ColourWarm: 10,
+  ColourGreen: 11,
 } as const;
-export const INPUTS_PER_RAY = 10;
+export const INPUTS_PER_RAY = 12;
 
 const AFTER_RAYS = RAY_COUNT * INPUTS_PER_RAY;
 export const Input = {
@@ -63,9 +69,13 @@ export const Input = {
   Season: AFTER_RAYS + 16,
   /** 0 at midnight, 1 at noon. */
   Daylight: AFTER_RAYS + 17,
-  Bias: AFTER_RAYS + 18,
+  /** How hot it is where the creature stands: -1 freezing, 1 scorching. */
+  Temperature: AFTER_RAYS + 18,
+  /** Above zero if it is warmer straight ahead, below if colder. */
+  WarmerAhead: AFTER_RAYS + 19,
+  Bias: AFTER_RAYS + 20,
 } as const;
-export const INPUT_COUNT = AFTER_RAYS + 19;
+export const INPUT_COUNT = AFTER_RAYS + 21;
 
 export const Output = { Turn: 0, Thrust: 1, Reproduce: 2, Attack: 3, Emit: 4, Call: 5, Give: 6 } as const;
 export const OUTPUT_COUNT = 7;
@@ -86,6 +96,8 @@ export const INPUT_LABELS: string[] = [
     `Meat-eater ${ray}`,
     `Coming ${ray}`,
     `Hurt ${ray}`,
+    `Red or cyan ${ray}`,
+    `Green or violet ${ray}`,
   ]),
   'Creature behind',
   'Crowding',
@@ -105,6 +117,8 @@ export const INPUT_LABELS: string[] = [
   'Clock',
   'Season',
   'Daylight',
+  'Temperature',
+  'Warmer ahead',
   'Bias',
 ];
 export const OUTPUT_LABELS: string[] = ['Turn', 'Thrust', 'Reproduce', 'Attack', 'Emit scent', 'Call', 'Give'];

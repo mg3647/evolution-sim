@@ -50,6 +50,7 @@
     { label: 'Mean size', color: '#6cb6ff' },
     { label: 'Mean speed', color: '#ff8f6b' },
     { label: 'Mean sensor range', color: '#b08cff' },
+    { label: 'Mean fur', color: '#f2f2f2' },
   ];
   const DIET_SERIES: ChartSeries[] = [
     { label: 'Plant-eaters', color: '#4caf50' },
@@ -78,6 +79,7 @@
   /** Set when a world is loaded from a file, so the settings follow the file's. */
   let adoptLoadedSettings = false;
   let showScent = $state(false);
+  let showTemperature = $state(false);
   let colorBySpecies = $state(false);
   let drawWorld = $state(true);
   let follow = $state(false);
@@ -103,7 +105,7 @@
     history && [history.tick, history.population, history.plantPercent],
   );
   const traitData = $derived<uPlot.AlignedData | null>(
-    history && [history.tick, history.meanSize, history.meanSpeed, history.meanSensorRange],
+    history && [history.tick, history.meanSize, history.meanSpeed, history.meanSensorRange, history.meanFur],
   );
   const dietData = $derived.by<uPlot.AlignedData | null>(() => {
     if (!history) return null;
@@ -194,6 +196,7 @@
   function applyViewOptions() {
     if (!renderer) return;
     renderer.showScent = showScent;
+    renderer.showTemperature = showTemperature;
     renderer.colorBy = colorBySpecies ? 'species' : 'family';
     renderer.follow = follow;
     renderer.redraw();
@@ -370,6 +373,10 @@
         <label title="Tint the ground purple where creatures have left scent">
           <input type="checkbox" bind:checked={showScent} onchange={applyViewOptions} />
           Show scent
+        </label>
+        <label title="Tint the ground blue where it is cold and red where it is hot, as it is right now">
+          <input type="checkbox" bind:checked={showTemperature} onchange={applyViewOptions} />
+          Show temperature
         </label>
         <label title="Colour creatures by the species they are grouped into, instead of by family colour">
           <input type="checkbox" bind:checked={colorBySpecies} onchange={applyViewOptions} />
@@ -586,6 +593,10 @@
           <div><dt>Mean size</dt><dd>{decimal(snapshot?.meanSize)}</dd></div>
           <div><dt>Mean speed</dt><dd>{decimal(snapshot?.meanSpeed)}</dd></div>
           <div><dt>Mean sensor range</dt><dd>{decimal(snapshot?.meanSensorRange)}</dd></div>
+          <div title="Average thickness of coat, from 0 (none) to 1. Fur keeps cold out, makes heat worse, and costs energy.">
+            <dt>Mean fur</dt>
+            <dd>{decimal(snapshot?.meanFur)}</dd>
+          </div>
           <div title="Creatures that digest plants better than meat">
             <dt>Plant-eaters</dt>
             <dd>{count(snapshot ? snapshot.population - snapshot.meatEaters : undefined)}</dd>
@@ -619,7 +630,7 @@
           />
           <Chart
             title="Traits"
-            note="Average body genes. 1 is what the first generation starts with."
+            note="Average body genes. 1 is what the first generation starts with, except fur, which starts at 0 and can reach 1."
             series={TRAIT_SERIES}
             data={traitData}
           />

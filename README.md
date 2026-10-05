@@ -3,7 +3,7 @@
 A 2D world of creatures whose bodies and brains evolve under natural selection
 alone: no fitness score, just a closed energy economy. Runs in the browser.
 
-Status: v2. Creatures have 49 senses and 7 actions: besides what is below,
+Status: v3 in progress. Creatures have 57 senses and 7 actions: besides what is below,
 they see what others eat, whether they are approaching or hurt, feel what is
 behind them, crowding and pain, hear and make calls, give energy to one
 another, and see less far at night. Plants regrow on a fertility map. Creatures see with
@@ -12,7 +12,10 @@ and mutated, eat, pay energy costs, reproduce and die. Bodies and brains
 evolve. Creatures can bite each other, the dead leave meat, and a diet gene
 trades plant digestion against meat digestion, so foraging, scavenging and
 hunting all emerge. A creature the colour of the ground under it can only be
-seen from close by, so colour is camouflage. The world has lakes and a river: land beside water is
+seen from close by, so colour is camouflage, and creatures see each other's
+actual colours. The map has hot and cold regions that warm and cool with the
+seasons and the hour: being too hot or too cold costs energy, big bodies and
+fur hold heat in, and creatures can feel the temperature. The world has lakes and a river: land beside water is
 richer, and creatures must drink and can swim. It has seasons and slowly
 drifting fertility. You
 can trigger droughts, ice ages and food booms, and use hand tools to place

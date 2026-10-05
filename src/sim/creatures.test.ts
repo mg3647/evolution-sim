@@ -11,7 +11,7 @@ import {
 } from './creatures';
 import { Rng } from './rng';
 
-const genes = { size: 1, speed: 1, sensorRange: 1, diet: 0.25, hue: 0.25, mutationRate: 0.05 };
+const genes = { size: 1, speed: 1, sensorRange: 1, diet: 0.25, hue: 0.25, fur: 0, mutationRate: 0.05 };
 const brain = founderBrain(new Rng('brain'), new Innovations(), defaultConfig);
 
 function options(overrides: Partial<SpawnOptions> = {}): SpawnOptions {

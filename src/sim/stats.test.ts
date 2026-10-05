@@ -10,6 +10,7 @@ function sample(tick: number): Sample {
     meanSpeed: 1,
     meanSensorRange: 1,
     meanDiet: 0.2,
+    meanFur: 0,
     meatEaters: 0,
     speciesCount: 1,
     meanLinks: 4,

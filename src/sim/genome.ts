@@ -14,6 +14,8 @@ export interface Genes {
   diet: number;
   /** Body colour as a hue in [0, 1). Relatives look alike, and a creature the colour of the ground is harder to see. */
   hue: number;
+  /** Thickness of its coat, from 0 (none) to 1: keeps cold out, makes heat worse, and costs a little to grow. */
+  fur: number;
   /** Standard deviation of the changes applied to each gene at birth. */
   mutationRate: number;
 }
@@ -30,7 +32,7 @@ function clamp(value: number, min: number, max: number): number {
   return Math.fround(Math.min(max, Math.max(min, value)));
 }
 
-/** Genes for a creature with no parent: average traits, a random diet and a random colour. */
+/** Genes for a creature with no parent: average traits, no fur, a random diet and a random colour. */
 export function founderGenes(rng: Rng, config: SimConfig): Genes {
   return mutateGenes(
     {
@@ -39,6 +41,7 @@ export function founderGenes(rng: Rng, config: SimConfig): Genes {
       sensorRange: 1,
       diet: rng.float() * config.founderDietMax,
       hue: rng.float(),
+      fur: 0,
       mutationRate: config.initialMutationRate,
     },
     rng,
@@ -64,6 +67,8 @@ export function mutateGenes(parent: Genes, rng: Rng, config: SimConfig): Genes {
     // Diet shifts by a fixed step rather than a factor, so it can reach and leave zero.
     diet: clamp(parent.diet + rng.gaussian() * rate, 0, 1),
     hue: Math.fround(hue - Math.floor(hue)) % 1,
+    // Like diet, fur shifts by a fixed step so it can grow from nothing.
+    fur: clamp(parent.fur + rng.gaussian() * rate, 0, 1),
     mutationRate: clamp(
       rate * Math.exp(rng.gaussian() * rate),
       config.minMutationRate,
@@ -113,6 +118,35 @@ export function strideFor(size: number, speed: number, config: SimConfig): numbe
   return config.creatureSpeed * speed * Math.sqrt(size);
 }
 
+/** Energy a body of this size spends per tick just staying alive. */
+export function upkeepFor(size: number, config: SimConfig): number {
+  const fixed = config.upkeepFixedShare;
+  return config.upkeepCost * (fixed + (1 - fixed) * size * Math.sqrt(size));
+}
+
+/**
+ * How far a temperature is beyond what a body can comfortably bear: 0 when
+ * comfortable, rising by 1 for each unit hotter or colder. Fur and a big body
+ * both hold heat in, which helps in the cold and hurts in the heat.
+ */
+export function temperatureStress(temperature: number, size: number, fur: number, config: SimConfig): number {
+  const held = config.sizeWarmth * (size - 1);
+  const cold = -temperature - config.comfortBand - config.furWarmth * fur - held;
+  const heat = temperature - config.comfortBand + config.furHeat * fur + held;
+  return Math.max(0, cold, heat);
+}
+
+/**
+ * Extra energy per tick that the temperature and a coat of fur cost a body.
+ * Both scale with its upkeep, so they weigh on big and small alike.
+ */
+export function climateCostFor(temperature: number, size: number, fur: number, config: SimConfig): number {
+  return (
+    upkeepFor(size, config) *
+    (config.temperatureCost * temperatureStress(temperature, size, fur, config) + config.furCost * fur)
+  );
+}
+
 /**
  * Energy spent per tick. Part of upkeep is the same for any body, which
  * penalises tiny bodies that cover little ground; the rest grows faster with
@@ -120,8 +154,7 @@ export function strideFor(size: number, speed: number, config: SimConfig): numbe
  * with the square of speed, so speed pays off only where food is sparse.
  */
 export function tickCostFor(size: number, speed: number, thrust: number, config: SimConfig): number {
-  const fixed = config.upkeepFixedShare;
-  const upkeep = config.upkeepCost * (fixed + (1 - fixed) * size * Math.sqrt(size));
+  const upkeep = upkeepFor(size, config);
   // A body built for speed is costly per unit of distance even when it ambles,
   // so the speed gene is not a free option to hold in reserve.
   const movement = config.moveCost * config.creatureSpeed * size * size * speed * speed * thrust;

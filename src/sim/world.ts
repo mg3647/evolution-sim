@@ -20,6 +20,7 @@ import {
 import {
   biteFor,
   bodyEnergyFor,
+  climateCostFor,
   founderGenes,
   maxEnergyFor,
   meatDigestion,
@@ -57,6 +58,7 @@ import {
   createPlantField,
   decayMeat,
   growPlants,
+  temperatureAt,
   totalMeatEnergy,
   totalPlantEnergy,
   type PlantField,
@@ -171,7 +173,7 @@ export function createWorld(config: SimConfig): World {
     species: createSpeciesState(),
     infected: 0,
     plagueDeaths: 0,
-    climate: { season: 1, growth: 1, cost: 1 },
+    climate: { season: 1, growth: 1, cost: 1, warmth: 0 },
   };
 
   for (let i = 0; i < config.initialCreatures; i++) {
@@ -197,6 +199,7 @@ export function step(world: World): void {
   }
   const climate = climateAt(env, world.tick, config);
   world.climate = climate;
+  world.senses.warmth = climate.warmth;
 
   growPlants(plants, config.plantGrowthRate * climate.growth, config.plantBareGrowth, ledger);
   decayMeat(plants, config.meatDecayRate, ledger);
@@ -291,8 +294,9 @@ export function step(world: World): void {
       creatures.hydration[i] = plants.shore[cell] === 1 ? Math.min(1, hydration + config.drinkRate) : hydration;
     }
 
-    // Pay for body, movement, senses, brain, fighting and signalling; what is
-    // spent leaves as heat. Cold weather makes everything cost more.
+    // Pay for body, movement, senses, brain, fighting and signalling, and for
+    // being too hot or too cold; what is spent leaves as heat. An ice age
+    // makes everything cost more.
     const cost =
       climate.cost *
       (sick ? config.plagueCost : 1) *
@@ -301,6 +305,7 @@ export function step(world: World): void {
         (attacking ? config.attackCost * size * size : 0) +
         (emitting ? config.scentCost : 0) +
         (calling ? config.callCost : 0) +
+        climateCostFor(temperatureAt(plants, cell, climate.warmth, config), size, creatures.fur[i]!, config) +
         senseCostFor(creatures.sensorRange[i]!, config) +
         brainCost(brain, config));
     const paid = Math.min(cost, energy);
@@ -561,6 +566,7 @@ function sampleHistory(world: World): void {
     meanSpeed,
     meanSensorRange,
     meanDiet,
+    meanFur: meanOf(creatures.fur, creatures),
     meatEaters,
     speciesCount: world.species.species.length,
     meanLinks: links / count,
@@ -643,6 +649,7 @@ export function hashWorld(world: World): number {
     c.sensorRange,
     c.diet,
     c.hue,
+    c.fur,
     c.mutationRate,
   ]) {
     h = hashBytes(h, bytesOf(field, c.count));
