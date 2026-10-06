@@ -19,7 +19,7 @@ import type { World } from './world';
  */
 
 /** Bumped whenever the saved layout changes; older files are refused. */
-export const SAVE_VERSION = 12;
+export const SAVE_VERSION = 13;
 
 /** Per-creature number arrays, saved up to the live count. */
 const CREATURE_FIELDS = [
@@ -38,6 +38,10 @@ const CREATURE_FIELDS = [
   'hydration',
   'pain',
   'calling',
+  'held',
+  'heldEnergy',
+  'heldFromX',
+  'heldFromY',
   'sick',
   'size',
   'speed',
@@ -49,7 +53,7 @@ const CREATURE_FIELDS = [
   'mutationRate',
 ] as const;
 
-const FIELD_ARRAYS = ['fertility', 'capacity', 'energy', 'meat', 'scent', 'walls', 'water', 'temperature', 'branches', 'stones', 'fire', 'ash'] as const;
+const FIELD_ARRAYS = ['fertility', 'capacity', 'energy', 'meat', 'scent', 'walls', 'water', 'temperature', 'branches', 'stones', 'fire', 'ash', 'store'] as const;
 
 interface SavedBrain {
   links: LinkGene[];
@@ -75,6 +79,7 @@ export interface SavedWorld {
   reseeded: number;
   defended: number;
   fires: World['fires'];
+  carry: World['carry'];
   parents: World['parents'];
   social: World['social'];
   deaths: World['deaths'];
@@ -126,6 +131,7 @@ export function saveWorld(world: World): SavedWorld {
     reseeded: world.reseeded,
     defended: world.defended,
     fires: { ...world.fires },
+    carry: { ...world.carry },
     parents: { ...world.parents },
     social: { ...world.social },
     deaths: { ...world.deaths },
@@ -175,6 +181,7 @@ export function loadWorld(saved: SavedWorld): World {
     walls: new Uint8Array(saved.field.walls),
     temperature: new Float32Array(saved.field.temperature),
     biome: new Uint8Array(cells),
+    store: new Float64Array(saved.field.store),
     branches: new Uint8Array(saved.field.branches),
     stones: new Uint8Array(saved.field.stones),
     fire: new Uint16Array(saved.field.fire),
@@ -232,6 +239,7 @@ export function loadWorld(saved: SavedWorld): World {
     reseeded: saved.reseeded,
     defended: saved.defended,
     fires: { ...saved.fires },
+    carry: { ...saved.carry },
     parents: { ...saved.parents },
     deaths: { ...saved.deaths },
     lab: { ...saved.lab, deathsThen: { ...saved.lab.deathsThen } },

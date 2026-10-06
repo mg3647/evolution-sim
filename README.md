@@ -3,7 +3,7 @@
 A 2D world of creatures whose bodies and brains evolve under natural selection
 alone: no fitness score, just a closed energy economy. Runs in the browser.
 
-Status: v3 in progress. Creatures have 57 senses and 7 actions: besides what is below,
+Status: v3 in progress. Creatures have 67 senses and 8 actions: besides what is below,
 they see what others eat, whether they are approaching or hurt, feel what is
 behind them, crowding and pain, hear and make calls, give energy to one
 another, and see less far at night. Plants regrow on a fertility map. Creatures see with
@@ -21,7 +21,9 @@ desert, tundra), each with a perk and a drawback. A defense gene (spines or
 poison) hurts whatever bites its owner, at a cost in energy. Branches lie in
 forests and stones in deserts; lightning starts wildfires in hot weather, which
 spread through plants, hurt what stands in them, warm the land around and
-leave ash where plants regrow faster. The world has lakes and a river: land beside water is
+leave ash where plants regrow faster. Creatures can pick up and hold one thing:
+a stone makes a bite stronger, a branch takes part of a bite, and a load of
+food can be set down elsewhere as a store that slowly spoils. The world has lakes and a river: land beside water is
 richer, and creatures must drink and can swim. It has seasons and slowly
 drifting fertility. You
 can trigger droughts, ice ages and food booms, and use hand tools to place

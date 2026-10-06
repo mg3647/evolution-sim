@@ -1,5 +1,6 @@
 <script lang="ts">
   import { BIOME_LABELS } from '../sim/biomes';
+  import { HELD_LABELS } from '../sim/creatures';
   import { INPUT_LABELS, OUTPUT_LABELS } from '../sim/brain';
   import { speciesHue } from '../render/renderer';
   import type { Inspection } from '../worker/protocol';
@@ -63,6 +64,10 @@
         <dt>Defenses</dt>
         <dd>{creature.defense.toFixed(2)}</dd>
       </div>
+      <div title="One thing at a time: a stone makes its bite stronger, a branch takes part of bites aimed at it, and food can be set down elsewhere as a store">
+        <dt>Holding</dt>
+        <dd>{HELD_LABELS[creature.held]}{creature.heldEnergy > 0 ? ` (${creature.heldEnergy.toFixed(1)})` : ''}</dd>
+      </div>
       <div title="The kind of land it is standing on"><dt>Biome</dt><dd>{BIOME_LABELS[creature.biome]}</dd></div>
       <div title="How hot it is where it stands: -1 is freezing, 1 is scorching. It pays extra energy when this is beyond what its size and fur can bear.">
         <dt>Temperature</dt>
@@ -92,6 +97,8 @@
       means it bites the nearest creature in reach. Emit scent: right of centre means it leaves a scent on
       the ground that others can smell. Call: right of centre means it makes a sound others can hear from
       farther than they can see. Give: right of centre means it hands energy to the creature in front.
+      Hold: right of centre means it picks up what is underfoot (a stone, a branch or a load of food) and
+      keeps hold of it; left of centre means it sets it down.
     </p>
     <ul>
       {#each OUTPUT_LABELS as label, k (label)}

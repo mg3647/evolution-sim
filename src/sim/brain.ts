@@ -36,8 +36,10 @@ export const Ray = {
   ColourGreen: 11,
   /** Fire along the ray, stronger when nearer. */
   Fire: 12,
+  /** A branch or stone lying along the ray, stronger when nearer. */
+  Items: 13,
 } as const;
-export const INPUTS_PER_RAY = 13;
+export const INPUTS_PER_RAY = 14;
 
 const AFTER_RAYS = RAY_COUNT * INPUTS_PER_RAY;
 export const Input = {
@@ -75,12 +77,20 @@ export const Input = {
   Temperature: AFTER_RAYS + 18,
   /** Above zero if it is warmer straight ahead, below if colder. */
   WarmerAhead: AFTER_RAYS + 19,
-  Bias: AFTER_RAYS + 20,
+  /** What lies underfoot to pick up: 1 a stone, -1 a branch, 0 neither. */
+  ItemUnderfoot: AFTER_RAYS + 20,
+  /** Stored food underfoot, dropped here by some creature. */
+  StoreUnderfoot: AFTER_RAYS + 21,
+  /** What it is holding: 1 a stone, -1 a branch, 0 neither. */
+  HoldingTool: AFTER_RAYS + 22,
+  /** How much food it is holding, up to 1 for a full load. */
+  HoldingFood: AFTER_RAYS + 23,
+  Bias: AFTER_RAYS + 24,
 } as const;
-export const INPUT_COUNT = AFTER_RAYS + 21;
+export const INPUT_COUNT = AFTER_RAYS + 25;
 
-export const Output = { Turn: 0, Thrust: 1, Reproduce: 2, Attack: 3, Emit: 4, Call: 5, Give: 6 } as const;
-export const OUTPUT_COUNT = 7;
+export const Output = { Turn: 0, Thrust: 1, Reproduce: 2, Attack: 3, Emit: 4, Call: 5, Give: 6, Hold: 7 } as const;
+export const OUTPUT_COUNT = 8;
 
 /** Neuron ids below this are inputs and outputs; hidden neurons come after. */
 const FIXED_NODES = INPUT_COUNT + OUTPUT_COUNT;
@@ -101,6 +111,7 @@ export const INPUT_LABELS: string[] = [
     `Red or cyan ${ray}`,
     `Green or violet ${ray}`,
     `Fire ${ray}`,
+    `Branch or stone ${ray}`,
   ]),
   'Creature behind',
   'Crowding',
@@ -122,9 +133,22 @@ export const INPUT_LABELS: string[] = [
   'Daylight',
   'Temperature',
   'Warmer ahead',
+  'Stone or branch underfoot',
+  'Stored food underfoot',
+  'Holding stone or branch',
+  'Holding food',
   'Bias',
 ];
-export const OUTPUT_LABELS: string[] = ['Turn', 'Thrust', 'Reproduce', 'Attack', 'Emit scent', 'Call', 'Give'];
+export const OUTPUT_LABELS: string[] = [
+  'Turn',
+  'Thrust',
+  'Reproduce',
+  'Attack',
+  'Emit scent',
+  'Call',
+  'Give',
+  'Hold',
+];
 
 export interface LinkGene {
   /** Id shared by every link between the same two neurons, across all brains. */

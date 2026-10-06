@@ -83,7 +83,7 @@ export const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
   {
-    title: 'Fire, branches and stones',
+    title: 'Fire, branches, stones and carrying',
     settings: [
       { key: 'fireChance', label: 'Lightning', hint: 'Chance each tick that lightning strikes somewhere; it starts a fire only where it is hot and there is something to burn. 0 means no fires start on their own', min: 0, max: 0.02, step: 0.0005 },
       { key: 'fireSpread', label: 'Fire spread', hint: 'Chance each tick that fire catches in a neighbouring cell with enough to burn; 0 keeps every fire to one cell', min: 0, max: 0.1, step: 0.005 },
@@ -91,6 +91,11 @@ export const SETTING_GROUPS: SettingGroup[] = [
       { key: 'fireWarmth', label: 'Warmth of fire', hint: 'How much a fire warms the land around it', min: 0, max: 2, step: 0.1 },
       { key: 'fireMinHeat', label: 'Heat needed for lightning fires', hint: 'Lightning only starts a fire where it is at least this hot at that moment', min: -1, max: 1.5, step: 0.05 },
       { key: 'ashGrowth', label: 'Richness of ash', hint: 'How many times faster plants regrow on fresh ash', min: 0, max: 6, step: 0.5 },
+      { key: 'stoneBite', label: 'Stone in the grip', hint: 'How much harder a creature holding a stone bites; 0 makes stones useless', min: 0, max: 2, step: 0.1 },
+      { key: 'branchShield', label: 'Branch as a shield', hint: 'Share of each bite that a held branch takes instead of its holder; 0 makes branches useless', min: 0, max: 0.9, step: 0.05 },
+      { key: 'carrySlow', label: 'Weight of a load', hint: 'Share of its speed a creature loses while it holds anything', min: 0, max: 0.6, step: 0.05 },
+      { key: 'carryMouthfuls', label: 'Size of a load of food', hint: 'How much food a creature picks up at once, in mouthfuls', min: 1, max: 30, step: 1 },
+      { key: 'storeDecay', label: 'Stored food spoils', hint: 'Share of dropped plant food that spoils each tick; meat rots at its own speed', min: 0, max: 0.001, step: 0.00001 },
       { key: 'branchRegrowTicks', label: 'Branch fall (ticks)', hint: 'Ticks for each forest cell to get about one chance at a new branch; 0 stops branches falling', min: 0, max: 20000, step: 500 },
     ],
   },
@@ -205,6 +210,12 @@ export const PRESETS: Preset[] = [
     label: 'Chaos',
     description: 'Random droughts, plagues, meteors and walls every few thousand ticks.',
     overrides: { randomEvents: true, randomEventInterval: 4000 },
+  },
+  {
+    id: 'longLives',
+    label: 'Long lives',
+    description: 'Creatures live 10,000 ticks instead of 5,000: easier to watch one carry and haul, but evolution runs at half the pace.',
+    overrides: { maxAge: 10000 },
   },
   {
     id: 'small',

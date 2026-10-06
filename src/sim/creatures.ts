@@ -37,6 +37,13 @@ export interface Creatures {
   sick: Int32Array;
   /** 1 if the creature called on its last turn; others hear it on the next tick. */
   calling: Uint8Array;
+  /** What it is holding; see Held. */
+  held: Uint8Array;
+  /** Energy of the food it is holding; 0 unless it holds food. */
+  heldEnergy: Float64Array;
+  /** Where it picked up what it holds. */
+  heldFromX: Float32Array;
+  heldFromY: Float32Array;
   // Genes; see Genes in genome.ts.
   size: Float32Array;
   speed: Float32Array;
@@ -49,6 +56,10 @@ export interface Creatures {
   /** One brain per creature, parallel to the arrays above. */
   brain: Brain[];
 }
+
+/** What a creature can hold: one thing at a time. */
+export const Held = { Nothing: 0, Branch: 1, Stone: 2, Plants: 3, Meat: 4 } as const;
+export const HELD_LABELS: string[] = ['nothing', 'a branch', 'a stone', 'plant food', 'meat'];
 
 /** Every per-creature array, so growing and removing cannot miss one. */
 const FIELDS = [
@@ -68,6 +79,10 @@ const FIELDS = [
   'pain',
   'sick',
   'calling',
+  'held',
+  'heldEnergy',
+  'heldFromX',
+  'heldFromY',
   'size',
   'speed',
   'sensorRange',
@@ -116,6 +131,10 @@ export function createCreatures(capacity: number): Creatures {
     pain: new Float32Array(capacity),
     sick: new Int32Array(capacity),
     calling: new Uint8Array(capacity),
+    held: new Uint8Array(capacity),
+    heldEnergy: new Float64Array(capacity),
+    heldFromX: new Float32Array(capacity),
+    heldFromY: new Float32Array(capacity),
     size: new Float32Array(capacity),
     speed: new Float32Array(capacity),
     sensorRange: new Float32Array(capacity),
@@ -163,6 +182,10 @@ export function spawnCreature(c: Creatures, options: SpawnOptions): number {
   c.pain[i] = 0;
   c.sick[i] = 0;
   c.calling[i] = 0;
+  c.held[i] = 0;
+  c.heldEnergy[i] = 0;
+  c.heldFromX[i] = 0;
+  c.heldFromY[i] = 0;
   c.size[i] = options.genes.size;
   c.speed[i] = options.genes.speed;
   c.sensorRange[i] = options.genes.sensorRange;
@@ -200,6 +223,6 @@ export function genesOf(c: Creatures, i: number): Genes {
 
 export function totalCreatureEnergy(c: Creatures): number {
   let total = 0;
-  for (let i = 0; i < c.count; i++) total += c.energy[i]!;
+  for (let i = 0; i < c.count; i++) total += c.energy[i]! + c.heldEnergy[i]!;
   return total;
 }

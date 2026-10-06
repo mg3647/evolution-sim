@@ -1,6 +1,7 @@
 import { BIOME_COUNT } from '../sim/biomes';
 import { enabledLinks, INPUT_COUNT, OUTPUT_COUNT } from '../sim/brain';
 import type { SimConfig } from '../sim/config';
+import { Held } from '../sim/creatures';
 import { daylightAt } from '../sim/environment';
 import { maxEnergyFor, temperatureStress } from '../sim/genome';
 import { cellIndexAt, temperatureAt } from '../sim/plants';
@@ -101,6 +102,8 @@ function inspect(world: World, i: number): Inspection {
     hue: c.hue[i]!,
     fur: c.fur[i]!,
     defense: c.defense[i]!,
+    held: c.held[i]!,
+    heldEnergy: c.heldEnergy[i]!,
     temperature,
     temperatureStress: temperatureStress(temperature, c.size[i]!, c.fur[i]!, config),
     biome: world.plants.biome[cell]!,
@@ -161,6 +164,7 @@ function sendSnapshot(now: number): void {
   let dietTotal = 0;
   let furTotal = 0;
   let defenseTotal = 0;
+  const holding = { branch: 0, stone: 0, food: 0 };
   let meatEaters = 0;
   let infected = 0;
   let maxGeneration = 0;
@@ -185,6 +189,9 @@ function sendSnapshot(now: number): void {
     dietTotal += c.diet[i]!;
     furTotal += c.fur[i]!;
     defenseTotal += c.defense[i]!;
+    if (c.held[i] === Held.Branch) holding.branch++;
+    else if (c.held[i] === Held.Stone) holding.stone++;
+    else if (c.held[i] !== Held.Nothing) holding.food++;
     if (c.diet[i]! > 0.5) meatEaters++;
     sizeTotal += size;
     speedTotal += c.speed[i]!;
@@ -204,7 +211,7 @@ function sendSnapshot(now: number): void {
   for (let i = 0; i < cells; i++) {
     fire[i] = p.fire[i]! > 0 ? 1 : 0;
     ash[i] = p.ash[i]! * 255;
-    items[i] = (p.branches[i]! > 0 ? 1 : 0) | (p.stones[i]! > 0 ? 2 : 0);
+    items[i] = (p.branches[i]! > 0 ? 1 : 0) | (p.stones[i]! > 0 ? 2 : 0) | (p.store[i]! >= 1 ? 4 : 0);
     const heat = temperatureAt(p, i, world.climate.warmth, config, world.climate.dayWarmth);
     temperature[i] = Math.max(0, Math.min(1, (heat + 1.5) / 3)) * 255;
     // Rich biomes hold more than the plain capacity; they draw as fully grown.
@@ -245,6 +252,8 @@ function sendSnapshot(now: number): void {
     ash,
     items,
     fires: { ...world.fires },
+    holding,
+    carry: { ...world.carry },
     environment: {
       season: world.climate.season,
       yearFraction: config.seasonLength > 0 ? (world.tick % config.seasonLength) / config.seasonLength : 0,
@@ -287,6 +296,8 @@ function sendHistory(now: number): void {
     meanDiet: h.meanDiet.slice(0, h.count),
     meanFur: h.meanFur.slice(0, h.count),
     meanDefense: h.meanDefense.slice(0, h.count),
+    toolHolders: h.toolHolders.slice(0, h.count),
+    foodHolders: h.foodHolders.slice(0, h.count),
     meatEaters: h.meatEaters.slice(0, h.count),
     speciesCount: h.speciesCount.slice(0, h.count),
     meanLinks: h.meanLinks.slice(0, h.count),

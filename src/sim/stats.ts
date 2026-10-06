@@ -21,6 +21,9 @@ export interface History {
   meanDiet: Float32Array;
   meanFur: Float32Array;
   meanDefense: Float32Array;
+  /** Creatures holding a stone or branch, and creatures holding food. */
+  toolHolders: Float32Array;
+  foodHolders: Float32Array;
   /** Creatures whose diet gene is above one half. */
   meatEaters: Float32Array;
   speciesCount: Float32Array;
@@ -150,6 +153,8 @@ export const HISTORY_SERIES = [
   'meanDiet',
   'meanFur',
   'meanDefense',
+  'toolHolders',
+  'foodHolders',
   'meatEaters',
   'speciesCount',
   'meanLinks',
@@ -189,6 +194,8 @@ export interface Sample {
   meanDiet: number;
   meanFur: number;
   meanDefense: number;
+  toolHolders: number;
+  foodHolders: number;
   meatEaters: number;
   speciesCount: number;
   meanLinks: number;
@@ -232,6 +239,8 @@ export function createHistory(interval: number, capacity: number): History {
     meanDiet: new Float32Array(capacity),
     meanFur: new Float32Array(capacity),
     meanDefense: new Float32Array(capacity),
+    toolHolders: new Float32Array(capacity),
+    foodHolders: new Float32Array(capacity),
     meatEaters: new Float32Array(capacity),
     speciesCount: new Float32Array(capacity),
     meanLinks: new Float32Array(capacity),

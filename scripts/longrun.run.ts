@@ -19,6 +19,7 @@
 import { it } from 'vitest';
 import { BIOME_COUNT, BIOME_LABELS } from '../src/sim/biomes';
 import { defaultConfig, type SimConfig } from '../src/sim/config';
+import { Held } from '../src/sim/creatures';
 import { daylightAt } from '../src/sim/environment';
 import { cellIndexAt, groundHue, visibility } from '../src/sim/plants';
 import { createWorld, step } from '../src/sim/world';
@@ -74,6 +75,14 @@ interface Summary {
   /** Wildfires started, and cells burned as a multiple of the map's cells, per 10,000 ticks. */
   firesPerTenThousand: number;
   burnedPerTenThousand: number;
+  /**
+   * Mean share of creatures holding a stone, a branch, and food; and how far,
+   * on average, a load of food was carried before being set down.
+   */
+  holdingStone: number;
+  holdingBranch: number;
+  holdingFood: number;
+  haulDistance: number;
   /** Mean fur and defense genes overall. */
   meanFur: number;
   meanDefense: number;
@@ -103,6 +112,8 @@ function run(seed: string): Summary {
   let hiddenSum = 0;
   let furSum = 0;
   let defenseSum = 0;
+  const heldSum = [0, 0, 0, 0, 0];
+  let carryBefore = { ...world.carry };
   const zero = () => new Array<number>(BIOME_COUNT).fill(0);
   const biomeCount = zero();
   const biomeOccupied = zero();
@@ -130,6 +141,7 @@ function run(seed: string): Summary {
       socialBefore = { ...world.social };
       reseededBefore = world.reseeded;
       firesBefore = { ...world.fires };
+      carryBefore = { ...world.carry };
     }
     // Activity is sampled often and at odd intervals, so it does not fall in step with the day.
     if (tick > from && tick % 37 === 0) {
@@ -168,6 +180,7 @@ function run(seed: string): Summary {
       biomeDiet[biome]! += c.diet[i]!;
       fur += c.fur[i]!;
       defense += c.defense[i]!;
+      heldSum[c.held[i]!]! += 1 / Math.max(1, c.count);
       hidden += 1 - visibility(c.hue[i]!, ground, 1);
       if (c.diet[i]! > 0.5) hunters++;
       size += c.size[i]!;
@@ -227,6 +240,15 @@ function run(seed: string): Summary {
     hidden: hiddenSum / samples,
     meanFur: furSum / samples,
     meanDefense: defenseSum / samples,
+    holdingStone: heldSum[Held.Stone]! / samples,
+    holdingBranch: heldSum[Held.Branch]! / samples,
+    holdingFood: (heldSum[Held.Plants]! + heldSum[Held.Meat]!) / samples,
+    haulDistance:
+      (world.carry.haul - carryBefore.haul) /
+      Math.max(
+        1e-9,
+        world.carry.plantsDropped + world.carry.meatDropped - carryBefore.plantsDropped - carryBefore.meatDropped,
+      ),
     biomes: biomeCount.map((count, biome) => ({
       land: biomeLand[biome]! / Math.max(1, biomeLand.reduce((a, b) => a + b, 0)),
       share: count / Math.max(1, biomeCount.reduce((a, b) => a + b, 0)),
@@ -270,6 +292,7 @@ it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
         `hidden=${s.hidden.toFixed(2)}`,
         `fur=${s.meanFur.toFixed(2)}`,
         `defense=${s.meanDefense.toFixed(2)}`,
+        `holding stone/branch/food=${(s.holdingStone * 100).toFixed(1)}%/${(s.holdingBranch * 100).toFixed(1)}%/${(s.holdingFood * 100).toFixed(1)}% haul=${s.haulDistance.toFixed(0)}`,
 
         `tps=${Math.round(s.ticksPerSecond)}`,
       ].join(' '),

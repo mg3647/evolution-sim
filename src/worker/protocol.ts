@@ -55,6 +55,9 @@ export interface Inspection {
   fur: number;
   // Spines or poison, from 0 to 1.
   defense: number;
+  /** What it is holding (see Held in creatures.ts), and the energy of it if it is food. */
+  held: number;
+  heldEnergy: number;
   /** How hot it is where the creature stands, and how far beyond its comfort that is. */
   temperature: number;
   temperatureStress: number;
@@ -157,12 +160,15 @@ export interface Snapshot {
   temperature: Uint8Array;
   // Per cell: the kind of land it is; see Biome in biomes.ts.
   biome: Uint8Array;
-  // Per cell: 1 where it is burning; ash as 0..255; and 1 for a branch plus 2 for a stone.
+  // Per cell: 1 where it is burning; ash as 0..255; and 1 for a branch plus 2 for a stone plus 4 for stored food.
   fire: Uint8Array;
   ash: Uint8Array;
   items: Uint8Array;
   /** Wildfires started since the world began, cells burned in all, and cells burning now. */
   fires: { started: number; cellsBurned: number; burning: number };
+  /** Creatures holding each kind of thing right now, and carrying totals since the world began. */
+  holding: { branch: number; stone: number; food: number };
+  carry: { pickups: number; plantsDropped: number; meatDropped: number; haul: number };
   environment: EnvironmentView;
 
   births: number;
@@ -192,6 +198,8 @@ export interface HistoryData {
   meanDiet: Float32Array;
   meanFur: Float32Array;
   meanDefense: Float32Array;
+  toolHolders: Float32Array;
+  foodHolders: Float32Array;
   meatEaters: Float32Array;
   speciesCount: Float32Array;
   meanLinks: Float32Array;

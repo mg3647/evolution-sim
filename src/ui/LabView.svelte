@@ -201,6 +201,15 @@
     ),
   );
   const diversityData = $derived<uPlot.AlignedData | null>(history && [history.tick, history.diversity]);
+  const CARRY_SERIES: ChartSeries[] = [
+    { label: 'Holding a stone or branch %', color: '#b0b0b6' },
+    { label: 'Holding food %', color: '#e8d678' },
+  ];
+  const carryData = $derived.by<uPlot.AlignedData | null>(() => {
+    if (!history) return null;
+    const share = (holders: Float32Array) => holders.map((n, k) => (100 * n) / Math.max(1, history.population[k]!));
+    return [history.tick, share(history.toolHolders), share(history.foodHolders)];
+  });
 </script>
 
 <div class="lab">
@@ -351,6 +360,15 @@
         takes over, and climbs back as mutations build up again.
       </p>
       <Chart {events} title="Gene spread" note="The average spread (standard deviation) of size, speed, sensor range and diet." series={DIVERSITY_SERIES} data={diversityData} />
+    </section>
+
+    <section class="card">
+      <h1>Carrying</h1>
+      <p class="teaches">
+        Whether holding things has become a habit. The first creatures hold at random; if the lines climb or
+        fall away from where they start, selection is acting on carrying.
+      </p>
+      <Chart title="Share of creatures holding something" series={CARRY_SERIES} data={carryData} />
     </section>
 
     <section class="card">

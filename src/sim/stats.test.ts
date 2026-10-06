@@ -12,6 +12,8 @@ function sample(tick: number): Sample {
     meanDiet: 0.2,
     meanFur: 0,
     meanDefense: 0,
+    toolHolders: 0,
+    foodHolders: 0,
     meatEaters: 0,
     speciesCount: 1,
     meanLinks: 4,

@@ -45,6 +45,8 @@ export interface PlantField {
   temperature: Float32Array;
   /** The kind of land each cell is; see biomes.ts. It follows temperature and wetness, so it shifts as fertility drifts. */
   biome: Uint8Array;
+  /** Plant food dropped in each cell by creatures: a store that slowly spoils. Eaten like plants. */
+  store: Float64Array;
   /** Branches and stones lying in each cell; see fire.ts. */
   branches: Uint8Array;
   stones: Uint8Array;
@@ -184,6 +186,7 @@ export function createPlantField(config: SimConfig, rng: Rng): PlantField {
     ...waterDerived(generateWater(config, rng, cols, rows), cols, rows, config),
     temperature: generateTemperature(config, rng, cols, rows),
     biome: new Uint8Array(cols * rows),
+    store: new Float64Array(cols * rows),
     branches: new Uint8Array(cols * rows),
     stones: new Uint8Array(cols * rows),
     fire: new Uint16Array(cols * rows),
@@ -253,6 +256,21 @@ export function decayMeat(field: PlantField, decayRate: number, ledger: EnergyLe
   ledger.heatOut += rotted;
 }
 
+/** Spoil a fraction of all stored plant food away as heat. */
+export function spoilStores(field: PlantField, decayRate: number, ledger: EnergyLedger): void {
+  const { store } = field;
+  let spoiled = 0;
+  for (let i = 0; i < store.length; i++) {
+    const current = store[i]!;
+    if (current === 0) continue;
+    // A crumb is not worth keeping forever.
+    const loss = current < 1e-3 ? current : current * decayRate;
+    store[i] = current - loss;
+    spoiled += loss;
+  }
+  ledger.heatOut += spoiled;
+}
+
 export function totalMeatEnergy(field: PlantField): number {
   let total = 0;
   for (let i = 0; i < field.meat.length; i++) total += field.meat[i]!;
@@ -262,6 +280,12 @@ export function totalMeatEnergy(field: PlantField): number {
 export function totalPlantEnergy(field: PlantField): number {
   let total = 0;
   for (let i = 0; i < field.energy.length; i++) total += field.energy[i]!;
+  return total;
+}
+
+export function totalStoreEnergy(field: PlantField): number {
+  let total = 0;
+  for (let i = 0; i < field.store.length; i++) total += field.store[i]!;
   return total;
 }
 

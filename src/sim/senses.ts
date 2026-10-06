@@ -1,7 +1,7 @@
 import { BIOME_TRAITS } from './biomes';
 import { Input, INPUTS_PER_RAY, RAY_COUNT, Ray } from './brain';
 import type { SimConfig } from './config';
-import type { Creatures } from './creatures';
+import { Held, type Creatures } from './creatures';
 import { daylightAt, seasonAt } from './environment';
 import { maxEnergyFor } from './genome';
 import { cellIndexAt, groundHue, temperatureAt, visibility, type PlantField } from './plants';
@@ -116,6 +116,7 @@ export class Senses {
       let wall = 0;
       let water = 0;
       let fire = 0;
+      let items = 0;
       for (const t of GROUND_SAMPLES) {
         let px = turn === 0 ? x + cosHeading * range * t : x + dx * t;
         let py = turn === 0 ? y + sinHeading * range * t : y + dy * t;
@@ -128,6 +129,7 @@ export class Senses {
         if (field.walls[cell]) wall = Math.max(wall, 1.5 - t);
         if (field.water[cell]) water = Math.max(water, 1.5 - t);
         if (field.fire[cell]) fire = Math.max(fire, 1.5 - t);
+        if (field.stones[cell] || field.branches[cell]) items = Math.max(items, 1.5 - t);
         if (t === GROUND_SAMPLES[0]) {
           if (turn < 0) scentLeft = field.scent[cell]!;
           else if (turn > 0) scentRight = field.scent[cell]!;
@@ -139,6 +141,7 @@ export class Senses {
       inputs[o + Ray.Water] = Math.min(1, water);
       inputs[o + Ray.Wall] = Math.min(1, wall);
       inputs[o + Ray.Fire] = Math.min(1, fire);
+      inputs[o + Ray.Items] = Math.min(1, items);
       inputs[o + Ray.Near] = 0;
       inputs[o + Ray.Kin] = 0;
       inputs[o + Ray.Bigger] = 0;
@@ -175,6 +178,14 @@ export class Senses {
     inputs[Input.MeatUnderfoot] = Math.min(1, field.meat[cell]! * meatScale);
     inputs[Input.InWater] = field.water[cell]!;
     inputs[Input.ScentUnderfoot] = Math.min(1, field.scent[cell]!);
+    inputs[Input.ItemUnderfoot] = field.stones[cell]! > 0 ? 1 : field.branches[cell]! > 0 ? -1 : 0;
+    inputs[Input.StoreUnderfoot] = Math.min(1, field.store[cell]! * plantScale);
+    const held = creatures.held[i]!;
+    inputs[Input.HoldingTool] = held === Held.Stone ? 1 : held === Held.Branch ? -1 : 0;
+    inputs[Input.HoldingFood] =
+      held === Held.Plants || held === Held.Meat
+        ? Math.min(1, creatures.heldEnergy[i]! / (config.biteSize * creatures.size[i]! ** 2 * config.carryMouthfuls))
+        : 0;
     inputs[Input.ScentSide] = Math.min(1, scentRight) - Math.min(1, scentLeft);
 
     // Hearing: how loud calls are one sound cell to the left and to the right.

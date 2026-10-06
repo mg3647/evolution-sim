@@ -508,6 +508,10 @@
             <svg width="20" height="20" viewBox="0 0 20 20"><rect width="20" height="20" fill="#b0b0b6"/></svg>
             <span>Stone</span>
           </div>
+          <div class="legend-item" title="Plant food a creature carried here and set down; it spoils slowly">
+            <svg width="20" height="20" viewBox="0 0 20 20"><rect width="20" height="20" fill="#e8d678"/></svg>
+            <span>Stored food</span>
+          </div>
           {#if (snapshot?.config.temperatureStrength ?? 0) > 0}
             {#each BIOME_LABELS as label, k (label)}
               {@const ground = BIOME_GROUND[k]!}
@@ -609,6 +613,22 @@
           <div title="Cells of land burning right now">
             <dt>Burning now</dt>
             <dd>{count(snapshot?.fires.burning)}</dd>
+          </div>
+          <div title="Creatures holding a stone (stronger bite) or a branch (takes part of bites aimed at them) right now">
+            <dt>Holding a tool</dt>
+            <dd>{snapshot ? `${count(snapshot.holding.stone)} stone, ${count(snapshot.holding.branch)} branch` : '-'}</dd>
+          </div>
+          <div title="Creatures holding a load of food right now">
+            <dt>Holding food</dt>
+            <dd>{count(snapshot?.holding.food)}</dd>
+          </div>
+          <div title="How far, on average, a load of food was carried before it was set down">
+            <dt>Food carried</dt>
+            <dd>
+              {snapshot && snapshot.carry.plantsDropped + snapshot.carry.meatDropped > 0
+                ? `${Math.round(snapshot.carry.haul / (snapshot.carry.plantsDropped + snapshot.carry.meatDropped))} units`
+                : '-'}
+            </dd>
           </div>
           <div title="Creatures making a call right now; each is drawn with a pale blue ring">
             <dt>Calling now</dt>

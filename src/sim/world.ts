@@ -14,6 +14,7 @@ import type { SimConfig } from './config';
 import {
   createCreatures,
   genesOf,
+  Held,
   removeCreature,
   spawnCreature,
   totalCreatureEnergy,
@@ -64,9 +65,11 @@ import {
   createPlantField,
   decayMeat,
   growPlants,
+  spoilStores,
   temperatureAt,
   totalMeatEnergy,
   totalPlantEnergy,
+  totalStoreEnergy,
   type PlantField,
 } from './plants';
 import { Rng } from './rng';
@@ -109,6 +112,12 @@ export interface World {
   defended: number;
   /** Wildfires so far, and how much is burning now. */
   fires: FireTally;
+  /**
+   * Carrying since the world was created: things picked up, plant food and
+   * meat set down (as energy), and the distance food was carried, weighted
+   * by its energy.
+   */
+  carry: { pickups: number; plantsDropped: number; meatDropped: number; haul: number };
   /**
    * Killed counts bites and biters felled by defenses; disaster counts
    * plagues, meteors and fire; temperature counts those that ran out of
@@ -258,6 +267,7 @@ export function createWorld(config: SimConfig): World {
     reseeded: 0,
     defended: 0,
     fires: createFireTally(),
+    carry: { pickups: 0, plantsDropped: 0, meatDropped: 0, haul: 0 },
     parents: { count: 0, size: 0, speed: 0, sensorRange: 0, diet: 0 },
     social: { calling: 0, calls: 0, given: 0, givenToKin: 0 },
     activity: 0,
@@ -312,6 +322,7 @@ export function step(world: World): void {
   );
   burn(plants, config, world.rng, ledger, world.fires);
   decayMeat(plants, config.meatDecayRate, ledger);
+  spoilStores(plants, config.storeDecay, ledger);
   spreadScent(env, plants, config);
   world.hash.build(creatures.x, creatures.y, creatures.count);
   world.social.calling = buildSound(world.sound, creatures);
@@ -344,6 +355,7 @@ export function step(world: World): void {
     const emitting = brain.activation[INPUT_COUNT + Output.Emit]! > 0;
     const calling = brain.activation[INPUT_COUNT + Output.Call]! > 0;
     const giving = brain.activation[INPUT_COUNT + Output.Give]! > 0;
+    const holding = brain.activation[INPUT_COUNT + Output.Hold]! > 0;
     creatures.calling[i] = calling ? 1 : 0;
     const sick = updateInfection(world, i);
     const diet = creatures.diet[i]!;
@@ -355,7 +367,13 @@ export function step(world: World): void {
       const victim = world.senses.targetIndex;
       const ratio = size / creatures.size[victim]!;
       const teeth = config.herbivoreAttack + (1 - config.herbivoreAttack) * diet;
-      const damage = config.attackDamage * teeth * ratio;
+      // A stone in the biter's grip adds to the blow; a branch in the victim's takes part of it.
+      const damage =
+        config.attackDamage *
+        teeth *
+        ratio *
+        (creatures.held[i] === Held.Stone ? 1 + config.stoneBite : 1) *
+        (creatures.held[victim] === Held.Branch ? 1 - config.branchShield : 1);
       creatures.health[victim]! -= damage;
       creatures.pain[victim]! += damage;
       // Spines and poison bite back at a bite that lands: the biter is hurt,
@@ -376,7 +394,11 @@ export function step(world: World): void {
     const speed = creatures.speed[i]!;
     const heading = creatures.heading[i]! + turn;
     const swimming = plants.water[cellIndexAt(plants, creatures.x[i]!, creatures.y[i]!)] === 1;
-    const distance = strideFor(size, speed, config) * thrust * (swimming ? config.swimSpeed : 1);
+    const distance =
+      strideFor(size, speed, config) *
+      thrust *
+      (swimming ? config.swimSpeed : 1) *
+      (creatures.held[i] !== Held.Nothing ? 1 - config.carrySlow : 1);
     creatures.heading[i] = heading;
     // Rounded to stored precision first, so the cell checked is the cell it lands in.
     const toX = Math.fround(wrap(creatures.x[i]! + Math.cos(heading) * distance, config.worldWidth));
@@ -413,21 +435,63 @@ export function step(world: World): void {
     plants.meat[cell]! -= meatBite;
     energy += meatBite;
     if (meatRate > 0) mouthful = Math.max(0, mouthful - meatBite / meatRate);
-    const bite = Math.max(0, Math.min(mouthful * plantDigestion(diet), plants.energy[cell]!, maxEnergy - energy));
+    // Stored plant food is eaten before what is growing.
+    const stored = Math.max(0, Math.min(mouthful * plantDigestion(diet), plants.store[cell]!, maxEnergy - energy));
+    plants.store[cell]! -= stored;
+    energy += stored;
+    const bite = Math.max(
+      0,
+      Math.min(mouthful * plantDigestion(diet) - stored, plants.energy[cell]!, maxEnergy - energy),
+    );
     plants.energy[cell]! -= bite;
     energy += bite;
+
+    // Hold: pick up what is underfoot when empty-handed (a stone, else a
+    // branch, else a load of meat, else of plants), and keep hold of it.
+    // Letting go sets it down here: food becomes a store that slowly spoils.
+    const held = creatures.held[i]!;
+    if (holding && held === Held.Nothing) {
+      const load = biteFor(size, config) * config.carryMouthfuls;
+      const least = biteFor(size, config);
+      if (plants.stones[cell]! > 0) {
+        plants.stones[cell]!--;
+        creatures.held[i] = Held.Stone;
+      } else if (plants.branches[cell]! > 0 && plants.fire[cell] === 0) {
+        plants.branches[cell]!--;
+        creatures.held[i] = Held.Branch;
+      } else if (plants.meat[cell]! >= least) {
+        const taken = Math.min(load, plants.meat[cell]!);
+        plants.meat[cell]! -= taken;
+        creatures.heldEnergy[i] = taken;
+        creatures.held[i] = Held.Meat;
+      } else if (plants.energy[cell]! + plants.store[cell]! >= least) {
+        const fromStore = Math.min(load, plants.store[cell]!);
+        const fromPlants = Math.min(load - fromStore, plants.energy[cell]!);
+        plants.store[cell]! -= fromStore;
+        plants.energy[cell]! -= fromPlants;
+        creatures.heldEnergy[i] = fromStore + fromPlants;
+        creatures.held[i] = Held.Plants;
+      }
+      if (creatures.held[i] !== Held.Nothing) {
+        world.carry.pickups++;
+        creatures.heldFromX[i] = creatures.x[i]!;
+        creatures.heldFromY[i] = creatures.y[i]!;
+      }
+    } else if (!holding && held !== Held.Nothing) {
+      setDown(world, i, cell);
+    }
     if (diet > 0.5) {
-      lab.plantsToMeatEaters += bite;
+      lab.plantsToMeatEaters += bite + stored;
       lab.meatToMeatEaters += meatBite;
     } else {
-      lab.plantsToPlantEaters += bite;
+      lab.plantsToPlantEaters += bite + stored;
       lab.meatToPlantEaters += meatBite;
     }
     if (sampling) {
       lab.acted++;
       if (attacking && world.senses.targetIndex >= 0 && effort > CHASE_THRUST) lab.chasing++;
       else if ((hurt || brain.activation[Input.Behind]! > FLEE_BEHIND) && effort > FLEE_THRUST && !attacking) lab.fleeing++;
-      else if (bite + meatBite >= FORAGE_MOUTHFUL * biteFor(size, config)) lab.foraging++;
+      else if (bite + stored + meatBite >= FORAGE_MOUTHFUL * biteFor(size, config)) lab.foraging++;
       else if (effort < REST_THRUST) lab.resting++;
     }
     if (emitting) plants.scent[cell]! += config.scentEmit;
@@ -519,8 +583,9 @@ export function step(world: World): void {
     lab.died++;
     lab.ageAtDeath += creatures.age[i]!;
     lab.childrenAtDeath += creatures.children[i]!;
-    // The body and whatever it had stored stay behind as meat.
+    // The body and whatever it had stored stay behind as meat, and what it held falls where it died.
     const cell = cellIndexAt(plants, creatures.x[i]!, creatures.y[i]!);
+    if (creatures.held[i] !== Held.Nothing) setDown(world, i, cell);
     plants.meat[cell]! += creatures.energy[i]! + bodyEnergyFor(creatures.size[i]!, config);
     world.lineage.died(creatures.id[i]!, world.tick);
     removeCreature(creatures, i);
@@ -546,6 +611,31 @@ export function step(world: World): void {
     classifySpecies(world.species, creatures, world.lineage, world.tick, config);
   }
   if (world.tick % world.history.interval === 0) sampleHistory(world);
+}
+
+/** Creature i lets go of what it holds, into the cell it stands on. */
+function setDown(world: World, i: number, cell: number): void {
+  const { creatures, plants, config } = world;
+  const held = creatures.held[i]!;
+  const energy = creatures.heldEnergy[i]!;
+  if (held === Held.Stone) {
+    if (plants.stones[cell]! < 255) plants.stones[cell]!++;
+  } else if (held === Held.Branch) {
+    if (plants.branches[cell]! < 255) plants.branches[cell]!++;
+  } else if (held === Held.Meat) {
+    plants.meat[cell]! += energy;
+    world.carry.meatDropped += energy;
+  } else if (held === Held.Plants) {
+    plants.store[cell]! += energy;
+    world.carry.plantsDropped += energy;
+  }
+  if (energy > 0) {
+    const dx = wrappedDelta(creatures.heldFromX[i]!, creatures.x[i]!, config.worldWidth);
+    const dy = wrappedDelta(creatures.heldFromY[i]!, creatures.y[i]!, config.worldHeight);
+    world.carry.haul += energy * Math.hypot(dx, dy);
+  }
+  creatures.held[i] = Held.Nothing;
+  creatures.heldEnergy[i] = 0;
 }
 
 /**
@@ -713,8 +803,13 @@ function sampleHistory(world: World): void {
   let links = 0;
   let neurons = 0;
   let meatEaters = 0;
+  let toolHolders = 0;
+  let foodHolders = 0;
   for (let i = 0; i < creatures.count; i++) {
     if (creatures.diet[i]! > 0.5) meatEaters++;
+    const held = creatures.held[i]!;
+    if (held === Held.Stone || held === Held.Branch) toolHolders++;
+    else if (held !== Held.Nothing) foodHolders++;
     links += enabledLinks(creatures.brain[i]!);
     neurons += creatures.brain[i]!.hiddenIds.length;
   }
@@ -775,6 +870,8 @@ function sampleHistory(world: World): void {
     meanDiet,
     meanFur: meanOf(creatures.fur, creatures),
     meanDefense: meanOf(creatures.defense, creatures),
+    toolHolders,
+    foodHolders,
     meatEaters,
     speciesCount: world.species.species.length,
     meanLinks: links / count,
@@ -798,13 +895,14 @@ function sampleHistory(world: World): void {
   lab.firstBirths = lab.firstBirthAge = lab.births = lab.parentAge = 0;
 }
 
-/** Energy currently held by everything in the world: plants, meat, and creatures' stores and bodies. */
+/** Energy currently held by everything in the world: plants, stored food, meat, and creatures' stores, loads and bodies. */
 export function totalEnergy(world: World): number {
   const { creatures, config } = world;
   let bodies = 0;
   for (let i = 0; i < creatures.count; i++) bodies += bodyEnergyFor(creatures.size[i]!, config);
   return (
     totalPlantEnergy(world.plants) +
+    totalStoreEnergy(world.plants) +
     totalMeatEnergy(world.plants) +
     totalCreatureEnergy(creatures) +
     bodies
@@ -841,6 +939,7 @@ export function hashWorld(world: World): number {
   h = hashBytes(h, bytesOf(plants.capacity));
   h = hashBytes(h, bytesOf(plants.scent));
   h = hashBytes(h, plants.walls);
+  h = hashBytes(h, bytesOf(plants.store));
   h = hashBytes(h, plants.branches);
   h = hashBytes(h, plants.stones);
   h = hashBytes(h, bytesOf(plants.fire));
@@ -862,6 +961,8 @@ export function hashWorld(world: World): number {
     c.pain,
     c.sick,
     c.calling,
+    c.held,
+    c.heldEnergy,
     c.size,
     c.speed,
     c.sensorRange,

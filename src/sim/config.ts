@@ -307,6 +307,17 @@ export interface SimConfig {
   /** Share of a cell's ash that washes away each tick, and how many times faster plants regrow on fresh ash. */
   ashDecay: number;
   ashGrowth: number;
+
+  /** Share of its stride a creature loses while it holds anything. */
+  carrySlow: number;
+  /** How much harder a creature holding a stone bites: 0.5 is half again as hard. 0 makes stones useless. */
+  stoneBite: number;
+  /** Share of each bite's damage that a held branch takes instead of its holder. 0 makes branches useless. */
+  branchShield: number;
+  /** Food a creature picks up at once, in mouthfuls. */
+  carryMouthfuls: number;
+  /** Share of a store of dropped plant food that spoils each tick. */
+  storeDecay: number;
 }
 
 export const defaultConfig: SimConfig = {
@@ -472,4 +483,10 @@ export const defaultConfig: SimConfig = {
   fireWarmth: 0.8,
   ashDecay: 0.0005,
   ashGrowth: 2,
+
+  carrySlow: 0.1,
+  stoneBite: 0.5,
+  branchShield: 0.4,
+  carryMouthfuls: 8,
+  storeDecay: 0.00005,
 };

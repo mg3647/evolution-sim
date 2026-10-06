@@ -89,6 +89,7 @@ const ASH_COLOR = [58, 54, 52] as const;
 const ASH_OPACITY = 0.7;
 const BRANCH_COLOR = [146, 100, 54] as const;
 const STONE_COLOR = [176, 176, 182] as const;
+const STORE_COLOR = [232, 214, 120] as const;
 const ITEM_OPACITY = 0.45;
 /** Colour of the outline showing where each tool would act. */
 const TOOL_COLORS: Record<ToolKind, number> = {
@@ -346,7 +347,7 @@ export class WorldRenderer {
       const tintOpacity = Math.abs(heat) * TEMPERATURE_OPACITY;
       const flame = fire[i] ? FIRE_COLORS[(i + snapshot.tick) & 1]! : null;
       const sooty = (ash[i]! / 255) * ASH_OPACITY;
-      const item = items[i]! & 2 ? STONE_COLOR : items[i]! & 1 ? BRANCH_COLOR : null;
+      const item = items[i]! & 2 ? STONE_COLOR : items[i]! & 1 ? BRANCH_COLOR : items[i]! & 4 ? STORE_COLOR : null;
       for (let c = 0; c < 3; c++) {
         if (walls[i]) {
           pixels[o + c] = WALL_COLOR[c]!;
