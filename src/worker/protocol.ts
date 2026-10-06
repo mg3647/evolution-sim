@@ -157,6 +157,12 @@ export interface Snapshot {
   temperature: Uint8Array;
   // Per cell: the kind of land it is; see Biome in biomes.ts.
   biome: Uint8Array;
+  // Per cell: 1 where it is burning; ash as 0..255; and 1 for a branch plus 2 for a stone.
+  fire: Uint8Array;
+  ash: Uint8Array;
+  items: Uint8Array;
+  /** Wildfires started since the world began, cells burned in all, and cells burning now. */
+  fires: { started: number; cellsBurned: number; burning: number };
   environment: EnvironmentView;
 
   births: number;

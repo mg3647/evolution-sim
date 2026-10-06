@@ -34,8 +34,10 @@ export const Ray = {
    */
   ColourWarm: 10,
   ColourGreen: 11,
+  /** Fire along the ray, stronger when nearer. */
+  Fire: 12,
 } as const;
-export const INPUTS_PER_RAY = 12;
+export const INPUTS_PER_RAY = 13;
 
 const AFTER_RAYS = RAY_COUNT * INPUTS_PER_RAY;
 export const Input = {
@@ -98,6 +100,7 @@ export const INPUT_LABELS: string[] = [
     `Hurt ${ray}`,
     `Red or cyan ${ray}`,
     `Green or violet ${ray}`,
+    `Fire ${ray}`,
   ]),
   'Creature behind',
   'Crowding',

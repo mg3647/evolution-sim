@@ -15,6 +15,8 @@ export const RESTART_KEYS: ReadonlySet<keyof SimConfig> = new Set<keyof SimConfi
   'fertilityFloor',
   'waterShare',
   'biomeSize',
+  'branchDensity',
+  'stoneDensity',
   'riverWidth',
   'moistureReach',
   'initialCreatures',
@@ -78,6 +80,18 @@ export const SETTING_GROUPS: SettingGroup[] = [
       { key: 'furCost', label: 'Cost of fur', hint: 'Energy a full coat costs, as a share of upkeep', min: 0, max: 1, step: 0.05 },
       { key: 'seasonTempSwing', label: 'Seasonal swing', hint: 'How much hotter summer is, and colder winter', min: 0, max: 1, step: 0.05 },
       { key: 'dayTempSwing', label: 'Day and night swing', hint: 'How much hotter noon is, and colder midnight', min: 0, max: 1, step: 0.05 },
+    ],
+  },
+  {
+    title: 'Fire, branches and stones',
+    settings: [
+      { key: 'fireChance', label: 'Lightning', hint: 'Chance each tick that lightning strikes somewhere; it starts a fire only where it is hot and there is something to burn. 0 means no fires start on their own', min: 0, max: 0.02, step: 0.0005 },
+      { key: 'fireSpread', label: 'Fire spread', hint: 'Chance each tick that fire catches in a neighbouring cell full of plants; 0 keeps every fire to one cell', min: 0, max: 0.1, step: 0.005 },
+      { key: 'fireDamage', label: 'Fire strength', hint: 'Health a creature loses each tick it stands in fire; 0 makes fire harmless', min: 0, max: 0.2, step: 0.005 },
+      { key: 'fireWarmth', label: 'Warmth of fire', hint: 'How much a fire warms the land around it', min: 0, max: 2, step: 0.1 },
+      { key: 'fireMinHeat', label: 'Heat needed for lightning fires', hint: 'Lightning only starts a fire where it is at least this hot at that moment', min: -1, max: 1.5, step: 0.05 },
+      { key: 'ashGrowth', label: 'Richness of ash', hint: 'How many times faster plants regrow on fresh ash', min: 0, max: 6, step: 0.5 },
+      { key: 'branchRegrowTicks', label: 'Branch fall (ticks)', hint: 'Ticks for each forest cell to get about one chance at a new branch; 0 stops branches falling', min: 0, max: 20000, step: 500 },
     ],
   },
   {

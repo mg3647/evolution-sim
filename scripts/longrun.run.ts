@@ -68,6 +68,11 @@ interface Summary {
    * all match exactly. Random colours score about 0.2.
    */
   hidden: number;
+  /** Share of all deaths that were from plague, meteors and fire. */
+  disasterShare: number;
+  /** Wildfires started, and cells burned as a multiple of the map's cells, per 10,000 ticks. */
+  firesPerTenThousand: number;
+  burnedPerTenThousand: number;
   /** Mean fur and defense genes overall. */
   meanFur: number;
   meanDefense: number;
@@ -115,6 +120,7 @@ function run(seed: string): Summary {
   let socialBefore = { ...world.social };
   let deathsBefore = { ...world.deaths };
   let reseededBefore = 0;
+  let firesBefore = { ...world.fires };
   for (let tick = 1; tick <= ticks; tick++) {
     if (tick === changeAt) Object.assign(world.config, change);
     step(world);
@@ -122,6 +128,7 @@ function run(seed: string): Summary {
       deathsBefore = { ...world.deaths };
       socialBefore = { ...world.social };
       reseededBefore = world.reseeded;
+      firesBefore = { ...world.fires };
     }
     // Activity is sampled often and at odd intervals, so it does not fall in step with the day.
     if (tick > from && tick % 37 === 0) {
@@ -201,6 +208,12 @@ function run(seed: string): Summary {
     killShare: deaths > 0 ? d.killed / deaths : 0,
     thirstShare: deaths > 0 ? d.thirst / deaths : 0,
     oldAgeShare: deaths > 0 ? d.oldAge / deaths : 0,
+    disasterShare: deaths > 0 ? d.disaster / deaths : 0,
+    firesPerTenThousand: ((world.fires.started - firesBefore.started) * 10000) / Math.max(1, ticks - from),
+    burnedPerTenThousand:
+      ((world.fires.cellsBurned - firesBefore.cellsBurned) * 10000) /
+      Math.max(1, ticks - from) /
+      world.plants.biome.length,
     callers: callerSum / samples,
     dayActivity: dayActivity / Math.max(1, daySamples),
     nightActivity: nightActivity / Math.max(1, nightSamples),
@@ -242,6 +255,8 @@ it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
         `killShare=${percent(s.killShare)}`,
         `thirstShare=${percent(s.thirstShare)}`,
         `oldAgeShare=${percent(s.oldAgeShare)}`,
+        `disasterShare=${percent(s.disasterShare)}`,
+        `fires=${s.firesPerTenThousand.toFixed(1)}/10kt burned=${(s.burnedPerTenThousand * 100).toFixed(2)}%/10kt`,
         `callers=${percent(s.callers)}`,
         `activity day/night=${s.dayActivity.toFixed(3)}/${s.nightActivity.toFixed(3)}`,
         `given=${s.givenPerThousand.toFixed(1)}/kt`,

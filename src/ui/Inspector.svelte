@@ -105,8 +105,8 @@
 
     <h3>Brain inputs: what it senses now</h3>
     <p class="note">
-      Each of the three rays (left, ahead, right) reports the ground along it: plants, meat, water and
-      wall, each reading higher the more or the nearer it is.
+      Each of the three rays (left, ahead, right) reports the ground along it: plants, meat, water,
+      wall and fire, each reading higher the more or the nearer it is.
     </p>
     <p class="note">
       Each ray also reports the nearest creature in its direction. &ldquo;Creature&rdquo; is how close it

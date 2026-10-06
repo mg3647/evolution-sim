@@ -19,7 +19,7 @@ import type { World } from './world';
  */
 
 /** Bumped whenever the saved layout changes; older files are refused. */
-export const SAVE_VERSION = 10;
+export const SAVE_VERSION = 11;
 
 /** Per-creature number arrays, saved up to the live count. */
 const CREATURE_FIELDS = [
@@ -48,7 +48,7 @@ const CREATURE_FIELDS = [
   'mutationRate',
 ] as const;
 
-const FIELD_ARRAYS = ['fertility', 'capacity', 'energy', 'meat', 'scent', 'walls', 'water', 'temperature'] as const;
+const FIELD_ARRAYS = ['fertility', 'capacity', 'energy', 'meat', 'scent', 'walls', 'water', 'temperature', 'branches', 'stones', 'fire', 'ash'] as const;
 
 interface SavedBrain {
   links: LinkGene[];
@@ -73,6 +73,7 @@ export interface SavedWorld {
   births: number;
   reseeded: number;
   defended: number;
+  fires: World['fires'];
   parents: World['parents'];
   social: World['social'];
   deaths: World['deaths'];
@@ -122,6 +123,7 @@ export function saveWorld(world: World): SavedWorld {
     births: world.births,
     reseeded: world.reseeded,
     defended: world.defended,
+    fires: { ...world.fires },
     parents: { ...world.parents },
     social: { ...world.social },
     deaths: { ...world.deaths },
@@ -170,6 +172,13 @@ export function loadWorld(saved: SavedWorld): World {
     walls: new Uint8Array(saved.field.walls),
     temperature: new Float32Array(saved.field.temperature),
     biome: new Uint8Array(cells),
+    branches: new Uint8Array(saved.field.branches),
+    stones: new Uint8Array(saved.field.stones),
+    fire: new Uint16Array(saved.field.fire),
+    ash: new Float32Array(saved.field.ash),
+    hasAsh: saved.field.ash.some((ash) => ash > 0),
+    // Warmth from fires is rebuilt on the next tick.
+    fireHeat: new Float32Array(cells),
     // Shore and moisture follow from where the water is, so they are rebuilt, not saved.
     ...waterDerived(new Uint8Array(saved.field.water), cols, rows, config),
   };
@@ -219,6 +228,7 @@ export function loadWorld(saved: SavedWorld): World {
     births: saved.births,
     reseeded: saved.reseeded,
     defended: saved.defended,
+    fires: { ...saved.fires },
     parents: { ...saved.parents },
     deaths: { ...saved.deaths },
     infected: saved.infected,

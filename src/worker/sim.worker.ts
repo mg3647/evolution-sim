@@ -194,7 +194,13 @@ function sendSnapshot(now: number): void {
   const meat = new Uint8Array(cells);
   const scent = new Uint8Array(cells);
   const temperature = new Uint8Array(cells);
+  const fire = new Uint8Array(cells);
+  const ash = new Uint8Array(cells);
+  const items = new Uint8Array(cells);
   for (let i = 0; i < cells; i++) {
+    fire[i] = p.fire[i]! > 0 ? 1 : 0;
+    ash[i] = p.ash[i]! * 255;
+    items[i] = (p.branches[i]! > 0 ? 1 : 0) | (p.stones[i]! > 0 ? 2 : 0);
     const heat = temperatureAt(p, i, world.climate.warmth, config, world.climate.dayWarmth);
     temperature[i] = Math.max(0, Math.min(1, (heat + 1.5) / 3)) * 255;
     // Rich biomes hold more than the plain capacity; they draw as fully grown.
@@ -231,6 +237,10 @@ function sendSnapshot(now: number): void {
     water: rendering ? p.water.slice() : new Uint8Array(0),
     temperature,
     biome: rendering ? p.biome.slice() : new Uint8Array(0),
+    fire,
+    ash,
+    items,
+    fires: { ...world.fires },
     environment: {
       season: world.climate.season,
       yearFraction: config.seasonLength > 0 ? (world.tick % config.seasonLength) / config.seasonLength : 0,
@@ -254,7 +264,7 @@ function sendSnapshot(now: number): void {
     rendered: rendering,
     species: speciesViews(world),
   };
-  post({ type: 'snapshot', snapshot }, [creatures.buffer, plants.buffer, meat.buffer, scent.buffer, temperature.buffer]);
+  post({ type: 'snapshot', snapshot }, [creatures.buffer, plants.buffer, meat.buffer, scent.buffer, temperature.buffer, fire.buffer, ash.buffer, items.buffer]);
   lastSnapshotTime = now;
 }
 

@@ -115,6 +115,7 @@ export class Senses {
       let meat = 0;
       let wall = 0;
       let water = 0;
+      let fire = 0;
       for (const t of GROUND_SAMPLES) {
         let px = turn === 0 ? x + cosHeading * range * t : x + dx * t;
         let py = turn === 0 ? y + sinHeading * range * t : y + dy * t;
@@ -126,6 +127,7 @@ export class Senses {
         // A nearer wall or shore reads stronger.
         if (field.walls[cell]) wall = Math.max(wall, 1.5 - t);
         if (field.water[cell]) water = Math.max(water, 1.5 - t);
+        if (field.fire[cell]) fire = Math.max(fire, 1.5 - t);
         if (t === GROUND_SAMPLES[0]) {
           if (turn < 0) scentLeft = field.scent[cell]!;
           else if (turn > 0) scentRight = field.scent[cell]!;
@@ -136,6 +138,7 @@ export class Senses {
       inputs[o + Ray.Meat] = Math.min(1, (meat / GROUND_SAMPLES.length) * meatScale);
       inputs[o + Ray.Water] = Math.min(1, water);
       inputs[o + Ray.Wall] = Math.min(1, wall);
+      inputs[o + Ray.Fire] = Math.min(1, fire);
       inputs[o + Ray.Near] = 0;
       inputs[o + Ray.Kin] = 0;
       inputs[o + Ray.Bigger] = 0;

@@ -41,6 +41,7 @@
     { id: 'erase', label: 'Erase wall', hint: 'Drag over a wall to remove that part of it' },
     { id: 'fertilise', label: 'Fertilise', hint: 'Drag to make land fully fertile; plants then grow there' },
     { id: 'blight', label: 'Blight', hint: 'Drag to make land barren; plants there die' },
+    { id: 'fire', label: 'Fire', hint: 'Click or drag to set light to land that has plants or branches on it' },
   ];
 
   /** What each biome gives and takes, shown when its name in the map key is pointed at. */
@@ -487,6 +488,22 @@
             </svg>
             <span>Scent mark</span>
           </div>
+          <div class="legend-item" title="Fire hurts creatures in it, warms the land around it and leaves ash">
+            <svg width="20" height="20" viewBox="0 0 20 20"><rect width="20" height="20" fill="#ff9628"/></svg>
+            <span>Fire</span>
+          </div>
+          <div class="legend-item" title="Plants regrow faster on fresh ash">
+            <svg width="20" height="20" viewBox="0 0 20 20"><rect width="20" height="20" fill="#3a3634"/></svg>
+            <span>Ash</span>
+          </div>
+          <div class="legend-item" title="Branches lie in forests; a branch keeps a fire burning">
+            <svg width="20" height="20" viewBox="0 0 20 20"><rect width="20" height="20" fill="#926436"/></svg>
+            <span>Branch</span>
+          </div>
+          <div class="legend-item" title="Stones lie in deserts">
+            <svg width="20" height="20" viewBox="0 0 20 20"><rect width="20" height="20" fill="#b0b0b6"/></svg>
+            <span>Stone</span>
+          </div>
           {#if (snapshot?.config.temperatureStrength ?? 0) > 0}
             {#each BIOME_LABELS as label, k (label)}
               {@const ground = BIOME_GROUND[k]!}
@@ -568,7 +585,7 @@
           <div><dt>Starved</dt><dd>{count(snapshot?.deaths.starved)}</dd></div>
           <div><dt>Killed</dt><dd>{count(snapshot?.deaths.killed)}</dd></div>
           <div><dt>Died of thirst</dt><dd>{count(snapshot?.deaths.thirst)}</dd></div>
-          <div title="Deaths from plague and meteors">
+          <div title="Deaths from plague, meteors and fire">
             <dt>Died in disasters</dt>
             <dd>{count(snapshot?.deaths.disaster)}</dd>
           </div>
@@ -576,6 +593,14 @@
           <div title="Parentless creatures added because the population fell below the minimum">
             <dt>Reseeded</dt>
             <dd>{count(snapshot?.reseeded)}</dd>
+          </div>
+          <div title="Wildfires started by lightning or by hand since the world began">
+            <dt>Fires</dt>
+            <dd>{count(snapshot?.fires.started)}</dd>
+          </div>
+          <div title="Cells of land burning right now">
+            <dt>Burning now</dt>
+            <dd>{count(snapshot?.fires.burning)}</dd>
           </div>
           <div title="Creatures making a call right now; each is drawn with a pale blue ring">
             <dt>Calling now</dt>

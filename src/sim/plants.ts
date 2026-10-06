@@ -45,6 +45,17 @@ export interface PlantField {
   temperature: Float32Array;
   /** The kind of land each cell is; see biomes.ts. It follows temperature and wetness, so it shifts as fertility drifts. */
   biome: Uint8Array;
+  /** Branches and stones lying in each cell; see fire.ts. */
+  branches: Uint8Array;
+  stones: Uint8Array;
+  /** Ticks each cell has left to burn; 0 where there is no fire. */
+  fire: Uint16Array;
+  /** Ash left by fire, from 1 (fresh) fading to 0. Plants regrow faster on it. */
+  ash: Float32Array;
+  /** Whether any cell has ash, so the fire step can skip a world without any. */
+  hasAsh: boolean;
+  /** Extra warmth each cell gets from fires nearby. Rebuilt every tick while anything burns. */
+  fireHeat: Float32Array;
 }
 
 /**
@@ -127,7 +138,7 @@ export function temperatureAt(
   const swing = BIOME_TRAITS[field.biome[cell]!]!.daySwing;
   return (
     config.temperatureStrength *
-    (field.temperature[cell]! + config.climateShift + warmth + (swing - 1) * dayWarmth)
+    (field.temperature[cell]! + config.climateShift + warmth + (swing - 1) * dayWarmth + field.fireHeat[cell]!)
   );
 }
 
@@ -173,6 +184,12 @@ export function createPlantField(config: SimConfig, rng: Rng): PlantField {
     ...waterDerived(generateWater(config, rng, cols, rows), cols, rows, config),
     temperature: generateTemperature(config, rng, cols, rows),
     biome: new Uint8Array(cols * rows),
+    branches: new Uint8Array(cols * rows),
+    stones: new Uint8Array(cols * rows),
+    fire: new Uint16Array(cols * rows),
+    ash: new Float32Array(cols * rows),
+    hasAsh: false,
+    fireHeat: new Float32Array(cols * rows),
   };
   classifyBiomes(field, config);
   for (let i = 0; i < fertility.length; i++) field.capacity[i] = cellCapacity(field, i, config);
@@ -196,6 +213,8 @@ export function cellIndexAt(field: PlantField, x: number, y: number): number {
  *
  * `bloom` multiplies growth in biomes whose plants grow in one seasonal
  * bloom: zero in the cold half of the year, well above one at midsummer.
+ * Nothing grows in a burning cell, and plants on fresh ash grow up to
+ * `1 + ashGrowth` times as fast.
  */
 export function growPlants(
   field: PlantField,
@@ -203,15 +222,16 @@ export function growPlants(
   bareGrowth: number,
   ledger: EnergyLedger,
   bloom = 1,
+  ashGrowth = 0,
 ): void {
-  const { energy, capacity, biome } = field;
+  const { energy, capacity, biome, fire, ash } = field;
   let grown = 0;
   for (let i = 0; i < energy.length; i++) {
     const cap = capacity[i]!;
-    if (cap === 0) continue;
+    if (cap === 0 || fire[i]! > 0) continue;
     const current = energy[i]!;
     const cover = bareGrowth + (1 - bareGrowth) * (current / cap);
-    const rate = SEASONAL_BLOOM[biome[i]!] ? growthRate * bloom : growthRate;
+    const rate = (SEASONAL_BLOOM[biome[i]!] ? growthRate * bloom : growthRate) * (1 + ashGrowth * ash[i]!);
     const growth = (cap - current) * Math.min(1, rate) * cover;
     energy[i] = current + growth;
     grown += growth;

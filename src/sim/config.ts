@@ -282,6 +282,31 @@ export interface SimConfig {
   defenseDamage: number;
   /** Energy per tick that full defenses cost, as a share of the body's upkeep. */
   defenseCost: number;
+
+  /** Share of forest and rainforest cells that start with a branch, and of desert cells that start with a stone. */
+  branchDensity: number;
+  stoneDensity: number;
+  /** Ticks over which every forest cell gets about one chance to drop a new branch. 0 stops branches falling. */
+  branchRegrowTicks: number;
+  /** Chance per tick that lightning strikes somewhere. 0 means no wildfires start on their own. */
+  fireChance: number;
+  /** Lightning only starts a fire where it is at least this hot right now. */
+  fireMinHeat: number;
+  /** A cell burns only if it holds a branch or at least this share of a full cell of plants. */
+  fireMinFuel: number;
+  /** Ticks a cell burns, and again for each branch in it. */
+  fireDuration: number;
+  /** Chance per tick that fire spreads to a neighbouring cell full of plants. */
+  fireSpread: number;
+  /** Share of a burning cell's plants that burn away each tick. */
+  fireBurnRate: number;
+  /** Health a creature loses per tick while standing in fire. */
+  fireDamage: number;
+  /** How much a fire warms its own cell; the warmth fades over two cells around. */
+  fireWarmth: number;
+  /** Share of a cell's ash that washes away each tick, and how many times faster plants regrow on fresh ash. */
+  ashDecay: number;
+  ashGrowth: number;
 }
 
 export const defaultConfig: SimConfig = {
@@ -433,4 +458,18 @@ export const defaultConfig: SimConfig = {
 
   defenseDamage: 0.3,
   defenseCost: 0.2,
+
+  branchDensity: 0.15,
+  stoneDensity: 0.04,
+  branchRegrowTicks: 4000,
+  fireChance: 0.002,
+  fireMinHeat: 0.45,
+  fireMinFuel: 0.3,
+  fireDuration: 40,
+  fireSpread: 0.02,
+  fireBurnRate: 0.05,
+  fireDamage: 0.03,
+  fireWarmth: 0.8,
+  ashDecay: 0.0005,
+  ashGrowth: 2,
 };

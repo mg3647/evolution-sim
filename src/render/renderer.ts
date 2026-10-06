@@ -79,7 +79,17 @@ const PICK_RADIUS = 14;
 const CLICK_SLOP = 4;
 const SELECTION_COLOR = 0xffffff;
 /** Tools that keep applying as the pointer is dragged; the others apply once per click. */
-const DRAG_TOOLS: ReadonlySet<ToolKind> = new Set(['wall', 'erase', 'fertilise', 'blight']);
+const DRAG_TOOLS: ReadonlySet<ToolKind> = new Set(['wall', 'erase', 'fertilise', 'blight', 'fire']);
+/** Colours of fire (it flickers between the two), of fresh ash, and of branches and stones on the ground. */
+const FIRE_COLORS: readonly Rgb[] = [
+  [255, 150, 40],
+  [255, 214, 90],
+];
+const ASH_COLOR = [58, 54, 52] as const;
+const ASH_OPACITY = 0.7;
+const BRANCH_COLOR = [146, 100, 54] as const;
+const STONE_COLOR = [176, 176, 182] as const;
+const ITEM_OPACITY = 0.45;
 /** Colour of the outline showing where each tool would act. */
 const TOOL_COLORS: Record<ToolKind, number> = {
   meteor: 0xff7a3c,
@@ -88,6 +98,7 @@ const TOOL_COLORS: Record<ToolKind, number> = {
   erase: 0xc8ced6,
   fertilise: 0x5fd35f,
   blight: 0xb08a5a,
+  fire: 0xff9628,
 };
 /** Ring drawn around creatures infected with the plague. */
 const SICK_COLOR = 0xb6ff3c;
@@ -288,6 +299,7 @@ export class WorldRenderer {
   /** One pixel per plant cell, stretched over the world. */
   private drawPlants(snapshot: Snapshot): void {
     const { plantCols: cols, plantRows: rows, plants, meat, scent, walls, water, temperature, biome } = snapshot;
+    const { fire, ash, items } = snapshot;
     const scentOpacity = this.showScent ? SCENT_OPACITY / 255 : 0;
     const canvas = this.plantCanvas;
     const ctx = canvas.getContext('2d')!;
@@ -332,9 +344,17 @@ export class WorldRenderer {
       const heat = this.showTemperature ? Math.max(-1, Math.min(1, ((temperature[i]! / 255) * 3 - 1.5) / 1.2)) : 0;
       const tint = heat > 0 ? HOT_COLOR : COLD_COLOR;
       const tintOpacity = Math.abs(heat) * TEMPERATURE_OPACITY;
+      const flame = fire[i] ? FIRE_COLORS[(i + snapshot.tick) & 1]! : null;
+      const sooty = (ash[i]! / 255) * ASH_OPACITY;
+      const item = items[i]! & 2 ? STONE_COLOR : items[i]! & 1 ? BRANCH_COLOR : null;
       for (let c = 0; c < 3; c++) {
         if (walls[i]) {
           pixels[o + c] = WALL_COLOR[c]!;
+          continue;
+        }
+        if (flame) {
+          // Fire glows through the night.
+          pixels[o + c] = flame[c]!;
           continue;
         }
         if (tintOpacity > 0) {
@@ -349,7 +369,9 @@ export class WorldRenderer {
           pixels[o + c] = (withMeat + (SCENT_COLOR[c]! - withMeat) * s) * dim[c]!;
           continue;
         }
-        const ground = land.soil[c]! + (land.plant[c]! - land.soil[c]!) * t;
+        let ground = land.soil[c]! + (land.plant[c]! - land.soil[c]!) * t;
+        ground += (ASH_COLOR[c]! - ground) * sooty;
+        if (item) ground += (item[c]! - ground) * ITEM_OPACITY;
         const withMeat = ground + (MEAT_COLOR[c]! - ground) * m;
         pixels[o + c] = (withMeat + (SCENT_COLOR[c]! - withMeat) * s) * dim[c]!;
       }
@@ -445,7 +467,7 @@ export class WorldRenderer {
         ? config.meteorRadius
         : this.tool === 'plague'
           ? config.plagueToolRadius
-          : this.tool === 'wall' || this.tool === 'erase'
+          : this.tool === 'wall' || this.tool === 'erase' || this.tool === 'fire'
             ? config.plantCellSize
             : config.brushRadius;
     cursor.circle(x, y, radius).stroke({ color: TOOL_COLORS[this.tool], pixelLine: true });
