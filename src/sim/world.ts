@@ -3,6 +3,7 @@ import {
   enabledLinks,
   founderBrain,
   Innovations,
+  Input,
   INPUT_COUNT,
   mutateBrain,
   Output,
@@ -31,6 +32,7 @@ import {
   plantDigestion,
   senseCostFor,
   strideFor,
+  temperatureStress,
   tickCostFor,
 } from './genome';
 import {
@@ -72,7 +74,7 @@ import { Senses } from './senses';
 import { buildSound, createSoundField, type SoundField } from './sound';
 import { SpatialHash } from './spatialHash';
 import { classifySpecies, createSpeciesState, type SpeciesState } from './species';
-import { createHistory, meanOf, recordSample, spreadOf, type History } from './stats';
+import { createHistory, meanOf, recordDensity, recordSample, spreadOf, type History } from './stats';
 
 export interface World {
   config: SimConfig;
@@ -107,8 +109,14 @@ export interface World {
   defended: number;
   /** Wildfires so far, and how much is burning now. */
   fires: FireTally;
-  /** Killed counts bites and biters felled by defenses; disaster counts plagues and meteors. */
-  deaths: { starved: number; oldAge: number; killed: number; disaster: number; thirst: number };
+  /**
+   * Killed counts bites and biters felled by defenses; disaster counts
+   * plagues, meteors and fire; temperature counts those that ran out of
+   * energy while too hot or too cold, which are left out of starved.
+   */
+  deaths: { starved: number; oldAge: number; killed: number; disaster: number; thirst: number; temperature: number };
+  /** Running totals behind the Lab's charts; see LabTally. */
+  lab: LabTally;
   environment: Environment;
   /** Family tree of the living population. */
   lineage: Lineage;
@@ -119,6 +127,82 @@ export interface World {
   /** The climate used for the most recent tick. */
   climate: Climate;
 }
+
+/**
+ * Counts kept between history samples for the Lab's charts, and the values
+ * last recorded where a sample may have nothing new to say.
+ */
+export interface LabTally {
+  /** Tick of the previous sample, and deaths by cause as they stood then. */
+  sampledAt: number;
+  deathsThen: World['deaths'];
+  /** Energy eaten since then: plants and meat, by plant-eaters and by meat-eaters (diet gene above one half). */
+  plantsToPlantEaters: number;
+  plantsToMeatEaters: number;
+  meatToPlantEaters: number;
+  meatToMeatEaters: number;
+  /** Deaths since then, with the ages and children of the dead summed. */
+  died: number;
+  ageAtDeath: number;
+  childrenAtDeath: number;
+  /** First births since then with the parents' ages summed, and all births likewise. */
+  firstBirths: number;
+  firstBirthAge: number;
+  births: number;
+  parentAge: number;
+  /** Last recorded life-history values, repeated when a sample has no deaths or births. */
+  lifespan: number;
+  firstBirth: number;
+  offspring: number;
+  generation: number;
+  /** What creatures were doing on the latest sampling tick, and how many acted. */
+  resting: number;
+  foraging: number;
+  chasing: number;
+  fleeing: number;
+  acted: number;
+}
+
+function createLabTally(): LabTally {
+  return {
+    sampledAt: 0,
+    deathsThen: { starved: 0, oldAge: 0, killed: 0, disaster: 0, thirst: 0, temperature: 0 },
+    plantsToPlantEaters: 0,
+    plantsToMeatEaters: 0,
+    meatToPlantEaters: 0,
+    meatToMeatEaters: 0,
+    died: 0,
+    ageAtDeath: 0,
+    childrenAtDeath: 0,
+    firstBirths: 0,
+    firstBirthAge: 0,
+    births: 0,
+    parentAge: 0,
+    lifespan: 0,
+    firstBirth: 0,
+    offspring: 0,
+    generation: 0,
+    resting: 0,
+    foraging: 0,
+    chasing: 0,
+    fleeing: 0,
+    acted: 0,
+  };
+}
+
+/**
+ * How the Lab sorts what a creature is doing on a sampling tick. A creature
+ * counts once, as the first of these that fits; one that fits none is
+ * wandering.
+ */
+/** Chasing: biting or trying to, with a creature in view, and moving. */
+const CHASE_THRUST = 0.3;
+/** Fleeing: just bitten, or with a creature close behind, and moving hard without biting. */
+const FLEE_THRUST = 0.6;
+const FLEE_BEHIND = 0.5;
+/** Resting: barely moving and not feeding. Foraging: getting at least this share of a full mouthful. */
+const REST_THRUST = 0.15;
+const FORAGE_MOUTHFUL = 0.25;
 
 /** Two creatures whose hues differ by less than this count as relatives when tallying gifts. */
 const KIN_HUE = 0.1;
@@ -177,7 +261,8 @@ export function createWorld(config: SimConfig): World {
     parents: { count: 0, size: 0, speed: 0, sensorRange: 0, diet: 0 },
     social: { calling: 0, calls: 0, given: 0, givenToKin: 0 },
     activity: 0,
-    deaths: { starved: 0, oldAge: 0, killed: 0, disaster: 0, thirst: 0 },
+    deaths: { starved: 0, oldAge: 0, killed: 0, disaster: 0, thirst: 0, temperature: 0 },
+    lab: createLabTally(),
     environment: createEnvironment(config, rng, plants),
     lineage: new Lineage(),
     species: createSpeciesState(),
@@ -235,6 +320,10 @@ export function step(world: World): void {
   // Children born this tick are appended past `alive` and first act next tick.
   const alive = creatures.count;
   let thrustTotal = 0;
+  // On a sampling tick, what each creature is doing is tallied for the Lab.
+  const lab = world.lab;
+  const sampling = world.tick % world.history.interval === 0;
+  if (sampling) lab.resting = lab.foraging = lab.chasing = lab.fleeing = lab.acted = 0;
   for (let i = 0; i < alive; i++) {
     // Killed earlier this tick: it no longer acts, and leaves its body in the death pass.
     if (creatures.health[i]! <= 0) continue;
@@ -243,11 +332,13 @@ export function step(world: World): void {
 
     // Sense, then think. Outputs are in [-1, 1].
     world.senses.sense(creatures, i, world.tick, brain.activation);
+    const hurt = creatures.pain[i]! > 0;
     creatures.pain[i] = 0;
     think(brain);
     const turn = brain.activation[INPUT_COUNT + Output.Turn]! * config.maxTurn;
     let thrust = (brain.activation[INPUT_COUNT + Output.Thrust]! + 1) / 2;
     thrustTotal += thrust;
+    const effort = thrust;
     const wantsChild = brain.activation[INPUT_COUNT + Output.Reproduce]! >= 0;
     const attacking = brain.activation[INPUT_COUNT + Output.Attack]! > 0;
     const emitting = brain.activation[INPUT_COUNT + Output.Emit]! > 0;
@@ -325,6 +416,20 @@ export function step(world: World): void {
     const bite = Math.max(0, Math.min(mouthful * plantDigestion(diet), plants.energy[cell]!, maxEnergy - energy));
     plants.energy[cell]! -= bite;
     energy += bite;
+    if (diet > 0.5) {
+      lab.plantsToMeatEaters += bite;
+      lab.meatToMeatEaters += meatBite;
+    } else {
+      lab.plantsToPlantEaters += bite;
+      lab.meatToPlantEaters += meatBite;
+    }
+    if (sampling) {
+      lab.acted++;
+      if (attacking && world.senses.targetIndex >= 0 && effort > CHASE_THRUST) lab.chasing++;
+      else if ((hurt || brain.activation[Input.Behind]! > FLEE_BEHIND) && effort > FLEE_THRUST && !attacking) lab.fleeing++;
+      else if (bite + meatBite >= FORAGE_MOUTHFUL * biteFor(size, config)) lab.foraging++;
+      else if (effort < REST_THRUST) lab.resting++;
+    }
     if (emitting) plants.scent[cell]! += config.scentEmit;
 
     // Water drains away with time and is topped up in or beside water.
@@ -404,8 +509,16 @@ export function step(world: World): void {
     }
     else if (killed) world.deaths.killed++;
     else if (parched) world.deaths.thirst++;
-    else if (starved) world.deaths.starved++;
-    else world.deaths.oldAge++;
+    else if (starved) {
+      // Running out of energy while too hot or too cold is put down to the temperature.
+      const here = cellIndexAt(plants, creatures.x[i]!, creatures.y[i]!);
+      const heat = temperatureAt(plants, here, climate.warmth, config, climate.dayWarmth);
+      if (temperatureStress(heat, creatures.size[i]!, creatures.fur[i]!, config) > 0) world.deaths.temperature++;
+      else world.deaths.starved++;
+    } else world.deaths.oldAge++;
+    lab.died++;
+    lab.ageAtDeath += creatures.age[i]!;
+    lab.childrenAtDeath += creatures.children[i]!;
     // The body and whatever it had stored stay behind as meat.
     const cell = cellIndexAt(plants, creatures.x[i]!, creatures.y[i]!);
     plants.meat[cell]! += creatures.energy[i]! + bodyEnergyFor(creatures.size[i]!, config);
@@ -583,6 +696,13 @@ function giveBirth(world: World, parent: number, energy: number): number {
   });
   world.lineage.born(creatures.id[child]!, creatures.id[parent]!, world.tick, genes.hue);
   world.births++;
+  if (creatures.children[parent] === 0) {
+    world.lab.firstBirths++;
+    world.lab.firstBirthAge += creatures.age[parent]!;
+  }
+  if (creatures.children[parent]! < 65535) creatures.children[parent]!++;
+  world.lab.births++;
+  world.lab.parentAge += creatures.age[parent]!;
   world.parents.count++;
   world.parents.size += parentGenes.size;
   world.parents.speed += parentGenes.speed;
@@ -609,7 +729,46 @@ function sampleHistory(world: World): void {
   // With no births since the last sample there is nothing to compare, so parents read as average.
   const parents = world.parents;
   const had = parents.count;
+
+  // Rates since the previous sample, for the Lab's charts.
+  const lab = world.lab;
+  const elapsed = Math.max(1, world.tick - lab.sampledAt);
+  const deaths = world.deaths;
+  const then = lab.deathsThen;
+  const perThousand = (now: number, before: number) => ((now - before) * 1000) / elapsed;
+  if (lab.died > 0) {
+    lab.lifespan = lab.ageAtDeath / lab.died;
+    lab.offspring = lab.childrenAtDeath / lab.died;
+  }
+  if (lab.firstBirths > 0) lab.firstBirth = lab.firstBirthAge / lab.firstBirths;
+  if (lab.births > 0) lab.generation = lab.parentAge / lab.births;
+  const acted = Math.max(1, lab.acted);
+  const speciesCounts = new Map<number, number>();
+  for (const record of world.species.species) speciesCounts.set(record.id, 0);
+  for (let i = 0; i < creatures.count; i++) {
+    speciesCounts.set(creatures.species[i]!, (speciesCounts.get(creatures.species[i]!) ?? 0) + 1);
+  }
+  recordDensity(world.history.density, creatures, world.config.worldWidth, world.config.worldHeight, world.tick);
+
   recordSample(world.history, {
+    deathsStarved: perThousand(deaths.starved, then.starved),
+    deathsOldAge: perThousand(deaths.oldAge, then.oldAge),
+    deathsKilled: perThousand(deaths.killed, then.killed),
+    deathsTemperature: perThousand(deaths.temperature, then.temperature),
+    deathsThirst: perThousand(deaths.thirst, then.thirst),
+    deathsOther: perThousand(deaths.disaster, then.disaster),
+    flowPlantsToPlantEaters: lab.plantsToPlantEaters / elapsed,
+    flowPlantsToMeatEaters: lab.plantsToMeatEaters / elapsed,
+    flowMeatToPlantEaters: lab.meatToPlantEaters / elapsed,
+    flowMeatToMeatEaters: lab.meatToMeatEaters / elapsed,
+    lifespan: lab.lifespan,
+    firstBirthAge: lab.firstBirth,
+    offspring: lab.offspring,
+    generationLength: lab.generation,
+    shareResting: lab.resting / acted,
+    shareForaging: lab.foraging / acted,
+    shareChasing: lab.chasing / acted,
+    shareFleeing: lab.fleeing / acted,
     tick: world.tick,
     population: creatures.count,
     plantFill: world.plantCapacityTotal > 0 ? totalPlantEnergy(world.plants) / world.plantCapacityTotal : 0,
@@ -633,8 +792,13 @@ function sampleHistory(world: World): void {
         spreadOf(creatures.sensorRange, creatures) +
         spreadOf(creatures.diet, creatures)) /
       4,
-  });
+  }, speciesCounts);
   world.parents = { count: 0, size: 0, speed: 0, sensorRange: 0, diet: 0 };
+  lab.sampledAt = world.tick;
+  lab.deathsThen = { ...deaths };
+  lab.plantsToPlantEaters = lab.plantsToMeatEaters = lab.meatToPlantEaters = lab.meatToMeatEaters = 0;
+  lab.died = lab.ageAtDeath = lab.childrenAtDeath = 0;
+  lab.firstBirths = lab.firstBirthAge = lab.births = lab.parentAge = 0;
 }
 
 /** Energy currently held by everything in the world: plants, meat, and creatures' stores and bodies. */
@@ -695,6 +859,7 @@ export function hashWorld(world: World): number {
     c.heading,
     c.energy,
     c.age,
+    c.children,
     c.health,
     c.hydration,
     c.pain,

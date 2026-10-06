@@ -96,7 +96,8 @@ describe('energy economy', () => {
     const world = runWorld({ plantCapacity: 0, ...noReseed, ...noFighting }, 3000);
     expect(world.creatures.count).toBe(0);
     // A small founder can hold enough to split once before it starves.
-    expect(world.deaths.starved).toBe(smallConfig.initialCreatures + world.births);
+    // Those that ran out of energy while too hot or too cold are counted under temperature.
+    expect(world.deaths.starved + world.deaths.temperature).toBe(smallConfig.initialCreatures + world.births);
     // All that is left is the meat of their bodies, rotting away.
     expect(totalEnergy(world)).toBeCloseTo(totalMeatEnergy(world.plants), 9);
     expect(totalEnergy(world)).toBeCloseTo(expectedEnergy(world.ledger), 6);

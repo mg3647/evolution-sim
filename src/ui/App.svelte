@@ -9,7 +9,7 @@
   import type { ToolKind } from '../sim/world';
   import { SimClient } from '../worker/client';
   import type { HistoryData, LabData, ProfileGroup, Snapshot, Speed, TreeData } from '../worker/protocol';
-  import Chart, { type ChartSeries } from './Chart.svelte';
+  import Chart, { type ChartEvent, type ChartSeries } from './Chart.svelte';
   import EnvironmentPanel from './EnvironmentPanel.svelte';
   import Inspector from './Inspector.svelte';
   import LabView from './LabView.svelte';
@@ -128,6 +128,10 @@
     history && [history.tick, history.meanLinks, history.meanNeurons],
   );
   const speciesData = $derived<uPlot.AlignedData | null>(history && [history.tick, history.speciesCount]);
+  /** Recent events, marked on every chart. */
+  const chartEvents = $derived<ChartEvent[]>(
+    (snapshot?.environment.log ?? []).map((entry) => ({ tick: entry.tick, label: entry.text })),
+  );
 
   onMount(() => {
     let disposed = false;
@@ -424,7 +428,7 @@
   {/if}
 
   {#if showLab}
-    <LabView {history} {profiles} {lab} onClose={() => (showLab = false)} />
+    <LabView {history} {profiles} {lab} events={chartEvents} onClose={() => (showLab = false)} />
   {/if}
 
   <div class="main">
@@ -585,6 +589,10 @@
           <div><dt>Starved</dt><dd>{count(snapshot?.deaths.starved)}</dd></div>
           <div><dt>Killed</dt><dd>{count(snapshot?.deaths.killed)}</dd></div>
           <div><dt>Died of thirst</dt><dd>{count(snapshot?.deaths.thirst)}</dd></div>
+          <div title="Creatures that ran out of energy while too hot or too cold">
+            <dt>Died of heat or cold</dt>
+            <dd>{count(snapshot?.deaths.temperature)}</dd>
+          </div>
           <div title="Deaths from plague, meteors and fire">
             <dt>Died in disasters</dt>
             <dd>{count(snapshot?.deaths.disaster)}</dd>
@@ -674,26 +682,30 @@
           <span class="toggle">{expandedSections.charts ? '▼' : '▶'}</span> Charts
         </button>
         {#if expandedSections.charts}
-          <Chart title="Population" series={POPULATION_SERIES} data={populationData} />
+          <Chart events={chartEvents} title="Population" series={POPULATION_SERIES} data={populationData} />
           <Chart
+            events={chartEvents}
             title="Diet"
             note="How many creatures digest plants better (drawn as discs) and how many digest meat better (drawn as pointed shapes). Red ground is meat left by the dead."
             series={DIET_SERIES}
             data={dietData}
           />
           <Chart
+            events={chartEvents}
             title="Number of species"
             note="Rises when families drift apart, falls when a species dies out."
             series={SPECIES_SERIES}
             data={speciesData}
           />
           <Chart
+            events={chartEvents}
             title="Traits"
             note="Average body genes. 1 is what the first generation starts with, except fur and defenses, which start at 0 and can reach 1."
             series={TRAIT_SERIES}
             data={traitData}
           />
           <Chart
+            events={chartEvents}
             title="Brains"
             note="Average brain wiring. Links are rules connecting a sense to an action; hidden neurons combine senses. Both cost energy, so brains grow only when the extra wiring pays for itself."
             series={BRAIN_SERIES}

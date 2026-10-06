@@ -26,8 +26,11 @@ meteors and plague, draw walls, and make land fertile or barren. Creatures can
 leave and smell scent. You can inspect any creature's brain wiring, see the
 family tree and species of the living population, change any setting while
 the world runs, pick a preset, and save and load a world. The Lab button opens
-a full-screen analysis page: selection at work, gene diversity, the most
-successful founders, which senses each species uses, and brain comparisons.
+a full-screen analysis page: deaths by cause, a stream of species, the diet
+gene's distribution, a density map with a time slider, behaviour, life
+histories, food flow, selection at work, gene diversity, the most successful
+founders, traits by biome, which senses each species uses, and brain
+comparisons. Events are marked on every chart.
 
 ## Run it
 

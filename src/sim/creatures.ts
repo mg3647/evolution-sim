@@ -25,6 +25,8 @@ export interface Creatures {
   energy: Float64Array;
   /** Ticks lived. */
   age: Uint32Array;
+  /** Children it has had. */
+  children: Uint16Array;
   /** 1 is unhurt; the creature dies at 0. */
   health: Float32Array;
   /** Water in the body, from 1 (full) to 0 (dies of thirst). */
@@ -60,6 +62,7 @@ const FIELDS = [
   'heading',
   'energy',
   'age',
+  'children',
   'health',
   'hydration',
   'pain',
@@ -107,6 +110,7 @@ export function createCreatures(capacity: number): Creatures {
     heading: new Float32Array(capacity),
     energy: new Float64Array(capacity),
     age: new Uint32Array(capacity),
+    children: new Uint16Array(capacity),
     health: new Float32Array(capacity),
     hydration: new Float32Array(capacity),
     pain: new Float32Array(capacity),
@@ -128,7 +132,7 @@ function grow(c: Creatures): void {
   const capacity = c.capacity * 2;
   const store = c as unknown as Record<
     string,
-    Uint8Array | Uint32Array | Int32Array | Float32Array | Float64Array
+    Uint8Array | Uint16Array | Uint32Array | Int32Array | Float32Array | Float64Array
   >;
   for (const field of FIELDS) {
     const old = store[field]!;
@@ -153,6 +157,7 @@ export function spawnCreature(c: Creatures, options: SpawnOptions): number {
   c.heading[i] = options.heading;
   c.energy[i] = options.energy;
   c.age[i] = options.age ?? 0;
+  c.children[i] = 0;
   c.health[i] = 1;
   c.hydration[i] = options.hydration ?? 1;
   c.pain[i] = 0;

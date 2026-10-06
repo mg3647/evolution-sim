@@ -169,7 +169,7 @@ export interface Snapshot {
   reseeded: number;
   /** Creatures calling now, and energy given since the world began, in all and to relatives. */
   social: { calling: number; calls: number; given: number; givenToKin: number };
-  deaths: { starved: number; oldAge: number; killed: number; disaster: number; thirst: number };
+  deaths: { starved: number; oldAge: number; killed: number; disaster: number; thirst: number; temperature: number };
 
   /** The selected creature, or null if none is selected or it has died. */
   selected: Inspection | null;
@@ -203,6 +203,27 @@ export interface HistoryData {
   parentDiet: Float32Array;
   /** How varied the body genes are: the mean of their standard deviations. */
   diversity: Float32Array;
+  /** See History in stats.ts for what each of these holds. */
+  deathsStarved: Float32Array;
+  deathsOldAge: Float32Array;
+  deathsKilled: Float32Array;
+  deathsTemperature: Float32Array;
+  deathsThirst: Float32Array;
+  deathsOther: Float32Array;
+  flowPlantsToPlantEaters: Float32Array;
+  flowPlantsToMeatEaters: Float32Array;
+  flowMeatToPlantEaters: Float32Array;
+  flowMeatToMeatEaters: Float32Array;
+  lifespan: Float32Array;
+  firstBirthAge: Float32Array;
+  offspring: Float32Array;
+  generationLength: Float32Array;
+  shareResting: Float32Array;
+  shareForaging: Float32Array;
+  shareChasing: Float32Array;
+  shareFleeing: Float32Array;
+  /** Members of the largest species at every sample, largest first; the rest are summed under id 0. */
+  species: { id: number; counts: Float32Array }[];
 }
 
 /**
@@ -253,10 +274,17 @@ export interface BiomeView {
   meanDiet: number;
 }
 
+/** Bars in the Lab's diet histogram. */
+export const DIET_BINS = 20;
+
 /** Numbers only the Lab view shows. */
 export interface LabData {
   /** Per biome, in the order of BIOME_LABELS. */
   biomes: BiomeView[];
+  /** How many living creatures have a diet gene in each of DIET_BINS equal steps from 0 (plants) to 1 (meat). */
+  dietBins: number[];
+  /** Where creatures have been: a square grid of counts per stretch of the run, oldest first. */
+  density: { grid: number; frames: Float32Array[]; ticks: number[] };
   tick: number;
   population: number;
   /** How many parentless creatures the world has had, and how many still have living descendants. */

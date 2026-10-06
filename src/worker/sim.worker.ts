@@ -6,11 +6,13 @@ import { maxEnergyFor, temperatureStress } from '../sim/genome';
 import { cellIndexAt, temperatureAt } from '../sim/plants';
 import { RESTART_KEYS } from '../sim/presets';
 import { brainProfile } from '../sim/profile';
+import { DENSITY_GRID } from '../sim/stats';
 import { wrappedDelta } from '../sim/geometry';
 import { loadWorld, saveWorld, type SavedWorld } from '../sim/serialize';
 import { applyTool, clearWorldWalls, triggerWorldEvent, type World } from '../sim/world';
 import {
   CREATURE_STRIDE,
+  DIET_BINS,
   type FromWorker,
   type HistoryData,
   type LabData,
@@ -36,6 +38,8 @@ const TPS_WINDOW_MS = 500;
 const SPECIES_SHOWN = 8;
 /** Founders listed in the Lab view. */
 const FOUNDERS_SHOWN = 12;
+/** Species drawn separately in the stream chart; smaller ones are summed. */
+const STREAM_SPECIES = 12;
 
 let runner: SimRunner | null = null;
 let loopTimer: ReturnType<typeof setTimeout> | null = null;
@@ -292,11 +296,41 @@ function sendHistory(now: number): void {
     parentSensorRange: h.parentSensorRange.slice(0, h.count),
     parentDiet: h.parentDiet.slice(0, h.count),
     diversity: h.diversity.slice(0, h.count),
+    deathsStarved: h.deathsStarved.slice(0, h.count),
+    deathsOldAge: h.deathsOldAge.slice(0, h.count),
+    deathsKilled: h.deathsKilled.slice(0, h.count),
+    deathsTemperature: h.deathsTemperature.slice(0, h.count),
+    deathsThirst: h.deathsThirst.slice(0, h.count),
+    deathsOther: h.deathsOther.slice(0, h.count),
+    flowPlantsToPlantEaters: h.flowPlantsToPlantEaters.slice(0, h.count),
+    flowPlantsToMeatEaters: h.flowPlantsToMeatEaters.slice(0, h.count),
+    flowMeatToPlantEaters: h.flowMeatToPlantEaters.slice(0, h.count),
+    flowMeatToMeatEaters: h.flowMeatToMeatEaters.slice(0, h.count),
+    lifespan: h.lifespan.slice(0, h.count),
+    firstBirthAge: h.firstBirthAge.slice(0, h.count),
+    offspring: h.offspring.slice(0, h.count),
+    generationLength: h.generationLength.slice(0, h.count),
+    shareResting: h.shareResting.slice(0, h.count),
+    shareForaging: h.shareForaging.slice(0, h.count),
+    shareChasing: h.shareChasing.slice(0, h.count),
+    shareFleeing: h.shareFleeing.slice(0, h.count),
+    species: [],
   };
-  post(
-    { type: 'history', history },
-    Object.values(history).map((series) => series.buffer),
-  );
+  // The species with the most member-samples are drawn separately; the rest are summed.
+  const ranked = [...h.species]
+    .map(([id, series]) => {
+      let total = 0;
+      for (let k = 0; k < h.count; k++) total += series[k]!;
+      return { id, series, total };
+    })
+    .sort((a, b) => b.total - a.total || a.id - b.id);
+  const others = new Float32Array(h.count);
+  ranked.forEach((entry, rank) => {
+    if (rank < STREAM_SPECIES) history.species.push({ id: entry.id, counts: entry.series.slice(0, h.count) });
+    else for (let k = 0; k < h.count; k++) others[k]! += entry.series[k]!;
+  });
+  if (ranked.length > STREAM_SPECIES) history.species.push({ id: 0, counts: others });
+  post({ type: 'history', history });
   sentHistoryVersion = h.version;
   lastHistoryTime = now;
 }
@@ -411,7 +445,12 @@ function sendLab(): void {
     biome.meanDefense /= count;
     biome.meanDiet /= count;
   }
+  const dietBins = new Array<number>(DIET_BINS).fill(0);
+  for (let i = 0; i < c.count; i++) dietBins[Math.min(DIET_BINS - 1, Math.floor(c.diet[i]! * DIET_BINS))]!++;
+  const density = world.history.density;
   const lab: LabData = {
+    dietBins,
+    density: { grid: DENSITY_GRID, frames: density.frames.map((frame) => frame.slice()), ticks: density.ticks.slice() },
     biomes,
     tick: world.tick,
     population: c.count,

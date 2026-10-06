@@ -49,8 +49,9 @@ interface Summary {
   hunters: number;
   /** Share of all deaths that were kills. */
   killShare: number;
-  /** Share of all deaths that were from thirst, and from old age. */
+  /** Share of all deaths that were from thirst, from running out of energy while too hot or cold, and from old age. */
   thirstShare: number;
+  temperatureShare: number;
   oldAgeShare: number;
   /** Mean share of creatures calling at any moment. */
   callers: number;
@@ -196,7 +197,7 @@ function run(seed: string): Summary {
   // Deaths are counted over the measured part of the run only.
   const d = { ...world.deaths };
   for (const cause of Object.keys(d) as (keyof typeof d)[]) d[cause] -= deathsBefore[cause];
-  const deaths = d.starved + d.oldAge + d.killed + d.disaster + d.thirst;
+  const deaths = d.starved + d.oldAge + d.killed + d.disaster + d.thirst + d.temperature;
   const given = world.social.given - socialBefore.given;
   return {
     seed,
@@ -207,6 +208,7 @@ function run(seed: string): Summary {
     hunters: hunterSum / samples,
     killShare: deaths > 0 ? d.killed / deaths : 0,
     thirstShare: deaths > 0 ? d.thirst / deaths : 0,
+    temperatureShare: deaths > 0 ? d.temperature / deaths : 0,
     oldAgeShare: deaths > 0 ? d.oldAge / deaths : 0,
     disasterShare: deaths > 0 ? d.disaster / deaths : 0,
     firesPerTenThousand: ((world.fires.started - firesBefore.started) * 10000) / Math.max(1, ticks - from),
@@ -254,6 +256,7 @@ it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
         `hunters=${s.hunters.toFixed(1)}`,
         `killShare=${percent(s.killShare)}`,
         `thirstShare=${percent(s.thirstShare)}`,
+        `temperatureShare=${percent(s.temperatureShare)}`,
         `oldAgeShare=${percent(s.oldAgeShare)}`,
         `disasterShare=${percent(s.disasterShare)}`,
         `fires=${s.firesPerTenThousand.toFixed(1)}/10kt burned=${(s.burnedPerTenThousand * 100).toFixed(2)}%/10kt`,

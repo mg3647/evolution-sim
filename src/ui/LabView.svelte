@@ -7,7 +7,9 @@
   import { HIDDEN_NODE } from '../sim/profile';
   import type { HistoryData, LabData, ProfileGroup } from '../worker/protocol';
   import BrainCompare from './BrainCompare.svelte';
-  import Chart, { type ChartSeries } from './Chart.svelte';
+  import Chart, { type ChartEvent, type ChartSeries } from './Chart.svelte';
+  import DensityMap from './DensityMap.svelte';
+  import DietHistogram from './DietHistogram.svelte';
 
   /** Rows in the ranked list of a group's most common links. */
   const LINKS_SHOWN = 15;
@@ -20,13 +22,128 @@
     history,
     profiles,
     lab,
+    events,
     onClose,
   }: {
     history: HistoryData | null;
     profiles: ProfileGroup[];
     lab: LabData | null;
+    /** Events to mark on every chart. */
+    events: ChartEvent[];
     onClose: () => void;
   } = $props();
+
+  const DEATH_SERIES: ChartSeries[] = [
+    { label: 'Starvation', color: '#e8c468' },
+    { label: 'Old age', color: '#8a9aa9' },
+    { label: 'Predation', color: '#e0566a' },
+    { label: 'Heat or cold', color: '#6cb6ff' },
+    { label: 'Thirst', color: '#7fd6c2' },
+    { label: 'Other', color: '#b08cff' },
+  ];
+  const deathData = $derived<uPlot.AlignedData | null>(
+    history && [
+      history.tick,
+      history.deathsStarved,
+      history.deathsOldAge,
+      history.deathsKilled,
+      history.deathsTemperature,
+      history.deathsThirst,
+      history.deathsOther,
+    ],
+  );
+
+  /** The species drawn in the stream chart. The chart is rebuilt when the set changes. */
+  const streamKey = $derived(history ? history.species.map((s) => s.id).join(',') : '');
+  const streamSeries = $derived<ChartSeries[]>(
+    (history?.species ?? []).map((s) => ({
+      label: s.id === 0 ? 'Smaller species' : `Species ${s.id}`,
+      color: s.id === 0 ? '#5a6672' : hslToHex(speciesHue(s.id), 0.7, 0.6),
+    })),
+  );
+  const streamData = $derived<uPlot.AlignedData | null>(
+    history && history.species.length > 0 ? [history.tick, ...history.species.map((s) => s.counts)] : null,
+  );
+
+  /** A hex colour for a hue, saturation and lightness in [0, 1]; the charts need hex. */
+  function hslToHex(h: number, s: number, l: number): string {
+    const a = s * Math.min(l, 1 - l);
+    const channel = (n: number) => {
+      const k = (n + h * 12) % 12;
+      const value = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+      return Math.round(value * 255)
+        .toString(16)
+        .padStart(2, '0');
+    };
+    return `#${channel(0)}${channel(8)}${channel(4)}`;
+  }
+
+  const BEHAVIOUR_SERIES: ChartSeries[] = [
+    { label: 'Foraging %', color: '#4caf50' },
+    { label: 'Resting %', color: '#8a9aa9' },
+    { label: 'Chasing %', color: '#e0566a' },
+    { label: 'Fleeing %', color: '#6cb6ff' },
+  ];
+  const asPercent = (values: Float32Array) => smooth(values).map((share) => share * 100);
+  const behaviourData = $derived<uPlot.AlignedData | null>(
+    history && [
+      history.tick,
+      asPercent(history.shareForaging),
+      asPercent(history.shareResting),
+      asPercent(history.shareChasing),
+      asPercent(history.shareFleeing),
+    ],
+  );
+
+  const LIFE_AGE_SERIES: ChartSeries[] = [
+    { label: 'Lifespan', color: '#e8c468' },
+    { label: 'Age at first birth', color: '#7fd6c2' },
+    { label: 'Generation length', color: '#b08cff' },
+  ];
+  const OFFSPRING_SERIES: ChartSeries[] = [{ label: 'Children per creature', color: '#ff8f6b' }];
+  const lifeAgeData = $derived<uPlot.AlignedData | null>(
+    history && [
+      history.tick,
+      smooth(history.lifespan),
+      smooth(history.firstBirthAge),
+      smooth(history.generationLength),
+    ],
+  );
+  const offspringData = $derived<uPlot.AlignedData | null>(history && [history.tick, smooth(history.offspring)]);
+
+  const FLOW_SERIES: ChartSeries[] = [
+    { label: 'Plants to plant-eaters', color: '#4caf50' },
+    { label: 'Plants to meat-eaters', color: '#b7c94a' },
+    { label: 'Meat to plant-eaters', color: '#e8a468' },
+    { label: 'Meat to meat-eaters', color: '#e0566a' },
+  ];
+  const flowData = $derived<uPlot.AlignedData | null>(
+    history && [
+      history.tick,
+      smooth(history.flowPlantsToPlantEaters),
+      smooth(history.flowPlantsToMeatEaters),
+      smooth(history.flowMeatToPlantEaters),
+      smooth(history.flowMeatToMeatEaters),
+    ],
+  );
+  /** Where the energy eaten lately went, as shares of all of it, for the flow diagram. */
+  const flowNow = $derived.by(() => {
+    if (!history || history.tick.length === 0) return null;
+    const last = (values: Float32Array) => {
+      let total = 0;
+      const from = Math.max(0, values.length - SMOOTH_SAMPLES);
+      for (let k = from; k < values.length; k++) total += values[k]!;
+      return total / Math.max(1, values.length - from);
+    };
+    const parts = [
+      last(history.flowPlantsToPlantEaters),
+      last(history.flowPlantsToMeatEaters),
+      last(history.flowMeatToPlantEaters),
+      last(history.flowMeatToMeatEaters),
+    ];
+    const total = parts.reduce((a, b) => a + b, 0);
+    return total > 0 ? { parts, total } : null;
+  });
 
   let rankedId = $state('plants');
   const ranked = $derived(profiles.find((g) => g.id === rankedId) ?? profiles[0]);
@@ -51,7 +168,8 @@
     ),
   );
 
-  const SELECTION: { title: string; all: keyof HistoryData; parents: keyof HistoryData }[] = [
+  type Trait = 'Size' | 'Speed' | 'SensorRange' | 'Diet';
+  const SELECTION: { title: string; all: `mean${Trait}`; parents: `parent${Trait}` }[] = [
     { title: 'Size', all: 'meanSize', parents: 'parentSize' },
     { title: 'Speed', all: 'meanSpeed', parents: 'parentSpeed' },
     { title: 'Sensor range', all: 'meanSensorRange', parents: 'parentSensorRange' },
@@ -95,6 +213,124 @@
   </header>
 
   <div class="grid">
+    <section class="card">
+      <h1>Deaths by cause</h1>
+      <p class="teaches">
+        What is killing creatures, and so what evolution is being pushed to solve. A band that widens after an
+        event shows what that event did.
+      </p>
+      <Chart
+        {events}
+        stacked
+        title="Deaths per 1,000 ticks"
+        note="Heat or cold counts creatures that ran out of energy while outside their comfort range. Other is plague, meteors and fire."
+        series={DEATH_SERIES}
+        data={deathData}
+      />
+    </section>
+
+    <section class="card">
+      <h1>Species stream</h1>
+      <p class="teaches">
+        How many creatures each species has, piled up, so the whole is the population. A new band splitting off
+        a shrinking one is a species dividing; a band pinching out is an extinction.
+      </p>
+      {#if streamData}
+        {#key streamKey}
+          <Chart {events} stacked title="Members of each species" series={streamSeries} data={streamData} />
+        {/key}
+      {:else}
+        <p class="empty">No species yet.</p>
+      {/if}
+    </section>
+
+    <section class="card">
+      <h1>Diet gene distribution</h1>
+      <p class="teaches">
+        How the population is spread between eating plants and eating meat right now. Two separate humps mean
+        specialists; one hump in the middle means generalists.
+      </p>
+      {#if lab}
+        <DietHistogram bins={lab.dietBins} />
+      {:else}
+        <p class="empty">No creatures yet.</p>
+      {/if}
+    </section>
+
+    <section class="card">
+      <h1>Density map</h1>
+      <p class="teaches">
+        Where creatures spend their time. Compare it with the biomes on the map to see which land is used, and
+        drag back in time to watch populations move.
+      </p>
+      {#if lab}
+        <DensityMap grid={lab.density.grid} frames={lab.density.frames} ticks={lab.density.ticks} />
+      {/if}
+    </section>
+
+    <section class="card">
+      <h1>Behaviour</h1>
+      <p class="teaches">
+        What creatures are doing, and how that shifts as generations pass. Each creature counts once. Chasing is
+        biting, or trying to, while moving with another creature in view. Fleeing is moving hard, without biting,
+        just after being bitten or with a creature close behind. Foraging is getting at least a quarter of a full
+        mouthful. Resting is staying nearly still without feeding. The rest are wandering.
+      </p>
+      <Chart {events} title="Share of creatures" note="Running averages." series={BEHAVIOUR_SERIES} data={behaviourData} />
+    </section>
+
+    <section class="card">
+      <h1>Life histories</h1>
+      <p class="teaches">
+        How lives are lived: how long, how soon the first child comes, and how many children in all. Short lives
+        with early, many births and long lives with few are different answers to the same world.
+      </p>
+      <Chart
+        {events}
+        title="Ages, in ticks"
+        note="Generation length is the average age of a parent at a birth. Running averages."
+        series={LIFE_AGE_SERIES}
+        data={lifeAgeData}
+      />
+      <Chart {events} title="Children" note="Average children had by the creatures that died." series={OFFSPRING_SERIES} data={offspringData} />
+    </section>
+
+    <section class="card wide">
+      <h1>Food flow</h1>
+      <p class="teaches">
+        Where energy goes: from plants into plant-eaters, and from bodies into whatever eats meat. Only a small
+        part of what plant-eaters take in ever reaches a meat-eater, which is why hunters are always few.
+      </p>
+      {#if flowNow}
+        {@const [plantHerb, plantCarn, meatHerb, meatCarn] = flowNow.parts as [number, number, number, number]}
+        <div class="flow">
+          <div class="pool plants">Plants</div>
+          <div class="arrows">
+            <div class="arrow" style="--share: {plantHerb / flowNow.total}; --color: #4caf50">
+              {percent(plantHerb / flowNow.total)} to plant-eaters
+            </div>
+            <div class="arrow" style="--share: {plantCarn / flowNow.total}; --color: #b7c94a">
+              {percent(plantCarn / flowNow.total)} to meat-eaters
+            </div>
+          </div>
+          <div class="pool bodies">Bodies of the dead</div>
+          <div class="arrows">
+            <div class="arrow" style="--share: {meatHerb / flowNow.total}; --color: #e8a468">
+              {percent(meatHerb / flowNow.total)} to plant-eaters
+            </div>
+            <div class="arrow" style="--share: {meatCarn / flowNow.total}; --color: #e0566a">
+              {percent(meatCarn / flowNow.total)} to meat-eaters
+            </div>
+          </div>
+        </div>
+        <p class="caption">
+          Shares of all the energy eaten lately: {flowNow.total.toFixed(1)} a tick. A meat-eater is a creature whose
+          diet gene is above one half.
+        </p>
+      {/if}
+      <Chart {events} stacked title="Energy eaten per tick" note="Running averages." series={FLOW_SERIES} data={flowData} />
+    </section>
+
     <section class="card wide">
       <h1>Selection at work</h1>
       <p class="teaches">
@@ -103,7 +339,7 @@
       </p>
       <div class="charts">
         {#each SELECTION as trait, k (trait.title)}
-          <Chart title={trait.title} series={SELECTION_SERIES} data={selectionData[k] ?? null} />
+          <Chart {events} title={trait.title} series={SELECTION_SERIES} data={selectionData[k] ?? null} />
         {/each}
       </div>
     </section>
@@ -114,7 +350,7 @@
         How varied the population's body genes are. It drops when a disaster leaves few survivors or one family
         takes over, and climbs back as mutations build up again.
       </p>
-      <Chart title="Gene spread" note="The average spread (standard deviation) of size, speed, sensor range and diet." series={DIVERSITY_SERIES} data={diversityData} />
+      <Chart {events} title="Gene spread" note="The average spread (standard deviation) of size, speed, sensor range and diet." series={DIVERSITY_SERIES} data={diversityData} />
     </section>
 
     <section class="card">
@@ -470,6 +706,48 @@
     border: 1px solid var(--border);
     border-radius: 4px;
     padding: 4px 6px;
+  }
+
+  .flow {
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    gap: 8px 14px;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 12px;
+  }
+
+  .pool {
+    padding: 10px;
+    text-align: center;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-weight: 600;
+  }
+
+  .plants {
+    background: rgba(76, 175, 80, 0.18);
+  }
+
+  .bodies {
+    background: rgba(224, 86, 106, 0.18);
+  }
+
+  .arrows {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  /* A bar as long as its share of all the energy eaten, with a little always showing. */
+  .arrow {
+    width: calc(max(2%, var(--share) * 100%));
+    min-width: max-content;
+    padding: 3px 8px;
+    border-left: 4px solid var(--color);
+    background: linear-gradient(90deg, color-mix(in srgb, var(--color) 45%, transparent), transparent);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
   }
 
   .caption,

@@ -19,7 +19,7 @@ import type { World } from './world';
  */
 
 /** Bumped whenever the saved layout changes; older files are refused. */
-export const SAVE_VERSION = 11;
+export const SAVE_VERSION = 12;
 
 /** Per-creature number arrays, saved up to the live count. */
 const CREATURE_FIELDS = [
@@ -33,6 +33,7 @@ const CREATURE_FIELDS = [
   'heading',
   'energy',
   'age',
+  'children',
   'health',
   'hydration',
   'pain',
@@ -77,6 +78,7 @@ export interface SavedWorld {
   parents: World['parents'];
   social: World['social'];
   deaths: World['deaths'];
+  lab: World['lab'];
   infected: number;
   plagueDeaths: number;
   environment: {
@@ -127,6 +129,7 @@ export function saveWorld(world: World): SavedWorld {
     parents: { ...world.parents },
     social: { ...world.social },
     deaths: { ...world.deaths },
+    lab: { ...world.lab, deathsThen: { ...world.lab.deathsThen } },
     infected: world.infected,
     plagueDeaths: world.plagueDeaths,
     environment: {
@@ -231,6 +234,7 @@ export function loadWorld(saved: SavedWorld): World {
     fires: { ...saved.fires },
     parents: { ...saved.parents },
     deaths: { ...saved.deaths },
+    lab: { ...saved.lab, deathsThen: { ...saved.lab.deathsThen } },
     infected: saved.infected,
     plagueDeaths: saved.plagueDeaths,
     environment: {
