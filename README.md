@@ -3,7 +3,7 @@
 A 2D world of creatures whose bodies and brains evolve under natural selection
 alone: no fitness score, just a closed energy economy. Runs in the browser.
 
-Status: v3 in progress. Creatures have 67 senses and 8 actions: besides what is below,
+Status: v3. Creatures have 67 senses and 8 actions: besides what is below,
 they see what others eat, whether they are approaching or hurt, feel what is
 behind them, crowding and pain, hear and make calls, give energy to one
 another, and see less far at night. Plants regrow on a fertility map. Creatures see with
