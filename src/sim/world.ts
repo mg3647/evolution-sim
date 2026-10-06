@@ -624,10 +624,7 @@ export function applyTool(
     meteorAt(env, world.tick, eventTarget(world), x, y);
   } else if (tool === 'fire') {
     const cell = cellIndexAt(plants, wrap(x, config.worldWidth), wrap(y, config.worldHeight));
-    if (ignite(plants, cell, config, world.fires)) {
-      world.fires.started++;
-      world.fires.burning++;
-    }
+    if (ignite(plants, cell, config, world.fires)) world.fires.started++;
   } else if (tool === 'plague') {
     const r2 = config.plagueToolRadius * config.plagueToolRadius;
     let infected = 0;

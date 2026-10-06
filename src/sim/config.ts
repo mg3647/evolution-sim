@@ -296,7 +296,7 @@ export interface SimConfig {
   fireMinFuel: number;
   /** Ticks a cell burns, and again for each branch in it. */
   fireDuration: number;
-  /** Chance per tick that fire spreads to a neighbouring cell full of plants. */
+  /** Chance per tick that fire spreads to a neighbouring cell with enough to burn. */
   fireSpread: number;
   /** Share of a burning cell's plants that burn away each tick. */
   fireBurnRate: number;
@@ -462,11 +462,11 @@ export const defaultConfig: SimConfig = {
   branchDensity: 0.15,
   stoneDensity: 0.04,
   branchRegrowTicks: 4000,
-  fireChance: 0.002,
+  fireChance: 0.005,
   fireMinHeat: 0.45,
-  fireMinFuel: 0.3,
+  fireMinFuel: 0.15,
   fireDuration: 40,
-  fireSpread: 0.02,
+  fireSpread: 0.03,
   fireBurnRate: 0.05,
   fireDamage: 0.03,
   fireWarmth: 0.8,

@@ -75,7 +75,6 @@ describe('wildfire', () => {
   it('burns plants away as heat, then goes out and leaves ash', () => {
     const { cfg, field, ledger, tally, rng } = meadow({ fireSpread: 0 });
     ignite(field, 0, cfg, tally);
-    tally.burning = 1;
     const before = field.energy[0]!;
     for (let k = 0; k < cfg.fireDuration; k++) burn(field, cfg, rng, ledger, tally);
     expect(field.fire[0]).toBe(0);
@@ -95,7 +94,6 @@ describe('wildfire', () => {
     for (let row = breakRow; row < breakRow + 2; row++) field.energy.fill(0, row * field.cols, (row + 1) * field.cols);
     for (let row = rows - 2; row < rows; row++) field.energy.fill(0, row * field.cols, (row + 1) * field.cols);
     ignite(field, field.cols * 3 + 3, cfg, tally);
-    tally.burning = 1;
     for (let k = 0; k < 2000 && tally.burning > 0; k++) burn(field, cfg, rng, ledger, tally);
     expect(tally.burning).toBe(0);
     let above = 0;
@@ -114,8 +112,7 @@ describe('wildfire', () => {
       const { cfg, field, ledger, tally, rng } = meadow({ fireSpread: 0 });
       field.branches[0] = branches;
       ignite(field, 0, cfg, tally);
-      tally.burning = 1;
-      let ticks = 0;
+        let ticks = 0;
       while (tally.burning > 0 && ticks < 10000) {
         burn(field, cfg, rng, ledger, tally);
         ticks++;
@@ -130,7 +127,6 @@ describe('wildfire', () => {
     field.temperature.fill(0);
     const centre = field.cols * 5 + 5;
     ignite(field, centre, cfg, tally);
-    tally.burning = 1;
     burn(field, cfg, rng, ledger, tally);
     const here = temperatureAt(field, centre, 0, cfg);
     const near = temperatureAt(field, centre + 1, 0, cfg);
@@ -157,8 +153,16 @@ describe('wildfire', () => {
     expect(field.hasAsh).toBe(false);
   });
 
-  it('is started by lightning only where it is hot', () => {
-    const strikes = (heat: number) => {
+  it('burns on from a lightning strike without any help', () => {
+    const { cfg, field, ledger, tally, rng } = meadow({ fireChance: 1, fireSpread: 0.5 });
+    maybeLightning(field, cfg, rng, tally, () => 1);
+    expect(tally.started).toBe(1);
+    expect(tally.burning).toBe(1);
+    for (let k = 0; k < 30; k++) burn(field, cfg, rng, ledger, tally);
+    expect(tally.cellsBurned).toBeGreaterThan(5);
+  });
+
+  it('is started by lightning only where it is hot', () => {    const strikes = (heat: number) => {
       const { cfg, field, tally, rng } = meadow({ fireChance: 1 });
       for (let k = 0; k < 50; k++) maybeLightning(field, cfg, rng, tally, () => heat);
       return tally.started;

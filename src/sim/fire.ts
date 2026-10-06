@@ -80,6 +80,7 @@ export function ignite(field: PlantField, cell: number, config: SimConfig, tally
   if (field.fire[cell]! > 0 || fuel(field, cell, config) < config.fireMinFuel) return false;
   field.fire[cell] = config.fireDuration;
   tally.cellsBurned++;
+  tally.burning++;
   return true;
 }
 
@@ -136,14 +137,14 @@ export function burn(
 
     const cx = cell % cols;
     const cy = (cell - cx) / cols;
-    // Spread to the four neighbours, each by chance, the likelier the more it has to burn.
+    // Spread to each of the four neighbours that has enough to burn, by chance.
     for (let side = 0; side < 4; side++) {
       const nx = (cx + (side === 0 ? 1 : side === 1 ? cols - 1 : 0)) % cols;
       const ny = (cy + (side === 2 ? 1 : side === 3 ? rows - 1 : 0)) % rows;
       const neighbour = ny * cols + nx;
       if (fire[neighbour]! > 0) continue;
       const food = fuel(field, neighbour, config);
-      if (food >= config.fireMinFuel && rng.chance(config.fireSpread * food)) caught.push(neighbour);
+      if (food >= config.fireMinFuel && rng.chance(config.fireSpread)) caught.push(neighbour);
     }
 
     // Warm the air around.
