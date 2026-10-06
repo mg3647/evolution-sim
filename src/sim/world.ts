@@ -767,9 +767,16 @@ function giveBirth(world: World, parent: number, energy: number): number {
   // The child appears just behind the parent rather than on top of it.
   const behind = creatures.heading[parent]! + Math.PI;
   const gap = config.creatureRadius * (creatures.size[parent]! + genes.size);
+  let childX = wrap(creatures.x[parent]! + Math.cos(behind) * gap, config.worldWidth);
+  let childY = wrap(creatures.y[parent]! + Math.sin(behind) * gap, config.worldHeight);
+  // Not into a wall, though: a child born inside one could walk out the far side.
+  if (world.plants.walls[cellIndexAt(world.plants, childX, childY)] === 1) {
+    childX = creatures.x[parent]!;
+    childY = creatures.y[parent]!;
+  }
   const child = spawnCreature(creatures, {
-    x: wrap(creatures.x[parent]! + Math.cos(behind) * gap, config.worldWidth),
-    y: wrap(creatures.y[parent]! + Math.sin(behind) * gap, config.worldHeight),
+    x: childX,
+    y: childY,
     heading: rng.range(0, Math.PI * 2),
     energy: given - lost - body,
     genes,

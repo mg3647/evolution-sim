@@ -126,6 +126,8 @@ export const SETTING_GROUPS: SettingGroup[] = [
     title: 'Reproduction and mutation',
     settings: [
       { key: 'reproduceThreshold', label: 'Energy needed to breed', hint: 'A creature can split once its store is this full', min: 0.3, max: 0.95, step: 0.05 },
+      { key: 'birthCost', label: 'Cost of a birth', hint: 'Share of the energy handed to a child that is lost as heat. Higher makes breeding often wasteful', min: 0, max: 0.8, step: 0.05 },
+      { key: 'offspringShare', label: 'Share given to a child', hint: 'Share of its energy a parent hands over at a birth; part of it builds the body of the child', min: 0.1, max: 0.9, step: 0.05 },
       { key: 'minReproduceAge', label: 'Youngest breeding age', hint: 'Ticks a creature must live before it can split', min: 0, max: 1500, step: 50 },
       { key: 'initialMutationRate', label: 'Starting mutation rate', hint: 'How much founders’ children differ from them; the rate itself then evolves', min: 0.01, max: 0.3, step: 0.01 },
       { key: 'addLinkChance', label: 'Chance of a new brain link', hint: 'Per birth; higher makes brains change faster', min: 0, max: 0.5, step: 0.01 },

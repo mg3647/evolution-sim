@@ -276,6 +276,31 @@ describe('history', () => {
     expect(h.diversity[last]).toBeGreaterThan(0);
   });
 
+  it('never places a newborn inside a wall', () => {
+    const world = createWorld({ ...smallConfig, seed: 'walled' });
+    // Wall off every other column of cells, so most births happen beside a wall.
+    const { plants } = world;
+    for (let cell = 0; cell < plants.walls.length; cell++) {
+      if ((cell % plants.cols) % 2 === 1) plants.walls[cell] = 1;
+    }
+    const seen = new Set<number>();
+    let births = 0;
+    for (let tick = 0; tick < 1500; tick++) {
+      step(world);
+      const { creatures: c } = world;
+      // A newborn has not acted yet, so it is still where it was put.
+      for (let i = c.count - 1; i >= 0 && c.age[i] === 0; i--) {
+        if (c.parentId[i] === 0 || seen.has(c.id[i]!)) continue;
+        seen.add(c.id[i]!);
+        births++;
+        const cx = Math.min(plants.cols - 1, Math.floor(c.x[i]! / plants.cellWidth));
+        const cy = Math.min(plants.rows - 1, Math.floor(c.y[i]! / plants.cellHeight));
+        expect(plants.walls[cy * plants.cols + cx]).toBe(0);
+      }
+    }
+    expect(births).toBeGreaterThan(20);
+  });
+
   it('samples the population at the configured interval', () => {
     const world = runWorld({ statsInterval: 50 }, 500);
     expect(world.history.count).toBe(11);

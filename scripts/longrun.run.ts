@@ -21,6 +21,7 @@ import { BIOME_COUNT, BIOME_LABELS } from '../src/sim/biomes';
 import { defaultConfig, type SimConfig } from '../src/sim/config';
 import { Held } from '../src/sim/creatures';
 import { daylightAt } from '../src/sim/environment';
+import { maxEnergyFor } from '../src/sim/genome';
 import { cellIndexAt, groundHue, visibility } from '../src/sim/plants';
 import { createWorld, step } from '../src/sim/world';
 
@@ -83,6 +84,16 @@ interface Summary {
   holdingBranch: number;
   holdingFood: number;
   haulDistance: number;
+  /**
+   * Breeding: births per creature per 1,000 ticks, the mean age at death,
+   * how full of energy a newborn is, the mean age of a parent at a birth,
+   * and how full of plants the world is.
+   */
+  birthRate: number;
+  lifespan: number;
+  newbornEnergy: number;
+  parentAge: number;
+  plantFill: number;
   /** Mean fur and defense genes overall. */
   meanFur: number;
   meanDefense: number;
@@ -112,6 +123,10 @@ function run(seed: string): Summary {
   let hiddenSum = 0;
   let furSum = 0;
   let defenseSum = 0;
+  let birthsBefore = 0;
+  let creatureTicks = 0;
+  let newborns = 0;
+  let newbornFill = 0;
   const heldSum = [0, 0, 0, 0, 0];
   let carryBefore = { ...world.carry };
   const zero = () => new Array<number>(BIOME_COUNT).fill(0);
@@ -141,7 +156,17 @@ function run(seed: string): Summary {
       socialBefore = { ...world.social };
       reseededBefore = world.reseeded;
       firesBefore = { ...world.fires };
+      birthsBefore = world.births;
       carryBefore = { ...world.carry };
+    }
+    if (tick > from) {
+      creatureTicks += c.count;
+      // A newborn has not yet acted, so its age is still zero.
+      for (let i = c.count - 1; i >= 0 && c.age[i] === 0; i--) {
+        if (c.parentId[i] === 0) continue;
+        newborns++;
+        newbornFill += c.energy[i]! / maxEnergyFor(c.size[i]!, world.config);
+      }
     }
     // Activity is sampled often and at odd intervals, so it does not fall in step with the day.
     if (tick > from && tick % 37 === 0) {
@@ -240,6 +265,11 @@ function run(seed: string): Summary {
     hidden: hiddenSum / samples,
     meanFur: furSum / samples,
     meanDefense: defenseSum / samples,
+    birthRate: ((world.births - birthsBefore) * 1000) / Math.max(1, creatureTicks),
+    lifespan: mean(world.history.lifespan, world.history.tick, world.history.count, from),
+    parentAge: mean(world.history.generationLength, world.history.tick, world.history.count, from),
+    plantFill: mean(world.history.plantFill, world.history.tick, world.history.count, from),
+    newbornEnergy: newbornFill / Math.max(1, newborns),
     holdingStone: heldSum[Held.Stone]! / samples,
     holdingBranch: heldSum[Held.Branch]! / samples,
     holdingFood: (heldSum[Held.Plants]! + heldSum[Held.Meat]!) / samples,
@@ -260,6 +290,18 @@ function run(seed: string): Summary {
     })),
     ticksPerSecond: (ticks * 1000) / (performance.now() - started),
   };
+}
+
+/** Mean of a history series over the samples taken after `from`. */
+function mean(series: Float32Array, ticks: Float64Array, count: number, from: number): number {
+  let total = 0;
+  let used = 0;
+  for (let k = 0; k < count; k++) {
+    if (ticks[k]! <= from) continue;
+    total += series[k]!;
+    used++;
+  }
+  return used > 0 ? total / used : 0;
 }
 
 const percent = (share: number) => `${Math.round(share * 100)}%`;
@@ -292,6 +334,7 @@ it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
         `hidden=${s.hidden.toFixed(2)}`,
         `fur=${s.meanFur.toFixed(2)}`,
         `defense=${s.meanDefense.toFixed(2)}`,
+        `births=${s.birthRate.toFixed(2)}/creature/kt lifespan=${s.lifespan.toFixed(0)} parentAge=${s.parentAge.toFixed(0)} newbornEnergy=${percent(s.newbornEnergy)} plants=${percent(s.plantFill)}`,
         `holding stone/branch/food=${(s.holdingStone * 100).toFixed(1)}%/${(s.holdingBranch * 100).toFixed(1)}%/${(s.holdingFood * 100).toFixed(1)}% haul=${s.haulDistance.toFixed(0)}`,
 
         `tps=${Math.round(s.ticksPerSecond)}`,
