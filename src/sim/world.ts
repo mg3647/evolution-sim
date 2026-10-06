@@ -774,6 +774,17 @@ function giveBirth(world: World, parent: number, energy: number): number {
     childX = creatures.x[parent]!;
     childY = creatures.y[parent]!;
   }
+  // Water is shared out, not made: the parent hands over a share of what its
+  // body holds, and the child is as full as that makes a body its size. With
+  // the share at zero a child is simply born as well watered as its parent.
+  const parentBody = creatures.size[parent]! * creatures.size[parent]!;
+  const childBody = genes.size * genes.size;
+  const parentWater = creatures.hydration[parent]!;
+  // In a world without water nobody thirsts, and everyone stays full.
+  const sharing = world.plants.hasWater && config.birthWaterShare > 0;
+  const childWater = sharing
+    ? Math.min(1, (parentWater * parentBody * config.birthWaterShare) / childBody)
+    : parentWater;
   const child = spawnCreature(creatures, {
     x: childX,
     y: childY,
@@ -785,9 +796,9 @@ function giveBirth(world: World, parent: number, energy: number): number {
     generation: creatures.generation[parent]! + 1,
     founder: creatures.founder[parent]!,
     species: creatures.species[parent]!,
-    // A child is born as well watered as its parent.
-    hydration: creatures.hydration[parent]!,
+    hydration: childWater,
   });
+  if (sharing) creatures.hydration[parent] = parentWater - (childWater * childBody) / parentBody;
   world.lineage.born(creatures.id[child]!, creatures.id[parent]!, world.tick, genes.hue);
   world.births++;
   if (creatures.children[parent] === 0) {

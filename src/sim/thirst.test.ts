@@ -123,15 +123,46 @@ describe('thirst', () => {
     for (let i = 0; i < world.creatures.count; i++) expect(world.creatures.hydration[i]).toBe(1);
   });
 
-  it('gives a child its parent’s level of water', () => {
-    const world = createWorld({ ...smallConfig, waterShare: 0.2, reproduceThreshold: 0.5, minReproduceAge: 0 });
+  it('shares the parent’s water with a child at birth, creating none', () => {
+    const world = createWorld({
+      ...smallConfig,
+      waterShare: 0.2,
+      reproduceThreshold: 0.5,
+      minReproduceAge: 0,
+      thirstRate: 0,
+      birthWaterShare: 0.5,
+    });
+    // Nowhere to drink and no thirst, so the only thing that moves water is a birth.
+    world.plants.shore.fill(0);
     const { creatures } = world;
-    for (let t = 0; t < 1500 && world.births === 0; t++) step(world);
-    expect(world.births).toBeGreaterThan(0);
+    const water = () => {
+      let total = 0;
+      for (let i = 0; i < creatures.count; i++) total += creatures.hydration[i]! * creatures.size[i]! ** 2;
+      return total;
+    };
+    const before = water();
+    const startCount = creatures.count;
+    for (let t = 0; t < 1500 && world.births < 5; t++) step(world);
+    expect(world.births).toBeGreaterThanOrEqual(5);
+    expect(world.deaths.thirst).toBe(0);
+    // Deaths take their water with them, so the living can only hold less than before.
+    expect(water()).toBeLessThanOrEqual(before + 1e-4);
+    // Somebody is no longer full: a parent that gave water away, or its child.
+    let notFull = 0;
     for (let i = 0; i < creatures.count; i++) {
       expect(creatures.hydration[i]).toBeGreaterThan(0);
       expect(creatures.hydration[i]).toBeLessThanOrEqual(1);
+      if (creatures.hydration[i]! < 0.99) notFull++;
     }
+    expect(notFull).toBeGreaterThanOrEqual(5);
+    expect(startCount).toBe(smallConfig.initialCreatures);
+  });
+
+  it('leaves everyone full at a birth in a world with no water', () => {
+    const world = createWorld({ ...smallConfig, waterShare: 0, reproduceThreshold: 0.5, minReproduceAge: 0 });
+    for (let t = 0; t < 1500 && world.births < 5; t++) step(world);
+    expect(world.births).toBeGreaterThanOrEqual(5);
+    for (let i = 0; i < world.creatures.count; i++) expect(world.creatures.hydration[i]).toBe(1);
   });
 });
 

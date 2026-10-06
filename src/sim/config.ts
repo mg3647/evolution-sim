@@ -318,6 +318,14 @@ export interface SimConfig {
   carryMouthfuls: number;
   /** Share of a store of dropped plant food that spoils each tick. */
   storeDecay: number;
+
+  /**
+   * Share of the water in its body that a parent hands to its child at a
+   * birth. 0 gives the child its parent's level of water for free, which is
+   * the default: in long runs any sharing, even a tenth, left newborns too dry
+   * to reach water and the population collapsed.
+   */
+  birthWaterShare: number;
 }
 
 export const defaultConfig: SimConfig = {
@@ -391,7 +399,7 @@ export const defaultConfig: SimConfig = {
 
   reproduceThreshold: 0.8,
   offspringShare: 0.5,
-  birthCost: 0,
+  birthCost: 0.25,
   minReproduceAge: 150,
   maxCreatures: 10000,
   minPopulation: 20,
@@ -489,4 +497,6 @@ export const defaultConfig: SimConfig = {
   branchShield: 0.4,
   carryMouthfuls: 8,
   storeDecay: 0.00005,
+
+  birthWaterShare: 0,
 };
