@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type uPlot from 'uplot';
-  import { BIOME_GROUND, WorldRenderer } from '../render/renderer';
+  import { BIOME_GROUND, RESOURCE_KINDS, resourcesIn, WorldRenderer, type ResourceKind } from '../render/renderer';
   import { BIOME_LABELS } from '../sim/biomes';
   import { defaultConfig, type SimConfig } from '../sim/config';
   import { presetConfig, RESTART_KEYS, WILDFIRE_LEVELS, wildfireLevel, type Preset } from '../sim/presets';
@@ -130,6 +130,7 @@
   let adoptLoadedSettings = false;
   let showScent = $state(false);
   let showTemperature = $state(false);
+  let showResources = $state(false);
   let colorBySpecies = $state(false);
   let drawWorld = $state(true);
   let follow = $state(false);
@@ -166,6 +167,21 @@
     history && [history.tick, history.meanLinks, history.meanNeurons],
   );
   const speciesData = $derived<uPlot.AlignedData | null>(history && [history.tick, history.speciesCount]);
+  /** Cells holding each kind of resource, counted only while the Resources view is on. */
+  const resourceCounts = $derived.by<Record<ResourceKind, number> | null>(() => {
+    if (!showResources || !snapshot || !snapshot.rendered) return null;
+    const counts: Record<ResourceKind, number> = { meat: 0, branch: 0, store: 0, stone: 0 };
+    const { items, meat } = snapshot;
+    for (let i = 0; i < items.length; i++) {
+      const here = resourcesIn(items[i]!, meat[i]!);
+      if (here.meat) counts.meat++;
+      if (here.branch) counts.branch++;
+      if (here.store) counts.store++;
+      if (here.stone) counts.stone++;
+    }
+    return counts;
+  });
+
   /** Recent events, marked on every chart. */
   const chartEvents = $derived<ChartEvent[]>(
     (snapshot?.environment.log ?? []).map((entry) => ({ tick: entry.tick, label: entry.text })),
@@ -271,6 +287,7 @@
     if (!renderer) return;
     renderer.showScent = showScent;
     renderer.showTemperature = showTemperature;
+    renderer.showResources = showResources;
     renderer.colorBy = colorBySpecies ? 'species' : 'family';
     renderer.follow = follow;
     renderer.redraw();
@@ -463,6 +480,10 @@
           <input type="checkbox" bind:checked={showTemperature} onchange={applyViewOptions} />
           Show temperature
         </label>
+        <label title="Grey out the ground and mark stones, branches, food stores and meat in bright colours, with counts in the map key">
+          <input type="checkbox" bind:checked={showResources} onchange={applyViewOptions} />
+          Show resources
+        </label>
         <label title="Colour creatures by the species they are grouped into, instead of by family colour">
           <input type="checkbox" bind:checked={colorBySpecies} onchange={applyViewOptions} />
           Colour by species
@@ -531,6 +552,25 @@
       <details class="map-legend" open title="Click to toggle the map legend">
         <summary>Map Key</summary>
         <div class="legend-items">
+          {#if showResources}
+            <div class="legend-heading">Resources (cells holding each)</div>
+            {#each [...RESOURCE_KINDS].reverse() as kind (kind.id)}
+              <div class="legend-item">
+                <svg width="20" height="20" viewBox="0 0 20 20">
+                  <rect x="3" y="3" width="14" height="14" fill="rgb({kind.color.join(',')})" />
+                </svg>
+                <span>{kind.label}</span>
+                <b class="legend-count">{count(resourceCounts?.[kind.id])}</b>
+              </div>
+            {/each}
+            <div class="legend-item" title="Creatures holding something right now">
+              <span class="legend-note">
+                Held: {count(snapshot?.holding.stone)} stone, {count(snapshot?.holding.branch)} branch,
+                {count(snapshot?.holding.food)} food
+              </span>
+            </div>
+            <div class="legend-heading">Everything else</div>
+          {/if}
           <div class="legend-item">
             <svg width="20" height="20" viewBox="0 0 20 20">
               <circle cx="10" cy="10" r="6" fill="#e8c468" opacity="0.8"/>
@@ -1023,6 +1063,25 @@
     display: flex;
     align-items: center;
     gap: 6px;
+  }
+
+  .legend-heading {
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .legend-count {
+    margin-left: auto;
+    padding-left: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .legend-note {
+    color: var(--muted);
+    font-size: 11px;
   }
 
   .legend-item svg {

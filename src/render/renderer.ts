@@ -91,6 +91,36 @@ const BRANCH_COLOR = [146, 100, 54] as const;
 const STONE_COLOR = [176, 176, 182] as const;
 const STORE_COLOR = [232, 214, 120] as const;
 const ITEM_OPACITY = 0.45;
+
+/**
+ * The Resources view: the ground goes grey and everything a creature can
+ * pick up or eat off the ground is drawn as a bright marker, bigger than its
+ * cell so it can be seen from afar. Later kinds are drawn over earlier ones.
+ */
+export const RESOURCE_KINDS = [
+  { id: 'meat', label: 'Meat', color: [255, 84, 112] },
+  { id: 'branch', label: 'Branches', color: [255, 158, 44] },
+  { id: 'store', label: 'Food stores', color: [250, 230, 80] },
+  { id: 'stone', label: 'Stones', color: [120, 226, 255] },
+] as const;
+export type ResourceKind = (typeof RESOURCE_KINDS)[number]['id'];
+/** Meat shows in the Resources view once a cell holds this share of the meat scale: about one mouthful. */
+export const RESOURCE_MEAT_SHOWN = 0.05;
+/** A resource found in no more than this share of cells is scarce, and drawn enlarged. */
+const RESOURCE_SCARCE = 0.02;
+/** How much of the ground's brightness is kept when it is greyed out. */
+const RESOURCE_GROUND = 0.4;
+const RESOURCE_WATER = [26, 38, 52] as const;
+
+/** Which kinds of resource lie in a cell, as the page receives it. */
+export function resourcesIn(items: number, meat: number): Record<ResourceKind, boolean> {
+  return {
+    meat: meat / 255 >= RESOURCE_MEAT_SHOWN,
+    branch: (items & 1) !== 0,
+    store: (items & 4) !== 0,
+    stone: (items & 2) !== 0,
+  };
+}
 /** Colour of the outline showing where each tool would act. */
 const TOOL_COLORS: Record<ToolKind, number> = {
   meteor: 0xff7a3c,
@@ -167,6 +197,8 @@ export class WorldRenderer {
   showScent = false;
   /** Whether to tint the ground blue where it is cold and red where it is hot. */
   showTemperature = false;
+  /** Whether to grey out the ground and mark stones, branches, food stores and meat. */
+  showResources = false;
   /** Colour creatures by their inherited hue, or by the species they are grouped into. */
   colorBy: 'family' | 'species' = 'family';
   /** Keep the selected creature in the middle of the view. */
@@ -310,8 +342,9 @@ export class WorldRenderer {
       canvas.height = rows;
       this.plantImage = ctx.createImageData(cols, rows);
       this.plantSprite.texture = Texture.from(canvas, true);
-      this.plantSprite.texture.source.scaleMode = 'linear';
     }
+    // Markers keep hard edges; the ordinary ground is smoothed.
+    this.plantSprite.texture.source.scaleMode = this.showResources ? 'nearest' : 'linear';
 
     // With seasons off the ground keeps its plain colours.
     const { config, environment } = snapshot;
@@ -349,6 +382,13 @@ export class WorldRenderer {
       const flame = fire[i] ? FIRE_COLORS[(i + snapshot.tick) & 1]! : null;
       const sooty = (ash[i]! / 255) * ASH_OPACITY;
       const item = items[i]! & 2 ? STONE_COLOR : items[i]! & 1 ? BRANCH_COLOR : items[i]! & 4 ? STORE_COLOR : null;
+      if (this.showResources && !walls[i] && !flame) {
+        // Grey ground: plants a little lighter than bare soil, water darkest.
+        const grey = water[i] ? 0 : (22 + 60 * t) * RESOURCE_GROUND;
+        for (let c = 0; c < 3; c++) pixels[o + c] = water[i] ? RESOURCE_WATER[c]! : grey + 14;
+        pixels[o + 3] = 255;
+        continue;
+      }
       for (let c = 0; c < 3; c++) {
         if (walls[i]) {
           pixels[o + c] = WALL_COLOR[c]!;
@@ -378,6 +418,32 @@ export class WorldRenderer {
         pixels[o + c] = (withMeat + (SCENT_COLOR[c]! - withMeat) * s) * dim[c]!;
       }
       pixels[o + 3] = 255;
+    }
+    if (this.showResources) {
+      // A scarce resource is painted over its own cell and the eight around it,
+      // so it can be found; a common one would flood the map, so it keeps to its cell.
+      for (const kind of RESOURCE_KINDS) {
+        let marked = 0;
+        for (let i = 0; i < plants.length; i++) if (resourcesIn(items[i]!, meat[i]!)[kind.id]) marked++;
+        const reach = marked <= plants.length * RESOURCE_SCARCE ? 1 : 0;
+        for (let i = 0; i < plants.length; i++) {
+          if (!resourcesIn(items[i]!, meat[i]!)[kind.id]) continue;
+          const cx = i % cols;
+          const cy = (i - cx) / cols;
+          for (let dy = -reach; dy <= reach; dy++) {
+            const y = cy + dy;
+            if (y < 0 || y >= rows) continue;
+            for (let dx = -reach; dx <= reach; dx++) {
+              const x = cx + dx;
+              if (x < 0 || x >= cols || walls[y * cols + x]) continue;
+              const o = (y * cols + x) * 4;
+              pixels[o] = kind.color[0];
+              pixels[o + 1] = kind.color[1];
+              pixels[o + 2] = kind.color[2];
+            }
+          }
+        }
+      }
     }
     ctx.putImageData(this.plantImage, 0, 0);
     this.plantSprite.texture.source.update();
