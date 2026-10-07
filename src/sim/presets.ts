@@ -156,7 +156,7 @@ export const SETTING_GROUPS: SettingGroup[] = [
     about: 'Wildfire, the branches that feed it, and what creatures can pick up.',
     settings: [
       { key: 'fireChance', label: 'Lightning', hint: 'Chance each tick that lightning strikes somewhere; 0 means no fires start on their own', more: 'A strike starts a fire only where it is hot and there is something to burn.', min: 0, max: 0.02, step: 0.0005 },
-      { key: 'fireSpread', label: 'Fire spread', hint: 'Chance each tick that fire catches in a neighbouring cell with enough to burn', more: 'At 0 every fire stays in one cell. At 0.05 fires cross most of the map.', min: 0, max: 0.1, step: 0.005 },
+      { key: 'fireSpread', label: 'Fire spread', hint: 'Chance each tick that fire catches in a neighbouring cell with enough to burn', more: 'At 0 every fire stays in one cell. At 0.015 fires burn out in patches; at 0.03 each burning cell lights nearly three others and fires run across whole forests.', min: 0, max: 0.1, step: 0.005 },
       { key: 'fireDamage', label: 'Fire strength', hint: 'Health a creature loses each tick it stands in fire; 0 makes fire harmless', min: 0, max: 0.2, step: 0.005 },
       { key: 'fireWarmth', label: 'Warmth of fire', hint: 'How much a fire warms the land around it', min: 0, max: 2, step: 0.1 },
       { key: 'fireMinHeat', label: 'Heat needed for lightning fires', hint: 'Lightning only starts a fire where it is at least this hot at that moment', min: -1, max: 1.5, step: 0.05 },
@@ -177,6 +177,40 @@ export const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
 ];
+
+/** The Wildfire switch: how often lightning strikes and how readily fire spreads. */
+export const WILDFIRE_LEVELS = [
+  {
+    id: 'off',
+    label: 'Off',
+    hint: 'No lightning, so no fire starts on its own. The Fire tool still works',
+    fireChance: 0,
+    fireSpread: 0.015,
+  },
+  {
+    id: 'rare',
+    label: 'Rare',
+    hint: 'Few lightning fires, and they spread slowly enough to burn out in patches',
+    fireChance: 0.002,
+    fireSpread: 0.015,
+  },
+  {
+    id: 'natural',
+    label: 'Natural',
+    hint: 'More lightning and fire that spreads twice as readily: big fires that cross whole forests',
+    fireChance: 0.005,
+    fireSpread: 0.03,
+  },
+] as const;
+
+/** The level the settings are at, or null if the fire sliders have been set to something else. */
+export function wildfireLevel(config: SimConfig): (typeof WILDFIRE_LEVELS)[number]['id'] | null {
+  if (config.fireChance === 0) return 'off';
+  for (const level of WILDFIRE_LEVELS) {
+    if (config.fireChance === level.fireChance && config.fireSpread === level.fireSpread) return level.id;
+  }
+  return null;
+}
 
 export interface Preset {
   id: string;

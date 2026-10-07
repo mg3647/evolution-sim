@@ -3,7 +3,7 @@ import { Biome } from './biomes';
 import { Input, INPUT_COUNT, INPUTS_PER_RAY, Ray, founderBrain, Innovations } from './brain';
 import { defaultConfig, type SimConfig } from './config';
 import { createCreatures, spawnCreature } from './creatures';
-import { burn, createFireTally, dropBranches, ignite, maybeLightning, scatterItems } from './fire';
+import { burn, createFireTally, douse, dropBranches, ignite, maybeLightning, scatterItems } from './fire';
 import { expectedEnergy, createLedger } from './ledger';
 import { cellIndexAt, createPlantField, growPlants, temperatureAt } from './plants';
 import { Rng } from './rng';
@@ -162,7 +162,23 @@ describe('wildfire', () => {
     expect(tally.cellsBurned).toBeGreaterThan(5);
   });
 
-  it('is started by lightning only where it is hot', () => {    const strikes = (heat: number) => {
+  it('is put out by rain, leaving the plants standing and no ash', () => {
+    const { cfg, field, ledger, tally, rng } = meadow({ fireSpread: 0 });
+    ignite(field, 0, cfg, tally);
+    burn(field, cfg, rng, ledger, tally);
+    expect(tally.burning).toBe(1);
+    const left = field.energy[0]!;
+    expect(douse(field, 0, tally)).toBe(true);
+    expect(douse(field, 0, tally)).toBe(false);
+    expect(tally.burning).toBe(0);
+    for (let k = 0; k < 10; k++) burn(field, cfg, rng, ledger, tally);
+    expect(field.fire[0]).toBe(0);
+    expect(field.ash[0]).toBe(0);
+    expect(field.energy[0]).toBe(left);
+  });
+
+  it('is started by lightning only where it is hot', () => {
+    const strikes = (heat: number) => {
       const { cfg, field, tally, rng } = meadow({ fireChance: 1 });
       for (let k = 0; k < 50; k++) maybeLightning(field, cfg, rng, tally, () => heat);
       return tally.started;
@@ -232,8 +248,25 @@ describe('fire and creatures', () => {
     expect(totalEnergy(world)).toBeCloseTo(expectedEnergy(world.ledger), 4);
   });
 
-  it('stays deterministic with fires burning', () => {
-    const run = () => {
+  it('can be put out by hand with the Rain tool', () => {
+    const world = createWorld({ ...small, fireChance: 0, fireSpread: 0.2 });
+    let at = 0;
+    for (let x = 10; x < 800 && world.fires.started === 0; x += 20) {
+      applyTool(world, 'fire', x, 410, x, 410);
+      at = x;
+    }
+    for (let k = 0; k < 30; k++) step(world);
+    expect(world.fires.burning).toBeGreaterThan(1);
+    // A fire spreading one cell at a time has not got far: rain over it and its surroundings.
+    for (let dx = -200; dx <= 200; dx += 50) {
+      for (let dy = -200; dy <= 200; dy += 50) applyTool(world, 'rain', at + dx, 410 + dy, at + dx, 410 + dy);
+    }
+    expect(world.plants.fire.reduce((sum, ticks) => sum + (ticks > 0 ? 1 : 0), 0)).toBe(0);
+    step(world);
+    expect(world.fires.burning).toBe(0);
+  });
+
+  it('stays deterministic with fires burning', () => {    const run = () => {
       const world = createWorld({ ...small, fireChance: 0.05, fireMinHeat: -2 });
       for (let k = 0; k < 600; k++) step(world);
       return world;

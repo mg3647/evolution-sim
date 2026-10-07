@@ -85,6 +85,19 @@ export function ignite(field: PlantField, cell: number, config: SimConfig, tally
 }
 
 /**
+ * Put out the fire in a cell, as rain does. What has not yet burned is left
+ * standing, and no ash is laid. Returns whether there was a fire to put out.
+ */
+export function douse(field: PlantField, cell: number, tally: FireTally): boolean {
+  if (field.fire[cell] === 0) return false;
+  field.fire[cell] = 0;
+  tally.burning = Math.max(0, tally.burning - 1);
+  // The warmth of a fire that is out goes with it; any still burning warm their surroundings again next tick.
+  field.fireHeat.fill(0);
+  return true;
+}
+
+/**
  * Lightning: in hot weather, now and then a random cell is struck. `heat` is
  * how hot that cell is right now; the hotter, the likelier it catches.
  */

@@ -4,7 +4,7 @@
   import { BIOME_GROUND, WorldRenderer } from '../render/renderer';
   import { BIOME_LABELS } from '../sim/biomes';
   import { defaultConfig, type SimConfig } from '../sim/config';
-  import { presetConfig, RESTART_KEYS, type Preset } from '../sim/presets';
+  import { presetConfig, RESTART_KEYS, WILDFIRE_LEVELS, wildfireLevel, type Preset } from '../sim/presets';
   import { EVENT_LABELS, type TimedEventKind } from '../sim/environment';
   import type { ToolKind } from '../sim/world';
   import { SimClient } from '../worker/client';
@@ -42,6 +42,7 @@
     { id: 'fertilise', label: 'Fertilise', hint: 'Drag to make land fully fertile; plants then grow there' },
     { id: 'blight', label: 'Blight', hint: 'Drag to make land barren; plants there die' },
     { id: 'fire', label: 'Fire', hint: 'Click or drag to set light to land that has plants or branches on it' },
+    { id: 'rain', label: 'Rain', hint: 'Click or drag to put out every fire inside the ring' },
   ];
 
   /** What each biome gives and takes, shown when its name in the map key is pointed at. */
@@ -249,6 +250,12 @@
     client?.setConfig(live);
   }
 
+  /** Set the Wildfire switch: both fire sliders at once, in the running world. */
+  function setWildfire(level: (typeof WILDFIRE_LEVELS)[number]) {
+    changeSetting('fireChance', level.fireChance);
+    changeSetting('fireSpread', level.fireSpread);
+  }
+
   function applyPreset(preset: Preset) {
     settings = presetConfig(preset, seed);
     client?.init({ ...settings });
@@ -422,6 +429,17 @@
             {EVENT_LABELS[kind]}
           </button>
         {/each}
+      </div>
+      <div class="group wildfire" role="group" aria-label="Wildfire">
+        <span class="label" title="How often lightning starts fires and how readily they spread">Wildfire</span>
+        {#each WILDFIRE_LEVELS as level (level.id)}
+          <button class:active={wildfireLevel(settings) === level.id} title={level.hint} onclick={() => setWildfire(level)}>
+            {level.label}
+          </button>
+        {/each}
+        {#if wildfireLevel(settings) === null}
+          <span class="custom" title="The Lightning and Fire spread sliders in Settings are set to something else">Custom</span>
+        {/if}
       </div>
       <label title="Let events strike on their own, about once every 15,000 ticks">
         <input
@@ -1209,6 +1227,19 @@
 
   .section > :last-child:not(.section-header) {
     padding-bottom: 12px;
+  }
+
+  .wildfire {
+    padding: 0 0 6px;
+  }
+
+  .wildfire .label {
+    margin-right: 4px;
+  }
+
+  .custom {
+    color: var(--muted);
+    font-size: 12px;
   }
 
   .lab-hint {

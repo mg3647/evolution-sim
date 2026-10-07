@@ -79,7 +79,7 @@ const PICK_RADIUS = 14;
 const CLICK_SLOP = 4;
 const SELECTION_COLOR = 0xffffff;
 /** Tools that keep applying as the pointer is dragged; the others apply once per click. */
-const DRAG_TOOLS: ReadonlySet<ToolKind> = new Set(['wall', 'erase', 'fertilise', 'blight', 'fire']);
+const DRAG_TOOLS: ReadonlySet<ToolKind> = new Set(['wall', 'erase', 'fertilise', 'blight', 'fire', 'rain']);
 /** Colours of fire (it flickers between the two), of fresh ash, and of branches and stones on the ground. */
 const FIRE_COLORS: readonly Rgb[] = [
   [255, 150, 40],
@@ -100,6 +100,7 @@ const TOOL_COLORS: Record<ToolKind, number> = {
   fertilise: 0x5fd35f,
   blight: 0xb08a5a,
   fire: 0xff9628,
+  rain: 0x6db3ff,
 };
 /** Ring drawn around creatures infected with the plague. */
 const SICK_COLOR = 0xb6ff3c;

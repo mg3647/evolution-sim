@@ -56,7 +56,16 @@ import {
   type EventKind,
   type EventTarget,
 } from './environment';
-import { burn, createFireTally, dropBranches, ignite, maybeLightning, scatterItems, type FireTally } from './fire';
+import {
+  burn,
+  createFireTally,
+  douse,
+  dropBranches,
+  ignite,
+  maybeLightning,
+  scatterItems,
+  type FireTally,
+} from './fire';
 import { wrap, wrappedDelta } from './geometry';
 import { createLedger, type EnergyLedger } from './ledger';
 import { Lineage } from './lineage';
@@ -694,7 +703,7 @@ export function triggerWorldEvent(world: World, kind: EventKind): void {
 }
 
 /** Tools the user applies at a point, or along a drag, on the map. */
-export type ToolKind = 'meteor' | 'plague' | 'wall' | 'erase' | 'fertilise' | 'blight' | 'fire';
+export type ToolKind = 'meteor' | 'plague' | 'wall' | 'erase' | 'fertilise' | 'blight' | 'fire' | 'rain';
 
 /**
  * Apply a hand tool. (x, y) is where the pointer is now; (fromX, fromY) is
@@ -715,6 +724,17 @@ export function applyTool(
   } else if (tool === 'fire') {
     const cell = cellIndexAt(plants, wrap(x, config.worldWidth), wrap(y, config.worldHeight));
     if (ignite(plants, cell, config, world.fires)) world.fires.started++;
+  } else if (tool === 'rain') {
+    // Rain puts out every fire inside the ring.
+    const r2 = config.brushRadius * config.brushRadius;
+    for (let cy = 0; cy < plants.rows; cy++) {
+      const dy = wrappedDelta(y, (cy + 0.5) * plants.cellHeight, config.worldHeight);
+      if (Math.abs(dy) > config.brushRadius) continue;
+      for (let cx = 0; cx < plants.cols; cx++) {
+        const dx = wrappedDelta(x, (cx + 0.5) * plants.cellWidth, config.worldWidth);
+        if (dx * dx + dy * dy <= r2) douse(plants, cy * plants.cols + cx, world.fires);
+      }
+    }
   } else if (tool === 'plague') {
     const r2 = config.plagueToolRadius * config.plagueToolRadius;
     let infected = 0;
