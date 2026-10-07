@@ -236,6 +236,12 @@ export interface SimConfig {
    * for example 0.15 in diet, or 20% in size.
    */
   speciesThreshold: number;
+  /**
+   * How different two branches' brain wiring must be to count as 1 toward the
+   * species threshold (0 to 2: links one group lacks, plus changed weights).
+   * 0 ignores the brain, so species follow body and diet only.
+   */
+  speciesBrainScale: number;
   /** A branch must have split off at least this many ticks ago to be its own species. */
   speciesMinAge: number;
   /** A species, and the group it leaves behind, must each have at least this many members. */
@@ -482,6 +488,7 @@ export const defaultConfig: SimConfig = {
 
   speciesInterval: 300,
   speciesThreshold: 2,
+  speciesBrainScale: 4,
   speciesMinAge: 6000,
   speciesMinMembers: 8,
 

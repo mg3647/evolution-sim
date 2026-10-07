@@ -10,6 +10,20 @@ import type { Lineage, LineageNode } from './lineage';
  * and plant-eaters and meat-eaters end up apart.
  */
 
+/**
+ * Wiring is compared through a fixed number of bins: each link's innovation
+ * id picks a bin, which counts the links in it (per member) and sums their
+ * weights. That keeps a group's wiring a small fixed-size summary that can
+ * be added and subtracted along the family tree like the gene averages.
+ */
+const WIRING_BINS = 128;
+/** Weights differ by up to this much between two groups before the difference counts fully. */
+const WEIGHT_SCALE = 4;
+
+function binOf(innovation: number): number {
+  return Math.imul(innovation, 2654435761) >>> 25;
+}
+
 /** A difference of this much in a gene's average counts as 1 toward the threshold. */
 const SIZE_SCALE = 0.2;
 const SPEED_SCALE = 0.2;
@@ -44,13 +58,60 @@ interface Tally {
   diet: number;
   fur: number;
   defense: number;
+  /** Links per bin summed over members, and the sum of their weights. */
+  links: Float32Array;
+  weights: Float32Array;
 }
 
 function emptyTally(): Tally {
-  return { count: 0, size: 0, speed: 0, sensor: 0, diet: 0, fur: 0, defense: 0 };
+  return {
+    count: 0,
+    size: 0,
+    speed: 0,
+    sensor: 0,
+    diet: 0,
+    fur: 0,
+    defense: 0,
+    links: new Float32Array(WIRING_BINS),
+    weights: new Float32Array(WIRING_BINS),
+  };
+}
+
+function cloneTally(from: Tally): Tally {
+  return { ...from, links: from.links.slice(), weights: from.weights.slice() };
+}
+
+/**
+ * How different two groups' wiring is, from 0 (the same links) to about 1
+ * (no links in common): the share of links, per member, that one group has
+ * and the other lacks, plus how far the weights of the shared ones differ.
+ */
+function wiringDifference(a: Tally, b: Tally): number {
+  let apart = 0;
+  let either = 0;
+  let weight = 0;
+  let shared = 0;
+  for (let bin = 0; bin < WIRING_BINS; bin++) {
+    const fa = a.links[bin]! / a.count;
+    const fb = b.links[bin]! / b.count;
+    apart += Math.abs(fa - fb);
+    either += Math.max(fa, fb);
+    const common = Math.min(fa, fb);
+    if (common > 0) {
+      weight += common * Math.abs(a.weights[bin]! / a.links[bin]! - b.weights[bin]! / b.links[bin]!);
+      shared += common;
+    }
+  }
+  const missing = either > 0 ? apart / either : 0;
+  const stronger = shared > 0 ? Math.min(1, weight / shared / WEIGHT_SCALE) : 0;
+  return missing + stronger;
 }
 
 function add(into: Tally, from: Tally, sign = 1): void {
+  for (let bin = 0; bin < WIRING_BINS; bin++) {
+    into.links[bin]! += sign * from.links[bin]!;
+    into.weights[bin]! += sign * from.weights[bin]!;
+  }
   into.count += sign * from.count;
   into.size += sign * from.size;
   into.speed += sign * from.speed;
@@ -61,8 +122,10 @@ function add(into: Tally, from: Tally, sign = 1): void {
 }
 
 /** How different the average members of two groups are: 1 or more is a clear difference. */
-function difference(a: Tally, b: Tally): number {
+function difference(a: Tally, b: Tally, config: SimConfig): number {
+  const wiring = config.speciesBrainScale > 0 ? wiringDifference(a, b) / config.speciesBrainScale : 0;
   return (
+    wiring +
     Math.abs(a.size / a.count - b.size / b.count) / SIZE_SCALE +
     Math.abs(a.speed / a.count - b.speed / b.count) / SPEED_SCALE +
     Math.abs(a.sensor / a.count - b.sensor / b.count) / SENSOR_SCALE +
@@ -119,6 +182,16 @@ export function classifySpecies(
       tally.diet = c.diet[i]!;
       tally.fur = c.fur[i]!;
       tally.defense = c.defense[i]!;
+      if (config.speciesBrainScale > 0) {
+        const brain = c.brain[i]!;
+        for (let k = 0; k < brain.links.length; k++) {
+          const link = brain.links[k]!;
+          if (!link.enabled) continue;
+          const bin = binOf(link.innovation);
+          tally.links[bin]!++;
+          tally.weights[bin]! += link.weight;
+        }
+      }
     }
     for (const child of node.children) add(tally, tallies.get(child)!);
     tallies.set(node.id, tally);
@@ -142,11 +215,11 @@ export function classifySpecies(
       branch.count >= config.speciesMinMembers &&
       rest >= config.speciesMinMembers
     ) {
-      const others = { ...parentGroup.tally };
+      const others = cloneTally(parentGroup.tally);
       add(others, branch, -1);
-      if (difference(branch, others) >= config.speciesThreshold) {
+      if (difference(branch, others, config) >= config.speciesThreshold) {
         parentGroup.tally = others;
-        group = { tally: { ...branch }, members: [], nodes: [] };
+        group = { tally: cloneTally(branch), members: [], nodes: [] };
         groups.push(group);
       }
     }

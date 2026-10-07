@@ -5,6 +5,7 @@ import { createCreatures, removeCreature, spawnCreature, type Creatures } from '
 import type { Genes } from './genome';
 import { Lineage } from './lineage';
 import { classifySpecies, createSpeciesState } from './species';
+import { INPUT_COUNT } from './brain';
 import { createWorld, step } from './world';
 
 // Fixed settings, so these tests do not move when the defaults are retuned.
@@ -203,5 +204,51 @@ describe('species in a running world', () => {
     expect(ids.size).toBeGreaterThan(0);
     for (let i = 0; i < creatures.count; i++) expect(creatures.species[i]).toBeGreaterThan(0);
     expect(world.history.speciesCount[world.history.count - 1]).toBe(species.species.length);
+  });
+});
+
+describe('species and brain wiring', () => {
+  const link = (innovation: number, weight = 1) => ({ innovation, from: 0, to: INPUT_COUNT, weight, enabled: true });
+
+  /** Two old branches with the same bodies; the second wires its members with different links. */
+  function twoBranches(weightsOfSecond: number, linksOfSecond: number[]) {
+    const t = setup();
+    const founder = t.born(0, 0);
+    const first = t.family(founder, 100, 4);
+    const secondRoot = t.born(founder, 200);
+    const second = t.family(secondRoot, 300, 4);
+    const wire = (ids: number[], links: number[], weight: number) => {
+      for (const id of ids) {
+        const i = [...Array(t.c.count).keys()].find((k) => t.c.id[k] === id)!;
+        t.c.brain[i] = compileBrain(links.map((n) => link(n, weight)), []);
+      }
+    };
+    wire([founder, ...first], [1, 2, 3, 4], 1);
+    wire([secondRoot, ...second], linksOfSecond, weightsOfSecond);
+    return t;
+  }
+
+  it('ignores the brain at the default of 0', () => {
+    const t = twoBranches(1, [10, 11, 12, 13]);
+    classifySpecies(t.state, t.c, t.lineage, NOW, { ...config, speciesBrainScale: 0 });
+    expect(t.state.species).toHaveLength(1);
+  });
+
+  it('splits two branches with the same bodies but different wiring', () => {
+    const t = twoBranches(1, [10, 11, 12, 13]);
+    classifySpecies(t.state, t.c, t.lineage, NOW, { ...config, speciesBrainScale: 1 });
+    expect(t.state.species).toHaveLength(2);
+  });
+
+  it('keeps branches together when their wiring is the same', () => {
+    const t = twoBranches(1, [1, 2, 3, 4]);
+    classifySpecies(t.state, t.c, t.lineage, NOW, { ...config, speciesBrainScale: 1 });
+    expect(t.state.species).toHaveLength(1);
+  });
+
+  it('counts a change in the weights of shared links', () => {
+    const t = twoBranches(-3, [1, 2, 3, 4]);
+    classifySpecies(t.state, t.c, t.lineage, NOW, { ...config, speciesBrainScale: 0.5 });
+    expect(t.state.species).toHaveLength(2);
   });
 });
