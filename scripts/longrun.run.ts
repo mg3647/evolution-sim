@@ -10,6 +10,10 @@
  *   TUNE   JSON of config overrides     (default: {})
  *   TRACE  ticks between progress lines (default: 0, off)
  *   FROM   measure only after this tick (default: 0)
+ *   REPEAT runs per seed, each with its own sub-seed (seed#1, seed#2, ...); with more
+ *          than one, a mean and spread per seed is printed after the runs (default: 1)
+ *   NO_RESEED  1 to stop adding parentless creatures when the population falls below
+ *          the minimum, so a collapsed world stays collapsed (default: 0)
  *
  * To test whether an evolved population relies on something, change a
  * setting partway through and compare with an unchanged run:
@@ -28,7 +32,11 @@ import { createWorld, step } from '../src/sim/world';
 
 const seeds = (process.env.SEEDS ?? 'genesis,second,third').split(',');
 const ticks = Number(process.env.TICKS ?? 200000);
-const overrides = JSON.parse(process.env.TUNE ?? '{}') as Partial<SimConfig>;
+const overrides = {
+  ...(process.env.NO_RESEED === '1' ? { minPopulation: 0 } : {}),
+  ...(JSON.parse(process.env.TUNE ?? '{}') as Partial<SimConfig>),
+};
+const repeat = Math.max(1, Number(process.env.REPEAT ?? 1));
 const trace = Number(process.env.TRACE ?? 0);
 const from = Number(process.env.FROM ?? 0);
 const changeAt = Number(process.env.CHANGE_AT ?? 0);
@@ -400,8 +408,11 @@ const percent = (share: number) => `${Math.round(share * 100)}%`;
 
 it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
   console.log(`overrides: ${JSON.stringify(overrides)} from: ${from} change at ${changeAt}: ${JSON.stringify(change)}`);
-  for (const seed of seeds) {
+  const runs = new Map<string, Summary[]>();
+  for (const seed of seeds.flatMap((base) => (repeat > 1 ? Array.from({ length: repeat }, (_, k) => `${base}#${k + 1}`) : [base]))) {
     const s = run(seed);
+    const base = seed.split('#')[0]!;
+    runs.set(base, [...(runs.get(base) ?? []), s]);
     console.log(
       [
         `seed=${s.seed}`,
@@ -450,6 +461,31 @@ it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
       console.log(
         `    ${BIOME_LABELS[k]!.padEnd(10)} land=${percent(b.land)} creatures=${percent(b.share)} occupied=${percent(b.occupied)} fur=${b.fur.toFixed(2)} size=${b.size.toFixed(2)} speed=${b.speed.toFixed(2)} diet=${b.diet.toFixed(2)}`,
       );
+    }
+  }
+  if (repeat > 1) {
+    const measures: [string, (s: Summary) => number, (x: number) => string][] = [
+      ['population', (s) => s.population.mean, (x) => x.toFixed(0)],
+      ['reseeded', (s) => s.reseeded, (x) => x.toFixed(1)],
+      ['hunters', (s) => s.hunters, (x) => x.toFixed(1)],
+      ['killShare', (s) => s.killShare, percent],
+      ['species', (s) => s.species.mean, (x) => x.toFixed(1)],
+      ['lifespan', (s) => s.lifespan, (x) => x.toFixed(0)],
+      ['learningRate', (s) => s.meanPlasticity, (x) => x.toFixed(4)],
+      ['linksThatLearn', (s) => s.plasticLinkShare, percent],
+      ['slowNeurons', (s) => s.slowNeuronShare, percent],
+      ['brainsWithLoop', (s) => s.recurrentShare, percent],
+      ['newLinksKept real', (s) => s.wiring.survival, percent],
+      ['newLinksKept shadow', (s) => s.wiring.shadowSurvival, percent],
+    ];
+    for (const [base, list] of runs) {
+      console.log(`${base}: mean (spread = standard deviation) over ${list.length} runs`);
+      for (const [name, pick, show] of measures) {
+        const values = list.map(pick);
+        const mean = values.reduce((a, b) => a + b, 0) / values.length;
+        const spread = Math.sqrt(values.reduce((a, b) => a + (b - mean) ** 2, 0) / values.length);
+        console.log(`    ${name.padEnd(22)} ${show(mean)} (spread ${show(spread)})`);
+      }
     }
   }
 });
