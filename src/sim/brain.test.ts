@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   brainCost,
+  compileBrain,
   enabledLinks,
   founderBrain,
   Innovations,
@@ -29,6 +30,7 @@ function only(overrides: Partial<SimConfig>): SimConfig {
     addLinkChance: 0,
     addNeuronChance: 0,
     toggleLinkChance: 0,
+    tauChangeChance: 0,
     ...overrides,
   };
 }
@@ -230,5 +232,61 @@ describe('brainCost', () => {
     expect(brainCost(parent, config)).toBeCloseTo(config.brainLinkCost, 12);
     const child = mutateBrain(parent, 0.1, rng, innovations, only({ addNeuronChance: 1 }));
     expect(brainCost(child, config)).toBeCloseTo(config.brainNeuronCost + 2 * config.brainLinkCost, 12);
+  });
+});
+
+describe('slow neurons', () => {
+  /** A one-input brain: input 0 feeds hidden neuron `FIXED` with weight 1, with the given time constant. */
+  function relay(tau: number): Brain {
+    const links = [{ innovation: 0, from: 0, to: FIXED, weight: 1, enabled: true }];
+    return compileBrain(links, [FIXED], [tau]);
+  }
+
+  it('follows its input at once with a time constant of 1', () => {
+    const brain = relay(1);
+    brain.activation[0] = 0.5;
+    think(brain);
+    expect(brain.activation[FIXED]).toBe(Math.fround(Math.tanh(0.5)));
+  });
+
+  it('moves only part of the way each tick with a larger time constant, and keeps a memory', () => {
+    const brain = relay(4);
+    brain.activation[0] = 1;
+    think(brain);
+    const target = Math.tanh(1);
+    expect(brain.activation[FIXED]).toBeCloseTo(target / 4, 6);
+    for (let i = 0; i < 40; i++) think(brain);
+    expect(brain.activation[FIXED]).toBeCloseTo(target, 3);
+    // With the input gone it fades slowly instead of dropping to zero.
+    brain.activation[0] = 0;
+    think(brain);
+    expect(brain.activation[FIXED]!).toBeGreaterThan(0.5);
+  });
+
+  it('starts every new neuron at 1 and keeps time constants beside their neurons', () => {
+    const innovations = new Innovations();
+    const rng = new Rng('tau');
+    const cfg = only({ addNeuronChance: 1, maxHiddenNeurons: 5 });
+    let brain = founderBrain(rng, innovations, cfg);
+    for (let i = 0; i < 40; i++) brain = mutateBrain(brain, 0.1, rng, innovations, cfg);
+    expect(brain.hiddenTau).toHaveLength(brain.hiddenIds.length);
+    expect(brain.hiddenTau.every((tau) => tau === 1)).toBe(true);
+  });
+
+  it('mutates time constants within 1 and the maximum, and passes them on', () => {
+    const innovations = new Innovations();
+    const rng = new Rng('tau2');
+    const parent = relay(5);
+    const cfg = only({ tauChangeChance: 1, tauChangeScale: 2, maxNeuronTau: 8 });
+    let brain = parent;
+    const seen = new Set<number>();
+    for (let i = 0; i < 200; i++) {
+      brain = mutateBrain(brain, 0.1, rng, innovations, cfg);
+      seen.add(brain.hiddenTau[0]!);
+      expect(brain.hiddenTau[0]!).toBeGreaterThanOrEqual(1);
+      expect(brain.hiddenTau[0]!).toBeLessThanOrEqual(8);
+    }
+    expect(seen.size).toBeGreaterThan(5);
+    expect(parent.hiddenTau).toEqual([5]);
   });
 });

@@ -1123,6 +1123,7 @@ export function hashWorld(world: World): number {
     h = hashBytes(h, bytesOf(brain.linkFrom));
     h = hashBytes(h, bytesOf(brain.linkTo));
     h = hashBytes(h, bytesOf(brain.activation));
+    h = hashBytes(h, bytesOf(new Float32Array(brain.hiddenTau)));
   }
   return h >>> 0;
 }

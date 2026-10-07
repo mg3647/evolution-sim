@@ -94,6 +94,14 @@ export interface SimConfig {
   addLinkChance: number;
   addNeuronChance: number;
   toggleLinkChance: number;
+  /**
+   * Per birth: chance that each hidden neuron's time constant shifts, how far
+   * (as a factor, relative to 1), and the longest time constant, in ticks.
+   * Neurons start at 1, which answers at once, so slow neurons must evolve.
+   */
+  tauChangeChance: number;
+  tauChangeScale: number;
+  maxNeuronTau: number;
   /** Energy a creature of size 1 spends per tick just staying alive. */
   upkeepCost: number;
   /** Share of upkeep that every body pays regardless of its size. */
@@ -390,6 +398,9 @@ export const defaultConfig: SimConfig = {
   addLinkChance: 0.1,
   addNeuronChance: 0.03,
   toggleLinkChance: 0.03,
+  tauChangeChance: 0.05,
+  tauChangeScale: 0.5,
+  maxNeuronTau: 20,
   upkeepCost: 0.12,
   upkeepFixedShare: 0.5,
   moveCost: 0.05,

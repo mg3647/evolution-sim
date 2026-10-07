@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { defaultConfig, type SimConfig } from './config';
 import { expectedEnergy } from './ledger';
-import { loadWorld, SAVE_VERSION, saveWorld, type SavedWorld } from './serialize';
+import { compileBrain } from './brain';
+import { loadWorld, OLDEST_LOADABLE_VERSION, SAVE_VERSION, saveWorld, type SavedWorld } from './serialize';
 import { createWorld, hashWorld, step, totalEnergy, triggerWorldEvent, type World } from './world';
 
 const smallConfig: SimConfig = {
@@ -69,6 +70,28 @@ describe('save and load', () => {
     const text = JSON.stringify(saved);
     expect(text).not.toContain('null');
     expect(JSON.parse(text)).toEqual(saved);
+  });
+
+  it('keeps slow neurons through a save', () => {
+    const world = createWorld(smallConfig);
+    const brain = world.creatures.brain[0]!;
+    world.creatures.brain[0] = compileBrain(brain.links, [999], [7]);
+    const copy = loadWorld(JSON.parse(JSON.stringify(saveWorld(world))));
+    expect(copy.creatures.brain[0]!.hiddenTau).toEqual([7]);
+  });
+
+  it('opens a save from before time constants, with every neuron answering at once', () => {
+    const saved = JSON.parse(JSON.stringify(saveWorld(run(createWorld(smallConfig), 100)))) as SavedWorld;
+    saved.version = OLDEST_LOADABLE_VERSION;
+    for (const brain of saved.creatures.brains) delete brain.hiddenTau;
+    const { tauChangeChance: _drop, ...older } = saved.config;
+    saved.config = older as SavedWorld['config'];
+    const copy = loadWorld(saved);
+    expect(copy.config.tauChangeChance).toBeGreaterThan(0);
+    for (const brain of copy.creatures.brain.slice(0, copy.creatures.count)) {
+      expect(brain.hiddenTau.every((tau) => tau === 1)).toBe(true);
+    }
+    run(copy, 50);
   });
 
   it('refuses files it cannot read', () => {

@@ -1,5 +1,5 @@
 import { compileBrain, Innovations, type InnovationsData, type LinkGene } from './brain';
-import type { SimConfig } from './config';
+import { defaultConfig, type SimConfig } from './config';
 import { createCreatures, type Creatures } from './creatures';
 import type { ActiveEvent, LogEntry } from './environment';
 import type { EnergyLedger } from './ledger';
@@ -19,8 +19,14 @@ import type { World } from './world';
  * exactly as the saved one would have: same state, same random numbers.
  */
 
-/** Bumped whenever the saved layout changes; older files are refused. */
-export const SAVE_VERSION = 14;
+/** Bumped whenever the saved layout changes. */
+export const SAVE_VERSION = 15;
+/**
+ * Oldest save this version still opens. Saves from 14 on load with the newer
+ * fields at their neutral values (settings added since take their defaults,
+ * neurons answer at once), so they play as they did before.
+ */
+export const OLDEST_LOADABLE_VERSION = 14;
 
 /** Per-creature number arrays, saved up to the live count. */
 const CREATURE_FIELDS = [
@@ -59,6 +65,8 @@ const FIELD_ARRAYS = ['fertility', 'capacity', 'energy', 'meat', 'scent', 'walls
 interface SavedBrain {
   links: LinkGene[];
   hiddenIds: number[];
+  /** Absent in saves made before neurons had time constants: all 1. */
+  hiddenTau?: number[];
   activation: number[];
 }
 
@@ -113,6 +121,7 @@ export function saveWorld(world: World): SavedWorld {
   creatures.brains = c.brain.slice(0, c.count).map((brain) => ({
     links: brain.links.map((link) => ({ ...link })),
     hiddenIds: brain.hiddenIds.slice(),
+    hiddenTau: brain.hiddenTau.slice(),
     activation: Array.from(brain.activation),
   }));
 
@@ -162,12 +171,13 @@ export function saveWorld(world: World): SavedWorld {
 
 /** Rebuild a world from saved data. Throws if the data is not a save this version can read. */
 export function loadWorld(saved: SavedWorld): World {
-  if (!saved || typeof saved !== 'object' || saved.version !== SAVE_VERSION) {
+  if (!saved || typeof saved !== 'object' || !(saved.version >= OLDEST_LOADABLE_VERSION && saved.version <= SAVE_VERSION)) {
     throw new Error(
       `This file is not a saved world this version can read (expected save version ${SAVE_VERSION}).`,
     );
   }
-  const config = { ...saved.config };
+  // Settings added since the save was made take their defaults.
+  const config = { ...defaultConfig, ...saved.config };
   const cells = saved.field.energy.length;
   const cols = Math.max(1, Math.round(config.worldWidth / config.plantCellSize));
   const rows = Math.max(1, Math.round(config.worldHeight / config.plantCellSize));
@@ -215,6 +225,7 @@ export function loadWorld(saved: SavedWorld): World {
     const brain = compileBrain(
       savedBrain.links.map((link) => ({ ...link })),
       savedBrain.hiddenIds.slice(),
+      savedBrain.hiddenTau?.slice(),
     );
     brain.activation.set(savedBrain.activation);
     return brain;

@@ -168,6 +168,8 @@ export const SETTING_GROUPS: SettingGroup[] = [
       { key: 'initialMutationRate', label: 'Starting mutation rate', hint: 'How much the first creatures’ children differ from them', more: 'The rate is itself inherited and evolves, so this only sets where it starts.', min: 0.01, max: 0.3, step: 0.01 },
       { key: 'addLinkChance', label: 'Chance of a new brain link', hint: 'Chance, at each birth, that the child’s brain gains a link', more: 'Higher makes behaviour change faster, and brains grow unless links are costly.', min: 0, max: 0.5, step: 0.01 },
       { key: 'addNeuronChance', label: 'Chance of a new neuron', hint: 'Chance, at each birth, that the child’s brain gains a hidden neuron', min: 0, max: 0.2, step: 0.005 },
+      { key: 'tauChangeChance', label: 'Chance a neuron gets slower or faster', hint: 'Chance, at each birth, that each hidden neuron’s time constant shifts', more: 'A neuron with a time constant of 1 follows its inputs at once. A larger one changes slowly, so it can hold a state for many ticks: a mood, a plan, or a count.', min: 0, max: 0.5, step: 0.01 },
+      { key: 'maxNeuronTau', label: 'Slowest neuron (ticks)', hint: 'The longest time constant a hidden neuron can evolve', min: 1, max: 100, step: 1 },
     ],
   },
   {
