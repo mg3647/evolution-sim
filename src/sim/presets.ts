@@ -48,6 +48,37 @@ export interface SettingGroup {
   settings: SettingInfo[];
 }
 
+/** What kind of difference a key setting makes. */
+export type KeyTag = 'Speed' | 'Outcome' | 'Pace' | 'Nature';
+export const KEY_TAG_HINTS: Record<KeyTag, string> = {
+  Speed: 'Changes how fast the simulation runs on your computer',
+  Outcome: 'Changes who survives and what evolves',
+  Pace: 'Changes how quickly things happen and change',
+  Nature: 'Changes the character of the world itself',
+};
+
+/** The few settings that matter most, each with the kind of difference it makes and why. */
+export const KEY_SETTINGS: Partial<Record<keyof SimConfig, { tag: KeyTag; why: string }>> = {
+  worldWidth: { tag: 'Speed', why: 'A bigger map holds more creatures, and the simulation slows with their number.' },
+  worldHeight: { tag: 'Speed', why: 'A bigger map holds more creatures, and the simulation slows with their number.' },
+  plantCapacity: { tag: 'Speed', why: 'More food means more creatures, which is the main thing that slows the simulation.' },
+  attackDamage: { tag: 'Outcome', why: 'Decides whether hunting pays, and so whether meat-eaters exist at all.' },
+  attackReach: { tag: 'Outcome', why: 'A longer reach lets hunters land bites on prey that would otherwise slip away.' },
+  woundSlow: { tag: 'Outcome', why: 'Lets a hunter that has bitten once catch its prey again; without it prey simply outrun hunters.' },
+  thirstRate: { tag: 'Outcome', why: 'Decides how far from water creatures can live, and so how much of the map is used.' },
+  birthCost: { tag: 'Outcome', why: 'Makes each birth dearer, which shifts the balance between many short lives and fewer long ones.' },
+  birthWaterShare: { tag: 'Outcome', why: 'Any sharing leaves newborns dry; in testing it collapsed the population unless water was easy to reach.' },
+  speciesThreshold: { tag: 'Outcome', why: 'Changes how many species every chart and list reports, without changing how creatures live.' },
+  speciesMinMembers: { tag: 'Outcome', why: 'Changes how many species every chart and list reports, without changing how creatures live.' },
+  plantGrowthRate: { tag: 'Pace', why: 'Faster regrowth lets populations recover sooner and stay put; slower forces them to keep moving.' },
+  initialMutationRate: { tag: 'Pace', why: 'Sets how fast bodies and brains change at the start; the rate then evolves on its own.' },
+  seasonLength: { tag: 'Pace', why: 'A shorter year means booms and crashes come round more often.' },
+  temperatureStrength: { tag: 'Nature', why: 'At 0 there are no biomes at all; higher makes deserts and tundra harsher.' },
+  seasonStrength: { tag: 'Nature', why: 'Decides whether the year is steady or swings between plenty and famine.' },
+  fireChance: { tag: 'Nature', why: 'Decides how often wildfires start.' },
+  fireSpread: { tag: 'Nature', why: 'Decides whether fires burn out in patches or run across whole forests.' },
+};
+
 export const SETTING_GROUPS: SettingGroup[] = [
   {
     title: 'The map',
@@ -136,6 +167,15 @@ export const SETTING_GROUPS: SettingGroup[] = [
       { key: 'initialMutationRate', label: 'Starting mutation rate', hint: 'How much the first creatures’ children differ from them', more: 'The rate is itself inherited and evolves, so this only sets where it starts.', min: 0.01, max: 0.3, step: 0.01 },
       { key: 'addLinkChance', label: 'Chance of a new brain link', hint: 'Chance, at each birth, that the child’s brain gains a link', more: 'Higher makes behaviour change faster, and brains grow unless links are costly.', min: 0, max: 0.5, step: 0.01 },
       { key: 'addNeuronChance', label: 'Chance of a new neuron', hint: 'Chance, at each birth, that the child’s brain gains a hidden neuron', min: 0, max: 0.2, step: 0.005 },
+    ],
+  },
+  {
+    title: 'Species',
+    about: 'How creatures are sorted into species. These change what the charts and lists count, not how creatures live.',
+    settings: [
+      { key: 'speciesThreshold', label: 'Species difference', hint: 'How different a branch of the family tree must be from the group it split from to count as its own species', more: '1 is a clear difference, such as 0.15 in diet or 20% in size. Lower counts more, smaller species; higher lumps them together.', min: 0.5, max: 6, step: 0.25 },
+      { key: 'speciesMinMembers', label: 'Species minimum members', hint: 'Fewest creatures a species, and the group it leaves behind, may have', more: 'Higher ignores small splinter groups, so the species list is shorter and steadier.', min: 2, max: 60, step: 1 },
+      { key: 'speciesMinAge', label: 'Species minimum age (ticks)', hint: 'How long ago a branch must have split off before it can be its own species', min: 0, max: 30000, step: 500 },
     ],
   },
   {
