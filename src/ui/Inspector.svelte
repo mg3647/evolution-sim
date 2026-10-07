@@ -5,8 +5,34 @@
   import { speciesHue } from '../render/renderer';
   import type { Inspection } from '../worker/protocol';
   import BrainGraph from './BrainGraph.svelte';
+  import { INPUT_GROUPS, SENSE_GROUP_HINTS, SENSE_GROUPS } from './senseGroups';
+  import { Input } from '../sim/brain';
 
   let { creature }: { creature: Inspection | null } = $props();
+
+  /** A reading weaker than this is left out of the bars. */
+  const SHOWN = 0.005;
+
+  /** What it senses right now, by group, strongest first. The bias never changes, so it is left out. */
+  const sensed = $derived(
+    SENSE_GROUPS.map((group) => ({
+      group,
+      readings: creature
+        ? creature.inputs
+            .map((value, input) => ({ value, input, label: INPUT_LABELS[input]! }))
+            .filter((r) => INPUT_GROUPS[r.input] === group && r.input !== Input.Bias && Math.abs(r.value) >= SHOWN)
+            .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
+        : [],
+    })),
+  );
+  /** What it is doing right now, strongest first. */
+  const doing = $derived(
+    creature
+      ? creature.outputs
+          .map((value, k) => ({ value, label: OUTPUT_LABELS[k]! }))
+          .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
+      : [],
+  );
 
   function dietName(diet: number): string {
     if (diet < 0.25) return 'plants';
@@ -88,9 +114,42 @@
       hidden {creature.hiddenNeurons === 1 ? 'neuron' : 'neurons'}: junctions that let it combine senses
       before acting. Children inherit the wiring with small random changes.
     </p>
-    <BrainGraph brain={creature.brain} />
+    <BrainGraph brain={creature.brain} live />
 
-    <h3>Brain outputs: what it is doing now</h3>
+    <h3>What it is doing now</h3>
+    <ul>
+      {#each doing as action (action.label)}
+        <li>
+          <span>{action.label}</span>
+          <span class="track"><span class="fill out" style={bar(action.value)}></span></span>
+          <span class="value">{action.value.toFixed(2)}</span>
+        </li>
+      {/each}
+    </ul>
+
+    <h3>What it senses now</h3>
+    <p class="note">Grouped, strongest first. Senses reading zero are left out.</p>
+    {#each sensed as { group, readings } (group)}
+      <div class="group" title={SENSE_GROUP_HINTS[group]}>
+        <span class="group-name">{group}</span>
+        {#if readings.length === 0}
+          <span class="quiet">nothing</span>
+        {:else}
+          <ul>
+            {#each readings as reading (reading.input)}
+              <li>
+                <span>{reading.label}</span>
+                <span class="track"><span class="fill" style={bar(reading.value)}></span></span>
+                <span class="value">{reading.value.toFixed(2)}</span>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </div>
+    {/each}
+
+    <details class="meanings">
+      <summary>What the actions and senses mean</summary>
     <p class="note">
       Turn: left of centre is left, right is right. Thrust: far left is standing still, far right is full
       speed. Reproduce: right of centre means it splits once it has enough energy. Attack: right of centre
@@ -100,17 +159,6 @@
       Hold: right of centre means it picks up what is underfoot (a stone, a branch or a load of food) and
       keeps hold of it; left of centre means it sets it down.
     </p>
-    <ul>
-      {#each OUTPUT_LABELS as label, k (label)}
-        <li>
-          <span>{label}</span>
-          <span class="track"><span class="fill out" style={bar(creature.outputs[k] ?? 0)}></span></span>
-          <span class="value">{(creature.outputs[k] ?? 0).toFixed(2)}</span>
-        </li>
-      {/each}
-    </ul>
-
-    <h3>Brain inputs: what it senses now</h3>
     <p class="note">
       Each of the three rays (left, ahead, right) reports the ground along it: plants, meat, water,
       wall and fire, each reading higher the more or the nearer it is.
@@ -132,15 +180,7 @@
       &ldquo;Temperature&rdquo; is left of centre when cold and right when hot. &ldquo;Warmer ahead&rdquo; is
       right of centre if it is warmer straight ahead.
     </p>
-    <ul>
-      {#each INPUT_LABELS as label, k (label)}
-        <li>
-          <span>{label}</span>
-          <span class="track"><span class="fill" style={bar(creature.inputs[k] ?? 0)}></span></span>
-          <span class="value">{(creature.inputs[k] ?? 0).toFixed(2)}</span>
-        </li>
-      {/each}
-    </ul>
+    </details>
   {:else}
     <p>Click a creature in the world to inspect it.</p>
   {/if}
@@ -222,6 +262,37 @@
     align-items: center;
     gap: 8px;
     line-height: 1.5;
+  }
+
+  .group {
+    margin-bottom: 6px;
+    padding-left: 8px;
+    border-left: 2px solid var(--border);
+  }
+
+  .group-name {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .quiet {
+    margin-left: 6px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .meanings {
+    margin-top: 8px;
+  }
+
+  .meanings summary {
+    cursor: pointer;
+    margin-bottom: 6px;
+    font-size: 12px;
+    color: var(--muted);
   }
 
   .track {

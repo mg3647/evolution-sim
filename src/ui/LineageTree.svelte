@@ -5,7 +5,42 @@
   const HEIGHT = 280;
   const PAD = 6;
 
-  let { tree, bySpecies = false }: { tree: TreeData | null; bySpecies?: boolean } = $props();
+  let {
+    tree,
+    bySpecies = false,
+    yearLength = 0,
+    picked = false,
+    onPick,
+  }: {
+    tree: TreeData | null;
+    bySpecies?: boolean;
+    /** Ticks in a year, for zooming to the last few. 0 if seasons are off. */
+    yearLength?: number;
+    /** Whether a branch picked here is being shown on the map. */
+    picked?: boolean;
+    /** Called with the ids of a branch's living members when it is clicked, or null to let go. */
+    onPick: (ids: Set<number> | null) => void;
+  } = $props();
+
+  /** How much of the run the tree shows: 0 is all of it, otherwise the last so many years. */
+  const ZOOMS = [
+    { years: 0, label: 'Whole run' },
+    { years: 5, label: 'Last 5 years' },
+    { years: 2, label: 'Last 2 years' },
+  ];
+  let zoomYears = $state(0);
+  /** What the pointer is on, for the line under the tree. */
+  let hovered = $state<{ founder: number; species: number; living: number; alive: boolean; born: number } | null>(null);
+
+  /** Where everything was last drawn, for finding what the pointer is on. */
+  let drawn: {
+    data: TreeData;
+    row: Float32Array;
+    children: number[][];
+    x: (tick: number) => number;
+    y: (k: number) => number;
+    end: Float64Array;
+  } | null = null;
 
   let canvas: HTMLCanvasElement;
   let living = $state(0);
@@ -61,6 +96,8 @@
     const { row, rows, children } = layoutRows(data);
     let first = Infinity;
     for (let k = 0; k < count; k++) first = Math.min(first, data.birthTick[k]!);
+    // Zoomed in, the left edge is that many years back; older lines run off it.
+    if (zoomYears > 0 && yearLength > 0) first = Math.max(first, data.tick - zoomYears * yearLength);
     const span = Math.max(1, data.tick - first);
     const x = (tick: number) => PAD + ((tick - first) / span) * (width - PAD * 2);
     const y = (k: number) => PAD + ((row[k]! + 0.5) / Math.max(1, rows)) * (HEIGHT - PAD * 2);
@@ -77,6 +114,8 @@
       ctx.setLineDash([]);
     }
 
+    const ends = new Float64Array(count);
+    drawn = { data, row, children, x, y, end: ends };
     ctx.lineWidth = 1;
     ctx.globalAlpha = 0.85;
     for (let k = 0; k < count; k++) {
@@ -84,6 +123,7 @@
       // A dead ancestor's line runs on to where its last child branches off.
       let end = alive ? data.tick : data.deathTick[k]!;
       for (const kid of children[k]!) end = Math.max(end, data.birthTick[kid]!);
+      ends[k] = end;
       const hue = colorBySpecies ? speciesHue(data.species[k]!) : data.hue[k]!;
       ctx.strokeStyle = `hsl(${hue * 360}, 70%, ${alive ? 62 : 42}%)`;
       ctx.beginPath();
@@ -96,6 +136,66 @@
       }
       ctx.stroke();
     }
+  }
+
+  /** The creature whose line is nearest the pointer, or -1 if none is close. */
+  function nodeAt(event: MouseEvent): number {
+    if (!drawn) return -1;
+    const box = canvas.getBoundingClientRect();
+    const px = event.clientX - box.left;
+    const py = event.clientY - box.top;
+    let best = -1;
+    let bestGap = 5;
+    for (let k = 0; k < drawn.data.parent.length; k++) {
+      const gap = Math.abs(drawn.y(k) - py);
+      if (gap >= bestGap) continue;
+      if (px < drawn.x(drawn.data.birthTick[k]!) - 2 || px > drawn.x(drawn.end[k]!) + 2) continue;
+      best = k;
+      bestGap = gap;
+    }
+    return best;
+  }
+
+  /** The living creatures on a branch: the one it starts at and everything descended from it. */
+  function livingOn(branch: number): number[] {
+    if (!drawn) return [];
+    const { data, children } = drawn;
+    const living: number[] = [];
+    const pending = [branch];
+    while (pending.length > 0) {
+      const k = pending.pop()!;
+      if (data.deathTick[k]! < 0) living.push(k);
+      for (const kid of children[k]!) pending.push(kid);
+    }
+    return living;
+  }
+
+  function point(event: MouseEvent): void {
+    const k = nodeAt(event);
+    if (k < 0 || !drawn) {
+      hovered = null;
+      return;
+    }
+    const living = livingOn(k);
+    const { data } = drawn;
+    hovered = {
+      // A dead ancestor's founder is that of any of its living descendants.
+      founder: living.length > 0 ? data.founder[living[0]!]! : 0,
+      species: data.species[k]!,
+      living: living.length,
+      alive: data.deathTick[k]! < 0,
+      born: data.birthTick[k]!,
+    };
+  }
+
+  function click(event: MouseEvent): void {
+    const k = nodeAt(event);
+    if (k < 0 || !drawn) {
+      onPick(null);
+      return;
+    }
+    const { data } = drawn;
+    onPick(new Set(livingOn(k).map((node) => data.id[node]!)));
   }
 
   /**
@@ -135,6 +235,8 @@
       share: alive > 0 ? family.members / alive : 0,
       alive: tree.deathTick[family.root]! < 0,
     };
+    // Redraw when the zoom changes too.
+    void zoomYears;
     draw(tree, bySpecies, family?.root ?? -1);
   });
 </script>
@@ -144,9 +246,39 @@
   <p>
     Every creature alive now, traced back to its ancestors. Time runs left to right and ends at the
     present. Lines join at a common ancestor, so a join far to the left means two families split long
-    ago. Colour is the inherited body colour, or the species when "Colour by species" is ticked.
+    ago. Colour is the inherited body colour, or the species when "Colour by species" is ticked. Point at a
+    line to read it; click it to pick out that branch's living members on the map.
   </p>
-  <canvas bind:this={canvas} style="height: {HEIGHT}px"></canvas>
+  <div class="zoom" role="group" aria-label="How much of the run to show">
+    {#each ZOOMS as zoom (zoom.years)}
+      <button
+        class:active={zoomYears === zoom.years}
+        disabled={zoom.years > 0 && yearLength <= 0}
+        onclick={() => (zoomYears = zoom.years)}
+      >
+        {zoom.label}
+      </button>
+    {/each}
+    {#if picked}<button onclick={() => onPick(null)}>Show everyone again</button>{/if}
+  </div>
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+  <canvas
+    bind:this={canvas}
+    style="height: {HEIGHT}px"
+    onmousemove={point}
+    onmouseleave={() => (hovered = null)}
+    onclick={click}
+  ></canvas>
+  <p class="readout">
+    {#if hovered}
+      {hovered.alive ? 'A living creature' : 'An ancestor'} born at tick {Math.round(hovered.born).toLocaleString()},
+      of species <b>{hovered.species}</b>{hovered.founder > 0 ? `, in the family of founder #${hovered.founder}` : ''}.
+      <b>{hovered.living.toLocaleString()}</b> living {hovered.living === 1 ? 'creature is' : 'creatures are'} on this
+      branch.
+    {:else}
+      Point at a line to see its founder, species and living members.
+    {/if}
+  </p>
   {#if tree && ancestor}
     <p class="caption">
       {#if founders === 1}
@@ -180,8 +312,29 @@
     color: var(--muted);
   }
 
-  .caption {
+  .caption,
+  .readout {
     margin: 6px 0 0;
+  }
+
+  .readout {
+    min-height: 2.9em;
+  }
+
+  .readout b {
+    color: var(--text);
+  }
+
+  .zoom {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 6px;
+  }
+
+  .zoom button {
+    font-size: 12px;
+    padding: 2px 8px;
   }
 
   .caption b {
@@ -191,6 +344,7 @@
   canvas {
     display: block;
     width: 100%;
+    cursor: pointer;
     background: #0f151c;
     border: 1px solid var(--border);
     border-radius: 4px;

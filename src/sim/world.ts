@@ -859,6 +859,10 @@ function sampleHistory(world: World): void {
   // With no births since the last sample there is nothing to compare, so parents read as average.
   const parents = world.parents;
   const had = parents.count;
+  const spreadSize = spreadOf(creatures.size, creatures);
+  const spreadSpeed = spreadOf(creatures.speed, creatures);
+  const spreadSensorRange = spreadOf(creatures.sensorRange, creatures);
+  const spreadDiet = spreadOf(creatures.diet, creatures);
 
   // Rates since the previous sample, for the Lab's charts.
   const lab = world.lab;
@@ -918,12 +922,13 @@ function sampleHistory(world: World): void {
     parentSpeed: had > 0 ? parents.speed / had : meanSpeed,
     parentSensorRange: had > 0 ? parents.sensorRange / had : meanSensorRange,
     parentDiet: had > 0 ? parents.diet / had : meanDiet,
-    diversity:
-      (spreadOf(creatures.size, creatures) +
-        spreadOf(creatures.speed, creatures) +
-        spreadOf(creatures.sensorRange, creatures) +
-        spreadOf(creatures.diet, creatures)) /
-      4,
+    diversity: (spreadSize + spreadSpeed + spreadSensorRange + spreadDiet) / 4,
+    spreadSize,
+    spreadSpeed,
+    spreadSensorRange,
+    spreadDiet,
+    spreadFur: spreadOf(creatures.fur, creatures),
+    spreadDefense: spreadOf(creatures.defense, creatures),
   }, speciesCounts);
   world.parents = { count: 0, size: 0, speed: 0, sensorRange: 0, diet: 0 };
   lab.sampledAt = world.tick;

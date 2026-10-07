@@ -184,6 +184,7 @@ function sendSnapshot(now: number): void {
       creatures[o + 8] = c.species[i]!;
       creatures[o + 9] = c.calling[i]!;
       creatures[o + 10] = c.defense[i]!;
+      creatures[o + 11] = c.id[i]!;
     }
     if (c.sick[i]! > 0) infected++;
     dietTotal += c.diet[i]!;
@@ -307,6 +308,12 @@ function sendHistory(now: number): void {
     parentSensorRange: h.parentSensorRange.slice(0, h.count),
     parentDiet: h.parentDiet.slice(0, h.count),
     diversity: h.diversity.slice(0, h.count),
+    spreadSize: h.spreadSize.slice(0, h.count),
+    spreadSpeed: h.spreadSpeed.slice(0, h.count),
+    spreadSensorRange: h.spreadSensorRange.slice(0, h.count),
+    spreadDiet: h.spreadDiet.slice(0, h.count),
+    spreadFur: h.spreadFur.slice(0, h.count),
+    spreadDefense: h.spreadDefense.slice(0, h.count),
     deathsStarved: h.deathsStarved.slice(0, h.count),
     deathsOldAge: h.deathsOldAge.slice(0, h.count),
     deathsKilled: h.deathsKilled.slice(0, h.count),
@@ -360,8 +367,14 @@ function sendTree(now: number): void {
     deathTick: new Float64Array(nodes.length),
     hue: new Float32Array(nodes.length),
     species: new Uint32Array(nodes.length),
+    id: new Uint32Array(nodes.length),
+    founder: new Uint32Array(nodes.length),
   };
+  const founderOf = new Map<number, number>();
+  for (let i = 0; i < world.creatures.count; i++) founderOf.set(world.creatures.id[i]!, world.creatures.founder[i]!);
   nodes.forEach((node, k) => {
+    tree.id[k] = node.id;
+    tree.founder[k] = founderOf.get(node.id) ?? 0;
     tree.parent[k] = indexOf.get(node.parentId) ?? -1;
     tree.birthTick[k] = node.birthTick;
     tree.deathTick[k] = node.deathTick;
@@ -374,6 +387,8 @@ function sendTree(now: number): void {
     tree.deathTick.buffer,
     tree.hue.buffer,
     tree.species.buffer,
+    tree.id.buffer,
+    tree.founder.buffer,
   ]);
   sentTreeTick = world.tick;
   lastTreeTime = now;

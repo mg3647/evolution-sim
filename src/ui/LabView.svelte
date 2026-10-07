@@ -1,6 +1,7 @@
 <script lang="ts">
   import type uPlot from 'uplot';
   import { speciesHue } from '../render/renderer';
+  import { streamSeries as seriesOfStream } from './speciesColors';
   import { BIOME_GROUND } from '../render/renderer';
   import { BIOME_LABELS } from '../sim/biomes';
   import { INPUT_COUNT, INPUT_LABELS, OUTPUT_LABELS } from '../sim/brain';
@@ -23,6 +24,7 @@
     profiles,
     lab,
     events,
+    focus = null,
     onClose,
   }: {
     history: HistoryData | null;
@@ -30,8 +32,15 @@
     lab: LabData | null;
     /** Events to mark on every chart. */
     events: ChartEvent[];
+    /** The title of a selection chart to bring into view when the Lab opens, if any. */
+    focus?: string | null;
     onClose: () => void;
   } = $props();
+
+  let selectionCard = $state<HTMLElement>();
+  $effect(() => {
+    if (focus && selectionCard) selectionCard.scrollIntoView({ block: 'start' });
+  });
 
   const DEATH_SERIES: ChartSeries[] = [
     { label: 'Starvation', color: '#e8c468' },
@@ -55,28 +64,10 @@
 
   /** The species drawn in the stream chart. The chart is rebuilt when the set changes. */
   const streamKey = $derived(history ? history.species.map((s) => s.id).join(',') : '');
-  const streamSeries = $derived<ChartSeries[]>(
-    (history?.species ?? []).map((s) => ({
-      label: s.id === 0 ? 'Smaller species' : `Species ${s.id}`,
-      color: s.id === 0 ? '#5a6672' : hslToHex(speciesHue(s.id), 0.7, 0.6),
-    })),
-  );
+  const streamSeries = $derived<ChartSeries[]>(seriesOfStream(history));
   const streamData = $derived<uPlot.AlignedData | null>(
     history && history.species.length > 0 ? [history.tick, ...history.species.map((s) => s.counts)] : null,
   );
-
-  /** A hex colour for a hue, saturation and lightness in [0, 1]; the charts need hex. */
-  function hslToHex(h: number, s: number, l: number): string {
-    const a = s * Math.min(l, 1 - l);
-    const channel = (n: number) => {
-      const k = (n + h * 12) % 12;
-      const value = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
-      return Math.round(value * 255)
-        .toString(16)
-        .padStart(2, '0');
-    };
-    return `#${channel(0)}${channel(8)}${channel(4)}`;
-  }
 
   const BEHAVIOUR_SERIES: ChartSeries[] = [
     { label: 'Foraging %', color: '#4caf50' },
@@ -340,7 +331,7 @@
       <Chart {events} stacked title="Energy eaten per tick" note="Running averages." series={FLOW_SERIES} data={flowData} />
     </section>
 
-    <section class="card wide">
+    <section class="card wide" bind:this={selectionCard}>
       <h1>Selection at work</h1>
       <p class="teaches">
         Natural selection, measured. The yellow line is the average gene of the creatures that had young; the grey
@@ -348,7 +339,9 @@
       </p>
       <div class="charts">
         {#each SELECTION as trait, k (trait.title)}
+          <div class:focused={focus === trait.title}>
           <Chart {events} title={trait.title} series={SELECTION_SERIES} data={selectionData[k] ?? null} />
+          </div>
         {/each}
       </div>
     </section>
@@ -620,6 +613,13 @@
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 14px;
+  }
+
+  /* The chart the Lab was opened to show. */
+  .focused {
+    outline: 1px solid var(--accent);
+    outline-offset: 6px;
+    border-radius: 4px;
   }
 
   .scroll {

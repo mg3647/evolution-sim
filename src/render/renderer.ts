@@ -139,6 +139,9 @@ const CALL_COLOR = 0x9fd8ff;
 /** Ring drawn around creatures with defenses, and the least defense that shows one. */
 const DEFENSE_COLOR = 0xffffff;
 const DEFENSE_SHOWN = 0.25;
+/** How creatures outside a highlight are drawn. */
+const FADED_COLOR = 0x6a737d;
+const FADED_ALPHA = 0.3;
 /** Smallest radius a creature is drawn at, in screen pixels. */
 const MIN_SCREEN_RADIUS = 2.5;
 
@@ -203,6 +206,12 @@ export class WorldRenderer {
   colorBy: 'family' | 'species' = 'family';
   /** Keep the selected creature in the middle of the view. */
   follow = false;
+  /**
+   * Creatures to pick out: everyone else is drawn grey and faint. Either the
+   * members of one species, or the creatures with the given ids. Null shows
+   * everyone as usual.
+   */
+  highlight: { species: number } | { ids: ReadonlySet<number> } | null = null;
 
   private app = new Application();
   private camera = new Container();
@@ -452,9 +461,15 @@ export class WorldRenderer {
 
   private drawCreatures(snapshot: Snapshot): void {
     const { creatures, population } = snapshot;
+    const { highlight } = this;
     const sprites = this.creatureSprites;
     // Zoomed out, true-size creatures would be under a pixel; keep them visible.
     const minRadius = MIN_SCREEN_RADIUS / this.camera.scale.x;
+
+    /** Whether the creature at offset o is one to show in full: all are, unless some are picked out. */
+    const isPicked = (o: number) =>
+      highlight === null ||
+      ('species' in highlight ? creatures[o + 8] === highlight.species : highlight.ids.has(creatures[o + 11]!));
 
     while (sprites.length < population) {
       const sprite = new Sprite(this.plantEaterTexture);
@@ -475,7 +490,9 @@ export class WorldRenderer {
       // Hue is inherited, so relatives share a colour; hungry creatures are dimmer.
       const fed = Math.min(1, creatures[o + 3]! * 2);
       const hue = this.colorBy === 'species' ? speciesHue(creatures[o + 8]!) : creatures[o + 5]!;
-      sprite.tint = hsvToRgb(hue, CREATURE_SATURATION, DIMMEST + (1 - DIMMEST) * fed);
+      const picked = isPicked(o);
+      sprite.tint = picked ? hsvToRgb(hue, CREATURE_SATURATION, DIMMEST + (1 - DIMMEST) * fed) : FADED_COLOR;
+      sprite.alpha = picked ? 1 : FADED_ALPHA;
     }
 
     const ring = this.selectionRing;
@@ -483,7 +500,7 @@ export class WorldRenderer {
     let anySick = false;
     for (let i = 0; i < population; i++) {
       const o = i * CREATURE_STRIDE;
-      if (creatures[o + 7]! <= 0) continue;
+      if (creatures[o + 7]! <= 0 || !isPicked(o)) continue;
       const radius = Math.max(creatures[o + 4]!, minRadius) + 2 / this.camera.scale.x;
       ring.circle(creatures[o]!, creatures[o + 1]!, radius);
       anySick = true;
@@ -494,7 +511,7 @@ export class WorldRenderer {
     let anyDefended = false;
     for (let i = 0; i < population; i++) {
       const o = i * CREATURE_STRIDE;
-      if (creatures[o + 10]! < DEFENSE_SHOWN) continue;
+      if (creatures[o + 10]! < DEFENSE_SHOWN || !isPicked(o)) continue;
       const radius = Math.max(creatures[o + 4]!, minRadius) * 1.25;
       ring.circle(creatures[o]!, creatures[o + 1]!, radius);
       anyDefended = true;
@@ -505,7 +522,7 @@ export class WorldRenderer {
     let anyCalling = false;
     for (let i = 0; i < population; i++) {
       const o = i * CREATURE_STRIDE;
-      if (creatures[o + 9]! === 0) continue;
+      if (creatures[o + 9]! === 0 || !isPicked(o)) continue;
       const radius = Math.max(creatures[o + 4]!, minRadius) * 2.2;
       ring.circle(creatures[o]!, creatures[o + 1]!, radius);
       anyCalling = true;

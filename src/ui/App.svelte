@@ -16,6 +16,8 @@
   import LineageTree from './LineageTree.svelte';
   import SettingsPanel from './SettingsPanel.svelte';
   import SpeciesList from './SpeciesList.svelte';
+  import { streamSeries } from './speciesColors';
+  import TraitCards from './TraitCards.svelte';
 
 
   const SPEEDS: { label: string; value: Speed }[] = [
@@ -58,22 +60,14 @@
     { label: 'Creatures', color: '#e8c468' },
     { label: 'Plants %', color: '#4caf50', axis: 'right' },
   ];
-  const TRAIT_SERIES: ChartSeries[] = [
-    { label: 'Mean size', color: '#6cb6ff' },
-    { label: 'Mean speed', color: '#ff8f6b' },
-    { label: 'Mean sensor range', color: '#b08cff' },
-    { label: 'Mean fur', color: '#f2f2f2' },
-    { label: 'Mean defenses', color: '#e0566a' },
-  ];
   const DIET_SERIES: ChartSeries[] = [
-    { label: 'Plant-eaters', color: '#4caf50' },
-    { label: 'Meat-eaters', color: '#e0566a' },
+    { label: 'Plant-eaters %', color: '#4caf50' },
+    { label: 'Meat-eaters %', color: '#e0566a' },
   ];
   const BRAIN_SERIES: ChartSeries[] = [
     { label: 'Mean links', color: '#e8c468' },
     { label: 'Mean hidden neurons', color: '#6cb6ff', axis: 'right' },
   ];
-  const SPECIES_SERIES: ChartSeries[] = [{ label: 'Species', color: '#7fd6c2' }];
 
   let host: HTMLDivElement;
   let fileInput: HTMLInputElement;
@@ -155,18 +149,38 @@
   const populationData = $derived<uPlot.AlignedData | null>(
     history && [history.tick, history.population, history.plantPercent],
   );
-  const traitData = $derived<uPlot.AlignedData | null>(
-    history && [history.tick, history.meanSize, history.meanSpeed, history.meanSensorRange, history.meanFur, history.meanDefense],
-  );
+  /** Plant-eaters and meat-eaters as shares of everyone, so the two always add up to 100. */
   const dietData = $derived.by<uPlot.AlignedData | null>(() => {
     if (!history) return null;
     const { population, meatEaters } = history;
-    return [history.tick, population.map((count, k) => count - meatEaters[k]!), meatEaters];
+    const meat = population.map((count, k) => (count > 0 ? (meatEaters[k]! / count) * 100 : 0));
+    return [history.tick, meat.map((share, k) => (population[k]! > 0 ? 100 - share : 0)), meat];
   });
   const brainData = $derived<uPlot.AlignedData | null>(
     history && [history.tick, history.meanLinks, history.meanNeurons],
   );
-  const speciesData = $derived<uPlot.AlignedData | null>(history && [history.tick, history.speciesCount]);
+  /** The species stream, as in the Lab. The chart is rebuilt when the set of species drawn changes. */
+  const streamKey = $derived(history ? history.species.map((s) => s.id).join(',') : '');
+  const streamData = $derived<uPlot.AlignedData | null>(
+    history && history.species.length > 0 ? [history.tick, ...history.species.map((s) => s.counts)] : null,
+  );
+
+  /** A species kept picked out on the map by a click, and one picked out while the pointer is on its row. */
+  let pinnedSpecies = $state<number | null>(null);
+  let hoveredSpecies = $state<number | null>(null);
+  /** The living members of a family-tree branch picked out by a click. */
+  let pickedBranch = $state.raw<Set<number> | null>(null);
+  /** The selection chart the Lab should open at, set by clicking a trait card. */
+  let labFocus = $state<string | null>(null);
+
+  $effect(() => {
+    // Read first, so the effect runs again when any of them changes.
+    const species = hoveredSpecies ?? pinnedSpecies;
+    const branch = pickedBranch;
+    if (!renderer) return;
+    renderer.highlight = species !== null ? { species } : branch ? { ids: branch } : null;
+    renderer.redraw();
+  });
   /** Cells holding each kind of resource, counted only while the Resources view is on. */
   const resourceCounts = $derived.by<Record<ResourceKind, number> | null>(() => {
     if (!showResources || !snapshot || !snapshot.rendered) return null;
@@ -318,10 +332,6 @@
 
   function count(value: number | undefined): string {
     return value === undefined ? '-' : value.toLocaleString();
-  }
-
-  function decimal(value: number | undefined): string {
-    return value === undefined ? '-' : value.toFixed(2);
   }
 
   function startResizing(e: MouseEvent) {
@@ -525,7 +535,17 @@
   {/if}
 
   {#if showLab}
-    <LabView {history} {profiles} {lab} events={chartEvents} onClose={() => (showLab = false)} />
+    <LabView
+      {history}
+      {profiles}
+      {lab}
+      events={chartEvents}
+      focus={labFocus}
+      onClose={() => {
+        showLab = false;
+        labFocus = null;
+      }}
+    />
   {/if}
 
   <div class="main">
@@ -764,7 +784,7 @@
           </div>
         </dl>
 
-          <EnvironmentPanel environment={snapshot?.environment ?? null} />
+          <EnvironmentPanel environment={snapshot?.environment ?? null} yearLength={snapshot?.config.seasonLength ?? 0} />
         {/if}
       </div>
 
@@ -788,26 +808,34 @@
           <span class="toggle">{expandedSections.evolution ? '▼' : '▶'}</span> Evolution
         </button>
         {#if expandedSections.evolution}
-        <dl>
-          <div><dt>Mean size</dt><dd>{decimal(snapshot?.meanSize)}</dd></div>
-          <div><dt>Mean speed</dt><dd>{decimal(snapshot?.meanSpeed)}</dd></div>
-          <div><dt>Mean sensor range</dt><dd>{decimal(snapshot?.meanSensorRange)}</dd></div>
-          <div title="Average thickness of coat, from 0 (none) to 1. Fur keeps cold out, makes heat worse, and costs energy.">
-            <dt>Mean fur</dt>
-            <dd>{decimal(snapshot?.meanFur)}</dd>
-          </div>
-          <div title="Average spines or poison, from 0 (none) to 1. Whatever bites a defended creature is hurt in return. Defended creatures are drawn with a white ring.">
-            <dt>Mean defenses</dt>
-            <dd>{decimal(snapshot?.meanDefense)}</dd>
-          </div>
-          <div title="Creatures that digest plants better than meat">
-            <dt>Plant-eaters</dt>
-            <dd>{count(snapshot ? snapshot.population - snapshot.meatEaters : undefined)}</dd>
-          </div>
-        </dl>
-
-          <LineageTree {tree} bySpecies={colorBySpecies} />
-          <SpeciesList species={snapshot?.species ?? []} tick={snapshot?.tick ?? 0} />
+          <TraitCards
+            {history}
+            onOpen={(selection) => {
+              labFocus = selection;
+              showLab = true;
+            }}
+          />
+          <LineageTree
+            {tree}
+            bySpecies={colorBySpecies}
+            yearLength={snapshot?.config.seasonLength ?? 0}
+            picked={pickedBranch !== null}
+            onPick={(ids) => {
+              pickedBranch = ids && ids.size > 0 ? ids : null;
+              if (pickedBranch) pinnedSpecies = null;
+            }}
+          />
+          <SpeciesList
+            species={snapshot?.species ?? []}
+            tick={snapshot?.tick ?? 0}
+            {history}
+            pinned={pinnedSpecies}
+            onHover={(id) => (hoveredSpecies = id)}
+            onPin={(id) => {
+              pinnedSpecies = pinnedSpecies === id ? null : id;
+              if (pinnedSpecies !== null) pickedBranch = null;
+            }}
+          />
           <p class="lab-hint">Brain comparisons and more are in the <button class="link" onclick={() => (showLab = true)}>Lab</button>.</p>
         {/if}
       </div>
@@ -821,25 +849,24 @@
           <Chart events={chartEvents} title="Population" series={POPULATION_SERIES} data={populationData} />
           <Chart
             events={chartEvents}
+            stacked
             title="Diet"
-            note="How many creatures digest plants better (drawn as discs) and how many digest meat better (drawn as pointed shapes). Red ground is meat left by the dead."
+            note="The share of creatures that digest plants better (drawn as discs) and the share that digest meat better (drawn as pointed shapes). Together they are everyone."
             series={DIET_SERIES}
             data={dietData}
           />
-          <Chart
-            events={chartEvents}
-            title="Number of species"
-            note="Rises when families drift apart, falls when a species dies out."
-            series={SPECIES_SERIES}
-            data={speciesData}
-          />
-          <Chart
-            events={chartEvents}
-            title="Traits"
-            note="Average body genes. 1 is what the first generation starts with, except fur and defenses, which start at 0 and can reach 1."
-            series={TRAIT_SERIES}
-            data={traitData}
-          />
+          {#if streamData}
+            {#key streamKey}
+              <Chart
+                events={chartEvents}
+                stacked
+                title="Species"
+                note="Members of each species, piled up, so the top edge is the population. A band splitting off is a new species; a band pinching out is an extinction. The Lab has the large version."
+                series={streamSeries(history)}
+                data={streamData}
+              />
+            {/key}
+          {/if}
           <Chart
             events={chartEvents}
             title="Brains"

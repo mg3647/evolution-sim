@@ -37,6 +37,13 @@ export interface History {
   parentDiet: Float32Array;
   /** How varied the body genes are: the mean of their standard deviations. */
   diversity: Float32Array;
+  /** The standard deviation of each gene across living creatures. */
+  spreadSize: Float32Array;
+  spreadSpeed: Float32Array;
+  spreadSensorRange: Float32Array;
+  spreadDiet: Float32Array;
+  spreadFur: Float32Array;
+  spreadDefense: Float32Array;
   /** Deaths per 1,000 ticks since the previous sample, by cause. Other is plague, meteors and fire. */
   deathsStarved: Float32Array;
   deathsOldAge: Float32Array;
@@ -164,6 +171,12 @@ export const HISTORY_SERIES = [
   'parentSensorRange',
   'parentDiet',
   'diversity',
+  'spreadSize',
+  'spreadSpeed',
+  'spreadSensorRange',
+  'spreadDiet',
+  'spreadFur',
+  'spreadDefense',
   'deathsStarved',
   'deathsOldAge',
   'deathsKilled',
@@ -205,6 +218,12 @@ export interface Sample {
   parentSensorRange: number;
   parentDiet: number;
   diversity: number;
+  spreadSize: number;
+  spreadSpeed: number;
+  spreadSensorRange: number;
+  spreadDiet: number;
+  spreadFur: number;
+  spreadDefense: number;
   deathsStarved: number;
   deathsOldAge: number;
   deathsKilled: number;
@@ -250,6 +269,12 @@ export function createHistory(interval: number, capacity: number): History {
     parentSensorRange: new Float32Array(capacity),
     parentDiet: new Float32Array(capacity),
     diversity: new Float32Array(capacity),
+    spreadSize: new Float32Array(capacity),
+    spreadSpeed: new Float32Array(capacity),
+    spreadSensorRange: new Float32Array(capacity),
+    spreadDiet: new Float32Array(capacity),
+    spreadFur: new Float32Array(capacity),
+    spreadDefense: new Float32Array(capacity),
     deathsStarved: new Float32Array(capacity),
     deathsOldAge: new Float32Array(capacity),
     deathsKilled: new Float32Array(capacity),

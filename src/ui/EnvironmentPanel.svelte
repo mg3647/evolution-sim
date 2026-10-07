@@ -1,25 +1,18 @@
 <script lang="ts">
-  import { EVENT_LABELS } from '../sim/environment';
   import type { EnvironmentView } from '../worker/protocol';
+  import YearDial from './YearDial.svelte';
 
   /** Log entries shown, newest first. */
   const LOG_SHOWN = 6;
 
-  let { environment }: { environment: EnvironmentView | null } = $props();
-
-  /** Sunlight peaks a quarter of the way through the year. */
-  function seasonName(yearFraction: number): string {
-    if (yearFraction < 0.125 || yearFraction >= 0.875) return 'Spring';
-    if (yearFraction < 0.375) return 'Summer';
-    if (yearFraction < 0.625) return 'Autumn';
-    return 'Winter';
-  }
-
-  function timeOfDay(daylight: number): string {
-    if (daylight > 0.7) return 'Day';
-    if (daylight < 0.3) return 'Night';
-    return 'Twilight';
-  }
+  let {
+    environment,
+    yearLength = 0,
+  }: {
+    environment: EnvironmentView | null;
+    /** Ticks in a year; 0 if seasons are off. */
+    yearLength?: number;
+  } = $props();
 
   const recent = $derived(environment ? environment.log.slice(-LOG_SHOWN).reverse() : []);
 </script>
@@ -27,15 +20,13 @@
 <section>
   <h2>Environment</h2>
   {#if environment}
+    <YearDial
+      yearFraction={environment.yearFraction}
+      daylight={environment.daylight}
+      {yearLength}
+      active={environment.active}
+    />
     <dl>
-      <div title="Sunlight swings over the year, and plant growth with it">
-        <dt>Season</dt>
-        <dd>{seasonName(environment.yearFraction)}</dd>
-      </div>
-      <div title="Creatures see less far in the dark. The map darkens at night.">
-        <dt>Time of day</dt>
-        <dd>{timeOfDay(environment.daylight)}</dd>
-      </div>
       <div title="Plant growth relative to normal, from the season and any events together">
         <dt>Plant growth</dt>
         <dd>{Math.round(environment.growth * 100)}%</dd>
@@ -48,7 +39,7 @@
       {/if}
     </dl>
 
-    {#if environment.active.length > 0 || environment.infected > 0}
+    {#if environment.infected > 0}
       <ul class="active">
         {#if environment.infected > 0}
           <li class="plague">
@@ -56,12 +47,7 @@
             <span>{environment.infected.toLocaleString()} infected</span>
           </li>
         {/if}
-        {#each environment.active as event (event.kind)}
-          <li>
-            <b>{EVENT_LABELS[event.kind]}</b>
-            <span>{event.remaining.toLocaleString()} ticks left</span>
-          </li>
-        {/each}
+
       </ul>
     {/if}
 

@@ -15,13 +15,19 @@
     brain,
     strength,
     note,
+    live = false,
   }: {
     brain: BrainView;
     /** How solid to draw each link, from 0 to 1. Defaults to how active its source neuron is. */
     strength?: number[];
     /** Text under the diagram, in place of the default explanation. */
     note?: string;
+    /** The brain is a living creature's: make the links carrying a signal right now glow. */
+    live?: boolean;
   } = $props();
+
+  /** A link is firing when its source's output times its weight is at least this strong. */
+  const FIRING = 0.25;
 
   interface Node {
     index: number;
@@ -76,6 +82,7 @@
         color: weight >= 0 ? POSITIVE : NEGATIVE,
         width: 0.6 + Math.min(3, Math.abs(weight)),
         opacity: 0.18 + 0.82 * Math.min(1, signal),
+        firing: live && Math.abs((brain.activation[from.index] ?? 0) * weight) >= FIRING,
       };
     }),
   );
@@ -89,7 +96,15 @@
 
 <svg viewBox="0 0 {WIDTH} {layout.height}" width="100%" role="img" aria-label="Diagram of this creature's brain wiring">
   {#each links as link, k (k)}
-    <path d={link.path} fill="none" stroke="rgba({link.color}, {link.opacity})" stroke-width={link.width} />
+    {#if link.firing}
+      <path d={link.path} fill="none" stroke="rgba({link.color}, 0.3)" stroke-width={link.width + 5} stroke-linecap="round" />
+    {/if}
+    <path
+      d={link.path}
+      fill="none"
+      stroke="rgba({link.color}, {link.firing ? 1 : link.opacity})"
+      stroke-width={link.firing ? link.width + 0.8 : link.width}
+    />
   {/each}
   {#each [...layout.nodes.values()] as node (node.index)}
     <circle cx={node.x} cy={node.y} r="5" fill={fill(node.index)} stroke="#8a9aa9" stroke-width="1" />
@@ -105,8 +120,9 @@
     {note}
   {:else}
     Senses on the left, actions on the right, hidden neurons between. Blue links excite, orange links
-    suppress, and thicker means stronger. A link lights up when its source is active. Senses with no
-    link are left out.
+    suppress, and thicker means stronger. A link lights up when its source is active{live
+      ? ', and glows while it is carrying a strong signal right now'
+      : ''}. Senses with no link are left out.
   {/if}
 </p>
 

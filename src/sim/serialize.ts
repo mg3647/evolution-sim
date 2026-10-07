@@ -212,7 +212,10 @@ export function loadWorld(saved: SavedWorld): World {
 
   const history = createHistory(saved.history.interval, config.statsCapacity);
   history.count = saved.history.count;
-  for (const name of HISTORY_SERIES) history[name].set(saved.history[name]);
+  for (const name of HISTORY_SERIES) {
+    // A save made before a series was added still loads; that series reads zero until then.
+    if (saved.history[name]) history[name].set(saved.history[name]);
+  }
 
   const rng = new Rng(config.seed);
   rng.setState(saved.rng);

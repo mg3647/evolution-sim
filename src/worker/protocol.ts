@@ -27,7 +27,7 @@ export type ToWorker =
   | { type: 'load'; json: string };
 
 /** Number of floats per creature in `Snapshot.creatures`. */
-export const CREATURE_STRIDE = 11;
+export const CREATURE_STRIDE = 12;
 
 /** Everything shown about the selected creature. */
 export interface Inspection {
@@ -129,7 +129,7 @@ export interface Snapshot {
 
   population: number;
   /** Per creature: x, y, heading, energy as a fraction of its maximum, radius, hue, diet,
-   * 1 if sick, -1 if immune, 0 otherwise, species id, 1 if calling, and defenses. Empty when drawing is off. */
+   * 1 if sick, -1 if immune, 0 otherwise, species id, 1 if calling, defenses, and its id. Empty when drawing is off. */
   creatures: Float32Array;
   meanSize: number;
   meanSpeed: number;
@@ -211,6 +211,13 @@ export interface HistoryData {
   parentDiet: Float32Array;
   /** How varied the body genes are: the mean of their standard deviations. */
   diversity: Float32Array;
+  /** The standard deviation of each gene across living creatures. */
+  spreadSize: Float32Array;
+  spreadSpeed: Float32Array;
+  spreadSensorRange: Float32Array;
+  spreadDiet: Float32Array;
+  spreadFur: Float32Array;
+  spreadDefense: Float32Array;
   /** See History in stats.ts for what each of these holds. */
   deathsStarved: Float32Array;
   deathsOldAge: Float32Array;
@@ -249,6 +256,10 @@ export interface TreeData {
   hue: Float32Array;
   /** Species id, or 0 if it has not been grouped yet. */
   species: Uint32Array;
+  /** The creature's id. */
+  id: Uint32Array;
+  /** For a living creature, the id of the parentless creature its family began with; 0 for the dead. */
+  founder: Uint32Array;
 }
 
 /** How the brains of one group of creatures are wired, for comparing groups. */
