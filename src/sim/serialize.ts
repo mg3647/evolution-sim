@@ -84,6 +84,16 @@ export interface SavedWorld {
     number[]
   >;
   innovations: InnovationsData;
+  /** The neutral shadow of the brains' links; absent in saves from before it existed. See wiring.ts. */
+  shadow?: {
+    creatures: number[][];
+    rng: RngState;
+    real: [number, number][];
+    shadow: [number, number][];
+    realFirst: [number, number][];
+    shadowFirst: [number, number][];
+    samples: number;
+  };
   ledger: EnergyLedger;
   history: { interval: number; count: number } & Record<(typeof HISTORY_SERIES)[number], number[]>;
   births: number;
@@ -140,6 +150,15 @@ export function saveWorld(world: World): SavedWorld {
     plantCapacityTotal: world.plantCapacityTotal,
     creatures,
     innovations: world.innovations.save(),
+    shadow: {
+      creatures: world.creatures.shadow.slice(0, world.creatures.count).map((ids) => ids.slice()),
+      rng: world.shadowRng.getState(),
+      real: [...world.wiring.real],
+      shadow: [...world.wiring.shadow],
+      realFirst: [...world.wiring.realFirst],
+      shadowFirst: [...world.wiring.shadowFirst],
+      samples: world.wiring.samples,
+    },
     ledger: { ...world.ledger },
     history: savedHistory,
     births: world.births,
@@ -235,6 +254,11 @@ export function loadWorld(saved: SavedWorld): World {
     return brain;
   });
 
+  // A save from before the shadow existed starts one now, as if it began with these creatures.
+  creatures.shadow = saved.shadow
+    ? saved.shadow.creatures.map((ids) => ids.slice())
+    : creatures.brain.map((brain) => brain.links.map((link) => link.innovation));
+
   const history = createHistory(saved.history.interval, config.statsCapacity);
   history.count = saved.history.count;
   for (const name of HISTORY_SERIES) {
@@ -244,6 +268,8 @@ export function loadWorld(saved: SavedWorld): World {
 
   const rng = new Rng(config.seed);
   rng.setState(saved.rng);
+  const shadowRng = new Rng(`${config.seed}:shadow`);
+  if (saved.shadow) shadowRng.setState(saved.shadow.rng);
   const hash = new SpatialHash(config.worldWidth, config.worldHeight, config.senseRange);
   const sound = createSoundField(config);
 
@@ -255,6 +281,14 @@ export function loadWorld(saved: SavedWorld): World {
     plantCapacityTotal: saved.plantCapacityTotal,
     creatures,
     innovations: Innovations.load(saved.innovations),
+    shadowRng,
+    wiring: {
+      real: new Map(saved.shadow?.real),
+      shadow: new Map(saved.shadow?.shadow),
+      realFirst: new Map(saved.shadow?.realFirst),
+      shadowFirst: new Map(saved.shadow?.shadowFirst),
+      samples: saved.shadow?.samples ?? 0,
+    },
     hash,
     // What is heard is rebuilt each tick from who called, so only the flags are saved.
     sound,

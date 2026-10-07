@@ -56,6 +56,12 @@ function sample(tick: number): Sample {
     plasticLinkShare: 0,
     meanTau: 1,
     slowNeuronShare: 0,
+    wiringLive: 0,
+    wiringShadowLive: 0,
+    wiringActivity: 0,
+    wiringShadowActivity: 0,
+    wiringSurvival: 0,
+    wiringShadowSurvival: 0,
   };
 }
 

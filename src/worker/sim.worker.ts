@@ -385,6 +385,12 @@ function sendHistory(now: number): void {
     plasticLinkShare: h.plasticLinkShare.slice(0, h.count),
     meanTau: h.meanTau.slice(0, h.count),
     slowNeuronShare: h.slowNeuronShare.slice(0, h.count),
+    wiringLive: h.wiringLive.slice(0, h.count),
+    wiringShadowLive: h.wiringShadowLive.slice(0, h.count),
+    wiringActivity: h.wiringActivity.slice(0, h.count),
+    wiringShadowActivity: h.wiringShadowActivity.slice(0, h.count),
+    wiringSurvival: h.wiringSurvival.slice(0, h.count),
+    wiringShadowSurvival: h.wiringShadowSurvival.slice(0, h.count),
     blockMoves: [],
     species: [],
   };

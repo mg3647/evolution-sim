@@ -2,6 +2,7 @@ import {
   brainCost,
   enabledLinks,
   founderBrain,
+  type Brain,
   Innovations,
   Input,
   INPUT_COUNT,
@@ -98,6 +99,7 @@ import { Senses } from './senses';
 import { buildSound, createSoundField, type SoundField } from './sound';
 import { SpatialHash } from './spatialHash';
 import { classifySpecies, createSpeciesState, type SpeciesState } from './species';
+import { createWiringTally, sampleWiring, type WiringTally } from './wiring';
 import { createHistory, meanOf, recordDensity, recordSample, spreadOf, type History } from './stats';
 
 export interface World {
@@ -109,6 +111,10 @@ export interface World {
   plantCapacityTotal: number;
   creatures: Creatures;
   innovations: Innovations;
+  /** Draws the shadow's random parents, apart from `rng` so the shadow never changes the world. */
+  shadowRng: Rng;
+  /** Activity of every brain link, real and neutral shadow; see wiring.ts. */
+  wiring: WiringTally;
   /** Creature positions as of the start of the current tick. */
   hash: SpatialHash;
   /** Calls made last tick, as creatures hear them this tick. */
@@ -284,6 +290,8 @@ export function createWorld(config: SimConfig): World {
     plantCapacityTotal: totalPlantEnergy(plants),
     creatures: createCreatures(Math.max(16, config.initialCreatures)),
     innovations: new Innovations(),
+    shadowRng: new Rng(`${config.seed}:shadow`),
+    wiring: createWiringTally(),
     hash,
     sound,
     senses: new Senses(config, plants, hash, sound),
@@ -892,6 +900,7 @@ function giveBirth(world: World, parent: number, energy: number): number {
     founder: creatures.founder[parent]!,
     species: creatures.species[parent]!,
     hydration: childWater,
+    shadow: shadowFor(world, parent, brain),
   });
   if (sharing) creatures.hydration[parent] = parentWater - (childWater * childBody) / parentBody;
   world.lineage.born(creatures.id[child]!, creatures.id[parent]!, world.tick, genes.hue);
@@ -909,6 +918,25 @@ function giveBirth(world: World, parent: number, energy: number): number {
   world.parents.sensorRange += parentGenes.sensorRange;
   world.parents.diet += parentGenes.diet;
   return given;
+}
+
+/**
+ * The neutral shadow of a newborn: a copy of a random living creature's
+ * shadow, plus the links its brain gained that its parent's did not have.
+ */
+function shadowFor(world: World, parent: number, brain: Brain): number[] {
+  const { creatures } = world;
+  const chosen = creatures.shadow[world.shadowRng.int(0, creatures.count)]!;
+  const had = new Set(creatures.brain[parent]!.links.map((link) => link.innovation));
+  const shadow = chosen.slice();
+  const held = new Set(shadow);
+  for (const link of brain.links) {
+    if (!had.has(link.innovation) && !held.has(link.innovation)) {
+      shadow.push(link.innovation);
+      held.add(link.innovation);
+    }
+  }
+  return shadow;
 }
 
 function sampleHistory(world: World): void {
@@ -985,6 +1013,7 @@ function sampleHistory(world: World): void {
   let built = 0;
   for (let cell = 0; cell < world.plants.blockBuilt.length; cell++) built += world.plants.blockBuilt[cell]!;
 
+  const wiring = sampleWiring(world.wiring, creatures);
   recordSample(world.history, {
     deathsStarved: perThousand(deaths.starved, then.starved),
     deathsOldAge: perThousand(deaths.oldAge, then.oldAge),
@@ -1013,6 +1042,12 @@ function sampleHistory(world: World): void {
     plasticLinkShare: links > 0 ? plasticLinks / links : 0,
     meanTau: neurons > 0 ? tauTotal / neurons : 1,
     slowNeuronShare: neurons > 0 ? slowNeurons / neurons : 0,
+    wiringLive: wiring.live,
+    wiringShadowLive: wiring.shadowLive,
+    wiringActivity: wiring.meanActivity,
+    wiringShadowActivity: wiring.shadowMeanActivity,
+    wiringSurvival: wiring.survival,
+    wiringShadowSurvival: wiring.shadowSurvival,
     tick: world.tick,
     population: creatures.count,
     plantFill: world.plantCapacityTotal > 0 ? totalPlantEnergy(world.plants) / world.plantCapacityTotal : 0,
@@ -1141,6 +1176,7 @@ export function hashWorld(world: World): number {
     h = hashBytes(h, bytesOf(new Float32Array(brain.hiddenTau)));
     h = hashBytes(h, bytesOf(brain.linkWeight));
     h = hashBytes(h, bytesOf(brain.plasticRate));
+    h = hashBytes(h, bytesOf(new Uint32Array(c.shadow[i]!)));
   }
   return h >>> 0;
 }

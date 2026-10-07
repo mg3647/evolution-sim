@@ -245,6 +245,32 @@
     history && [history.tick, history.meanPlasticity, history.meanTau],
   );
 
+  const ACTIVITY_SERIES: ChartSeries[] = [
+    { label: 'Real population', color: '#7fd6c2' },
+    { label: 'Neutral shadow', color: '#8a9aa9' },
+  ];
+  const activityData = $derived<uPlot.AlignedData | null>(
+    history && [history.tick, history.wiringActivity, history.wiringShadowActivity],
+  );
+  const SURVIVAL_SERIES: ChartSeries[] = [
+    { label: 'Real population %', color: '#7fd6c2' },
+    { label: 'Neutral shadow %', color: '#8a9aa9' },
+  ];
+  const survivalData = $derived<uPlot.AlignedData | null>(
+    history && [
+      history.tick,
+      history.wiringSurvival.map((share) => share * 100),
+      history.wiringShadowSurvival.map((share) => share * 100),
+    ],
+  );
+  const WIRING_SERIES: ChartSeries[] = [
+    { label: 'Different links in use', color: '#7fd6c2' },
+    { label: 'Different links in the shadow', color: '#8a9aa9' },
+  ];
+  const wiringData = $derived<uPlot.AlignedData | null>(
+    history && [history.tick, history.wiringLive, history.wiringShadowLive],
+  );
+
   const CARRY_SERIES: ChartSeries[] = [
     { label: 'Holding a stone or branch %', color: '#b0b0b6' },
     { label: 'Holding food %', color: '#e8d678' },
@@ -444,6 +470,22 @@
       <div class="charts">
         <Chart title="How much of the brain uses them" series={BRAIN_SERIES} data={brainFeatureData} />
         <Chart title="How strongly" series={RATE_SERIES} data={rateData} />
+      </div>
+    </section>
+
+    <section class="card">
+      <h1>Is the wiring selected, or just drifting?</h1>
+      <p class="teaches">
+        Every brain link keeps a running count of how many samples it has been in the population. A link can last
+        a long time by chance alone, so a neutral shadow runs alongside: a copy of the population with the same
+        births and deaths, but where nothing is favoured. The survival chart takes every link that first appeared
+        at least 20 samples ago and shows how many are still carried. Above the shadow, selection is keeping new
+        wiring that chance would lose; below it, selection is purging new wiring.
+      </p>
+      <div class="charts">
+        <Chart title="How long the average link has lasted (samples)" series={ACTIVITY_SERIES} data={activityData} />
+        <Chart title="New links still carried" series={SURVIVAL_SERIES} data={survivalData} />
+        <Chart title="How many different links" series={WIRING_SERIES} data={wiringData} />
       </div>
     </section>
 

@@ -85,6 +85,8 @@ interface Summary {
   holdingFood: number;
   /** Brain features, averaged over the samples: mean learning rate over all links, the share of links that can learn, mean time constant, and the share of slow neurons. */
   meanPlasticity: number;
+  /** Mean links in use, in the shadow, mean link activity real and shadow, and the share of new links still carried, real and shadow (real above shadow is a sign of selection). */
+  wiring: { live: number; shadowLive: number; activity: number; shadowActivity: number; survival: number; shadowSurvival: number };
   plasticLinkShare: number;
   meanTau: number;
   slowNeuronShare: number;
@@ -315,6 +317,14 @@ function run(seed: string): Summary {
     holdingStone: heldSum[Held.Stone]! / samples,
     holdingBranch: heldSum[Held.Branch]! / samples,
     holdingFood: (heldSum[Held.Plants]! + heldSum[Held.Meat]!) / samples,
+    wiring: {
+      live: mean(world.history.wiringLive, world.history.tick, world.history.count, from),
+      shadowLive: mean(world.history.wiringShadowLive, world.history.tick, world.history.count, from),
+      activity: mean(world.history.wiringActivity, world.history.tick, world.history.count, from),
+      shadowActivity: mean(world.history.wiringShadowActivity, world.history.tick, world.history.count, from),
+      survival: mean(world.history.wiringSurvival, world.history.tick, world.history.count, from),
+      shadowSurvival: mean(world.history.wiringShadowSurvival, world.history.tick, world.history.count, from),
+    },
     meanPlasticity: mean(world.history.meanPlasticity, world.history.tick, world.history.count, from),
     plasticLinkShare: mean(world.history.plasticLinkShare, world.history.tick, world.history.count, from),
     meanTau: mean(world.history.meanTau, world.history.tick, world.history.count, from),
@@ -416,6 +426,9 @@ it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
     );
     console.log(
       `    brains: learningRate=${s.meanPlasticity.toFixed(4)} linksThatLearn=${percent(s.plasticLinkShare)} meanTau=${s.meanTau.toFixed(2)} slowNeurons=${percent(s.slowNeuronShare)}`,
+    );
+    console.log(
+      `    wiring: links=${s.wiring.live.toFixed(0)} shadow=${s.wiring.shadowLive.toFixed(0)} activity real/shadow=${s.wiring.activity.toFixed(1)}/${s.wiring.shadowActivity.toFixed(1)} newLinksKept real/shadow=${percent(s.wiring.survival)}/${percent(s.wiring.shadowSurvival)}`,
     );
     for (const sp of s.speciesLearning) {
       console.log(

@@ -55,6 +55,8 @@ export interface Creatures {
   mutationRate: Float32Array;
   /** One brain per creature, parallel to the arrays above. */
   brain: Brain[];
+  /** Link ids of the neutral shadow genome, one list per creature; see wiring.ts. */
+  shadow: number[][];
 }
 
 /** What a creature can hold: one thing at a time. */
@@ -100,6 +102,8 @@ export interface SpawnOptions {
   energy: number;
   genes: Genes;
   brain: Brain;
+  /** Shadow link ids; the ids of the brain's own links if not given. */
+  shadow?: number[];
   age?: number;
   parentId?: number;
   generation?: number;
@@ -144,6 +148,7 @@ export function createCreatures(capacity: number): Creatures {
     defense: new Float32Array(capacity),
     mutationRate: new Float32Array(capacity),
     brain: [],
+    shadow: [],
   };
 }
 
@@ -195,6 +200,7 @@ export function spawnCreature(c: Creatures, options: SpawnOptions): number {
   c.defense[i] = options.genes.defense;
   c.mutationRate[i] = options.genes.mutationRate;
   c.brain[i] = options.brain;
+  c.shadow[i] = options.shadow ?? options.brain.links.map((link) => link.innovation);
   return i;
 }
 
@@ -204,8 +210,10 @@ export function removeCreature(c: Creatures, i: number): void {
   if (i !== last) {
     for (const field of FIELDS) c[field][i] = c[field][last]!;
     c.brain[i] = c.brain[last]!;
+    c.shadow[i] = c.shadow[last]!;
   }
   c.brain.length = c.count;
+  c.shadow.length = c.count;
 }
 
 export function genesOf(c: Creatures, i: number): Genes {

@@ -93,6 +93,14 @@ export interface History {
   meanTau: Float32Array;
   slowNeuronShare: Float32Array;
 
+  /** Evolutionary activity of brain links, real and neutral shadow; see wiring.ts. */
+  wiringLive: Float32Array;
+  wiringShadowLive: Float32Array;
+  wiringActivity: Float32Array;
+  wiringShadowActivity: Float32Array;
+  wiringSurvival: Float32Array;
+  wiringShadowSurvival: Float32Array;
+
   /** Blocks moved per 1,000 ticks by each species, by species id. Not saved, like `species`. */
   blockMoves: Map<number, Float32Array>;
 
@@ -228,6 +236,12 @@ export const HISTORY_SERIES = [
   'plasticLinkShare',
   'meanTau',
   'slowNeuronShare',
+  'wiringLive',
+  'wiringShadowLive',
+  'wiringActivity',
+  'wiringShadowActivity',
+  'wiringSurvival',
+  'wiringShadowSurvival',
 ] as const;
 
 export interface Sample {
@@ -284,6 +298,12 @@ export interface Sample {
   plasticLinkShare: number;
   meanTau: number;
   slowNeuronShare: number;
+  wiringLive: number;
+  wiringShadowLive: number;
+  wiringActivity: number;
+  wiringShadowActivity: number;
+  wiringSurvival: number;
+  wiringShadowSurvival: number;
 }
 
 export function createHistory(interval: number, capacity: number): History {
@@ -344,6 +364,12 @@ export function createHistory(interval: number, capacity: number): History {
     plasticLinkShare: new Float32Array(capacity),
     meanTau: new Float32Array(capacity),
     slowNeuronShare: new Float32Array(capacity),
+    wiringLive: new Float32Array(capacity),
+    wiringShadowLive: new Float32Array(capacity),
+    wiringActivity: new Float32Array(capacity),
+    wiringShadowActivity: new Float32Array(capacity),
+    wiringSurvival: new Float32Array(capacity),
+    wiringShadowSurvival: new Float32Array(capacity),
     blockMoves: new Map(),
     species: new Map(),
     density: createDensityHistory(),
