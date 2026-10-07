@@ -248,6 +248,10 @@ export interface HistoryData {
   builtBlocks: Float32Array;
   shelteredShare: Float32Array;
   blockHolders: Float32Array;
+  meanPlasticity: Float32Array;
+  plasticLinkShare: Float32Array;
+  meanTau: Float32Array;
+  slowNeuronShare: Float32Array;
   /** Blocks moved per 1,000 ticks by the species that moved most, most first; the rest are summed under id 0. */
   blockMoves: { id: number; counts: Float32Array }[];
   /** Members of the largest species at every sample, largest first; the rest are summed under id 0. */

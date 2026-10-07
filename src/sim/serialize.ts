@@ -24,7 +24,7 @@ export const SAVE_VERSION = 15;
 /**
  * Oldest save this version still opens. Saves from 14 on load with the newer
  * fields at their neutral values (settings added since take their defaults,
- * neurons answer at once), so they play as they did before.
+ * neurons answer at once, links do not learn), so they play as they did before.
  */
 export const OLDEST_LOADABLE_VERSION = 14;
 
@@ -67,6 +67,8 @@ interface SavedBrain {
   hiddenIds: number[];
   /** Absent in saves made before neurons had time constants: all 1. */
   hiddenTau?: number[];
+  /** What the links have learned so far; only saved for a brain that can learn. */
+  liveWeights?: number[];
   activation: number[];
 }
 
@@ -122,6 +124,7 @@ export function saveWorld(world: World): SavedWorld {
     links: brain.links.map((link) => ({ ...link })),
     hiddenIds: brain.hiddenIds.slice(),
     hiddenTau: brain.hiddenTau.slice(),
+    ...(brain.plasticLinks.length > 0 ? { liveWeights: Array.from(brain.linkWeight) } : {}),
     activation: Array.from(brain.activation),
   }));
 
@@ -228,6 +231,7 @@ export function loadWorld(saved: SavedWorld): World {
       savedBrain.hiddenTau?.slice(),
     );
     brain.activation.set(savedBrain.activation);
+    if (savedBrain.liveWeights) brain.linkWeight.set(savedBrain.liveWeights);
     return brain;
   });
 

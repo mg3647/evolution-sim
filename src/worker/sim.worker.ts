@@ -381,6 +381,10 @@ function sendHistory(now: number): void {
     builtBlocks: h.builtBlocks.slice(0, h.count),
     shelteredShare: h.shelteredShare.slice(0, h.count),
     blockHolders: h.blockHolders.slice(0, h.count),
+    meanPlasticity: h.meanPlasticity.slice(0, h.count),
+    plasticLinkShare: h.plasticLinkShare.slice(0, h.count),
+    meanTau: h.meanTau.slice(0, h.count),
+    slowNeuronShare: h.slowNeuronShare.slice(0, h.count),
     blockMoves: [],
     species: [],
   };

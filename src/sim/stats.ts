@@ -83,6 +83,16 @@ export interface History {
   shelteredShare: Float32Array;
   blockHolders: Float32Array;
 
+  /**
+   * Brain features: mean learning rate over all enabled links, the share of
+   * enabled links that can learn at all, mean time constant over hidden
+   * neurons, and the share of hidden neurons that are slow (above 1).
+   */
+  meanPlasticity: Float32Array;
+  plasticLinkShare: Float32Array;
+  meanTau: Float32Array;
+  slowNeuronShare: Float32Array;
+
   /** Blocks moved per 1,000 ticks by each species, by species id. Not saved, like `species`. */
   blockMoves: Map<number, Float32Array>;
 
@@ -214,6 +224,10 @@ export const HISTORY_SERIES = [
   'builtBlocks',
   'shelteredShare',
   'blockHolders',
+  'meanPlasticity',
+  'plasticLinkShare',
+  'meanTau',
+  'slowNeuronShare',
 ] as const;
 
 export interface Sample {
@@ -266,6 +280,10 @@ export interface Sample {
   builtBlocks: number;
   shelteredShare: number;
   blockHolders: number;
+  meanPlasticity: number;
+  plasticLinkShare: number;
+  meanTau: number;
+  slowNeuronShare: number;
 }
 
 export function createHistory(interval: number, capacity: number): History {
@@ -322,6 +340,10 @@ export function createHistory(interval: number, capacity: number): History {
     builtBlocks: new Float32Array(capacity),
     shelteredShare: new Float32Array(capacity),
     blockHolders: new Float32Array(capacity),
+    meanPlasticity: new Float32Array(capacity),
+    plasticLinkShare: new Float32Array(capacity),
+    meanTau: new Float32Array(capacity),
+    slowNeuronShare: new Float32Array(capacity),
     blockMoves: new Map(),
     species: new Map(),
     density: createDensityHistory(),

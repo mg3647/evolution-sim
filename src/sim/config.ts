@@ -102,6 +102,13 @@ export interface SimConfig {
   tauChangeChance: number;
   tauChangeScale: number;
   maxNeuronTau: number;
+  /**
+   * Per birth: chance that each link's learning rate shifts, how far, and the
+   * highest rate. 0 is a fixed weight, as before; learning must evolve.
+   */
+  plasticityChangeChance: number;
+  plasticityChangeScale: number;
+  maxPlasticity: number;
   /** Energy a creature of size 1 spends per tick just staying alive. */
   upkeepCost: number;
   /** Share of upkeep that every body pays regardless of its size. */
@@ -401,6 +408,9 @@ export const defaultConfig: SimConfig = {
   tauChangeChance: 0.05,
   tauChangeScale: 0.5,
   maxNeuronTau: 20,
+  plasticityChangeChance: 0.03,
+  plasticityChangeScale: 0.01,
+  maxPlasticity: 0.05,
   upkeepCost: 0.12,
   upkeepFixedShare: 0.5,
   moveCost: 0.05,

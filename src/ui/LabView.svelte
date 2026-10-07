@@ -225,6 +225,26 @@
     ];
   });
 
+  const BRAIN_SERIES: ChartSeries[] = [
+    { label: 'Links that can learn %', color: '#7fd6c2' },
+    { label: 'Slow neurons %', color: '#c478ff' },
+  ];
+  const brainFeatureData = $derived.by<uPlot.AlignedData | null>(() => {
+    if (!history) return null;
+    return [
+      history.tick,
+      history.plasticLinkShare.map((share) => share * 100),
+      history.slowNeuronShare.map((share) => share * 100),
+    ];
+  });
+  const RATE_SERIES: ChartSeries[] = [
+    { label: 'Mean learning rate', color: '#e8c468' },
+    { label: 'Mean time constant (ticks)', color: '#6cb6ff', axis: 'right' },
+  ];
+  const rateData = $derived<uPlot.AlignedData | null>(
+    history && [history.tick, history.meanPlasticity, history.meanTau],
+  );
+
   const CARRY_SERIES: ChartSeries[] = [
     { label: 'Holding a stone or branch %', color: '#b0b0b6' },
     { label: 'Holding food %', color: '#e8d678' },
@@ -411,6 +431,19 @@
           data={lineData}
         />
         <Chart {events} title="Creatures and blocks" note="The share of creatures in or beside a block's cell, where there is shelter, and the share carrying one." series={SHELTER_SERIES} data={shelterData} />
+      </div>
+    </section>
+
+    <section class="card">
+      <h1>Learning and slow neurons</h1>
+      <p class="teaches">
+        Whether evolution has used two brain features that start switched off. A link that can learn strengthens
+        when the neurons at both ends are active together; a slow neuron changes gradually and so holds a state.
+        If the lines stay at zero, nothing was gained by them in this world.
+      </p>
+      <div class="charts">
+        <Chart title="How much of the brain uses them" series={BRAIN_SERIES} data={brainFeatureData} />
+        <Chart title="How strongly" series={RATE_SERIES} data={rateData} />
       </div>
     </section>
 

@@ -52,6 +52,10 @@ function sample(tick: number): Sample {
     builtBlocks: 0,
     shelteredShare: 0,
     blockHolders: 0,
+    meanPlasticity: 0,
+    plasticLinkShare: 0,
+    meanTau: 1,
+    slowNeuronShare: 0,
   };
 }
 

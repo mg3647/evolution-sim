@@ -99,6 +99,9 @@ export const OUTPUT_COUNT = 8;
 /** Neuron ids below this are inputs and outputs; hidden neurons come after. */
 const FIXED_NODES = INPUT_COUNT + OUTPUT_COUNT;
 
+/** Learning never pushes a weight's size past this. */
+const MAX_LIVE_WEIGHT = 4;
+
 const RAY_NAMES = ['left', 'ahead', 'right'];
 export const INPUT_LABELS: string[] = [
   ...RAY_NAMES.flatMap((ray) => [
@@ -163,6 +166,11 @@ export interface LinkGene {
   to: number;
   weight: number;
   enabled: boolean;
+  /**
+   * How fast the live weight follows the two neurons' activity during life
+   * (Hebbian learning). 0 keeps the weight fixed. Absent in older saves.
+   */
+  plasticity?: number;
 }
 
 export interface Brain {
@@ -182,6 +190,9 @@ export interface Brain {
   /** Current output of every neuron: inputs, then outputs, then hidden. */
   activation: Float32Array;
   sum: Float32Array;
+  /** Indices into the compiled links of those that can learn, and how fast each does. Empty for most brains. */
+  plasticLinks: Uint16Array;
+  plasticRate: Float32Array;
   /** Share of the way each neuron moves toward its new value per tick: 1 / time constant. */
   rate: Float32Array;
 }
@@ -267,6 +278,14 @@ function compile(links: LinkGene[], hiddenIds: number[], hiddenTau: number[]): B
     linkTo[k] = indexOf(link.to);
     linkWeight[k] = link.weight;
   });
+  const plastic: number[] = [];
+  const plasticRates: number[] = [];
+  enabled.forEach((link, k) => {
+    if ((link.plasticity ?? 0) > 0) {
+      plastic.push(k);
+      plasticRates.push(link.plasticity!);
+    }
+  });
   const nodes = FIXED_NODES + hiddenIds.length;
   // Inputs and outputs answer at once; only hidden neurons can be slow.
   const rate = new Float32Array(nodes).fill(1);
@@ -282,6 +301,8 @@ function compile(links: LinkGene[], hiddenIds: number[], hiddenTau: number[]): B
     linkWeight,
     activation: new Float32Array(nodes),
     sum: new Float32Array(nodes),
+    plasticLinks: Uint16Array.from(plastic),
+    plasticRate: Float32Array.from(plasticRates),
     rate,
   };
 }
@@ -312,6 +333,7 @@ function addLink(links: LinkGene[], from: number, to: number, rng: Rng, innovati
     to,
     weight: randomWeight(rng),
     enabled: true,
+    plasticity: 0,
   });
 }
 
@@ -369,10 +391,17 @@ export function mutateBrain(
         hiddenIds.splice(at, 0, node);
         hiddenTau.splice(at, 0, 1);
         links.push(
-          { innovation: innovations.linkId(split.from, node), from: split.from, to: node, weight: 1, enabled: true },
-          { innovation: innovations.linkId(node, split.to), from: node, to: split.to, weight: split.weight, enabled: true },
+          { innovation: innovations.linkId(split.from, node), from: split.from, to: node, weight: 1, enabled: true, plasticity: 0 },
+          { innovation: innovations.linkId(node, split.to), from: node, to: split.to, weight: split.weight, enabled: true, plasticity: split.plasticity ?? 0 },
         );
       }
+    }
+  }
+
+  for (const link of links) {
+    if (rng.chance(config.plasticityChangeChance)) {
+      const shifted = (link.plasticity ?? 0) + rng.gaussian() * config.plasticityChangeScale;
+      link.plasticity = Math.fround(Math.min(config.maxPlasticity, Math.max(0, shifted)));
     }
   }
 
@@ -404,6 +433,16 @@ export function think(brain: Brain): void {
     const target = Math.tanh(sum[n]!);
     const r = rate[n]!;
     activation[n] = r >= 1 ? target : activation[n]! + (target - activation[n]!) * r;
+  }
+  // Learning: a link whose two ends are active together strengthens (or, if one
+  // end is negative, weakens). The live weight never grows past the limit, but
+  // a weight already beyond it is left alone. Children start from the genes.
+  const { plasticLinks, plasticRate } = brain;
+  for (let p = 0; p < plasticLinks.length; p++) {
+    const k = plasticLinks[p]!;
+    const old = linkWeight[k]!;
+    const next = old + plasticRate[p]! * activation[linkFrom[k]!]! * activation[linkTo[k]!]!;
+    linkWeight[k] = Math.abs(next) > MAX_LIVE_WEIGHT && Math.abs(next) > Math.abs(old) ? old : next;
   }
 }
 

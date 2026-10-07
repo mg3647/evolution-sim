@@ -169,6 +169,8 @@ export const SETTING_GROUPS: SettingGroup[] = [
       { key: 'addLinkChance', label: 'Chance of a new brain link', hint: 'Chance, at each birth, that the child’s brain gains a link', more: 'Higher makes behaviour change faster, and brains grow unless links are costly.', min: 0, max: 0.5, step: 0.01 },
       { key: 'addNeuronChance', label: 'Chance of a new neuron', hint: 'Chance, at each birth, that the child’s brain gains a hidden neuron', min: 0, max: 0.2, step: 0.005 },
       { key: 'tauChangeChance', label: 'Chance a neuron gets slower or faster', hint: 'Chance, at each birth, that each hidden neuron’s time constant shifts', more: 'A neuron with a time constant of 1 follows its inputs at once. A larger one changes slowly, so it can hold a state for many ticks: a mood, a plan, or a count.', min: 0, max: 0.5, step: 0.01 },
+      { key: 'plasticityChangeChance', label: 'Chance a link can learn', hint: 'Chance, at each birth, that each brain link’s learning rate shifts', more: 'A link with a learning rate above 0 strengthens when the neurons at both ends are active together, so a creature can adapt during its life. What it learns is not passed to its young; only the learning rate is.', min: 0, max: 0.3, step: 0.01 },
+      { key: 'maxPlasticity', label: 'Fastest learning rate', hint: 'The highest rate at which a link can learn', min: 0, max: 0.2, step: 0.005 },
       { key: 'maxNeuronTau', label: 'Slowest neuron (ticks)', hint: 'The longest time constant a hidden neuron can evolve', min: 1, max: 100, step: 1 },
     ],
   },

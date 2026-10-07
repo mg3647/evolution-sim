@@ -920,6 +920,10 @@ function sampleHistory(world: World): void {
   let foodHolders = 0;
   let blockHolders = 0;
   let sheltered = 0;
+  let plasticityTotal = 0;
+  let plasticLinks = 0;
+  let tauTotal = 0;
+  let slowNeurons = 0;
   for (let i = 0; i < creatures.count; i++) {
     if (creatures.diet[i]! > 0.5) meatEaters++;
     const held = creatures.held[i]!;
@@ -929,6 +933,13 @@ function sampleHistory(world: World): void {
     if (world.plants.nearBlocks[cellIndexAt(world.plants, creatures.x[i]!, creatures.y[i]!)]! > 0) sheltered++;
     links += enabledLinks(creatures.brain[i]!);
     neurons += creatures.brain[i]!.hiddenIds.length;
+    const brain = creatures.brain[i]!;
+    plasticLinks += brain.plasticLinks.length;
+    for (let k = 0; k < brain.plasticRate.length; k++) plasticityTotal += brain.plasticRate[k]!;
+    for (const tau of brain.hiddenTau) {
+      tauTotal += tau;
+      if (tau > 1) slowNeurons++;
+    }
   }
   const count = Math.max(1, creatures.count);
   const meanSize = meanOf(creatures.size, creatures);
@@ -998,6 +1009,10 @@ function sampleHistory(world: World): void {
     builtBlocks: built,
     shelteredShare: sheltered / count,
     blockHolders,
+    meanPlasticity: links > 0 ? plasticityTotal / links : 0,
+    plasticLinkShare: links > 0 ? plasticLinks / links : 0,
+    meanTau: neurons > 0 ? tauTotal / neurons : 1,
+    slowNeuronShare: neurons > 0 ? slowNeurons / neurons : 0,
     tick: world.tick,
     population: creatures.count,
     plantFill: world.plantCapacityTotal > 0 ? totalPlantEnergy(world.plants) / world.plantCapacityTotal : 0,
@@ -1124,6 +1139,8 @@ export function hashWorld(world: World): number {
     h = hashBytes(h, bytesOf(brain.linkTo));
     h = hashBytes(h, bytesOf(brain.activation));
     h = hashBytes(h, bytesOf(new Float32Array(brain.hiddenTau)));
+    h = hashBytes(h, bytesOf(brain.linkWeight));
+    h = hashBytes(h, bytesOf(brain.plasticRate));
   }
   return h >>> 0;
 }

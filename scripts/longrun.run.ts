@@ -83,6 +83,13 @@ interface Summary {
   holdingStone: number;
   holdingBranch: number;
   holdingFood: number;
+  /** Brain features, averaged over the samples: mean learning rate over all links, the share of links that can learn, mean time constant, and the share of slow neurons. */
+  meanPlasticity: number;
+  plasticLinkShare: number;
+  meanTau: number;
+  slowNeuronShare: number;
+  /** At the end: for the largest species, members, mean learning rate over their links, and the share of their links that can learn. */
+  speciesLearning: { id: number; members: number; meanPlasticity: number; plasticShare: number }[];
   haulDistance: number;
   /**
    * Breeding: births per creature per 1,000 ticks, the mean age at death,
@@ -308,6 +315,11 @@ function run(seed: string): Summary {
     holdingStone: heldSum[Held.Stone]! / samples,
     holdingBranch: heldSum[Held.Branch]! / samples,
     holdingFood: (heldSum[Held.Plants]! + heldSum[Held.Meat]!) / samples,
+    meanPlasticity: mean(world.history.meanPlasticity, world.history.tick, world.history.count, from),
+    plasticLinkShare: mean(world.history.plasticLinkShare, world.history.tick, world.history.count, from),
+    meanTau: mean(world.history.meanTau, world.history.tick, world.history.count, from),
+    slowNeuronShare: mean(world.history.slowNeuronShare, world.history.tick, world.history.count, from),
+    speciesLearning: speciesLearning(world),
     haulDistance:
       (world.carry.haul - carryBefore.haul) /
       Math.max(
@@ -337,6 +349,30 @@ function mean(series: Float32Array, ticks: Float64Array, count: number, from: nu
     used++;
   }
   return used > 0 ? total / used : 0;
+}
+
+/** For the five largest species alive now: how much of their wiring can learn. */
+function speciesLearning(world: ReturnType<typeof createWorld>): Summary['speciesLearning'] {
+  const tally = new Map<number, { members: number; links: number; plastic: number; rate: number }>();
+  const { creatures } = world;
+  for (let i = 0; i < creatures.count; i++) {
+    const t = tally.get(creatures.species[i]!) ?? { members: 0, links: 0, plastic: 0, rate: 0 };
+    const brain = creatures.brain[i]!;
+    t.members++;
+    t.links += brain.linkWeight.length;
+    t.plastic += brain.plasticLinks.length;
+    for (const r of brain.plasticRate) t.rate += r;
+    tally.set(creatures.species[i]!, t);
+  }
+  return [...tally.entries()]
+    .sort((a, b) => b[1].members - a[1].members)
+    .slice(0, 5)
+    .map(([id, t]) => ({
+      id,
+      members: t.members,
+      meanPlasticity: t.links > 0 ? t.rate / t.links : 0,
+      plasticShare: t.links > 0 ? t.plastic / t.links : 0,
+    }));
 }
 
 const percent = (share: number) => `${Math.round(share * 100)}%`;
@@ -378,6 +414,14 @@ it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
     console.log(
       `    blocks: pushes=${s.blockPushes.toFixed(2)}/creature/kt setDowns=${s.blockSetDowns.toFixed(3)}/creature/kt holding=${(s.holdingBlock * 100).toFixed(2)}% shelteredCreatures=${percent(s.shelteredCreatures)} shelteredLand=${percent(s.shelteredLand)} longestLine=${s.longestLine} builtShare=${percent(s.builtShare)}`,
     );
+    console.log(
+      `    brains: learningRate=${s.meanPlasticity.toFixed(4)} linksThatLearn=${percent(s.plasticLinkShare)} meanTau=${s.meanTau.toFixed(2)} slowNeurons=${percent(s.slowNeuronShare)}`,
+    );
+    for (const sp of s.speciesLearning) {
+      console.log(
+        `      species ${sp.id}: members=${sp.members} learningRate=${sp.meanPlasticity.toFixed(4)} linksThatLearn=${percent(sp.plasticShare)}`,
+      );
+    }
     for (const [k, b] of s.biomes.entries()) {
       console.log(
         `    ${BIOME_LABELS[k]!.padEnd(10)} land=${percent(b.land)} creatures=${percent(b.share)} occupied=${percent(b.occupied)} fur=${b.fur.toFixed(2)} size=${b.size.toFixed(2)} speed=${b.speed.toFixed(2)} diet=${b.diet.toFixed(2)}`,

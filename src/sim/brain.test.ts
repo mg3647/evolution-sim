@@ -31,6 +31,7 @@ function only(overrides: Partial<SimConfig>): SimConfig {
     addNeuronChance: 0,
     toggleLinkChance: 0,
     tauChangeChance: 0,
+    plasticityChangeChance: 0,
     ...overrides,
   };
 }
@@ -288,5 +289,71 @@ describe('slow neurons', () => {
     }
     expect(seen.size).toBeGreaterThan(5);
     expect(parent.hiddenTau).toEqual([5]);
+  });
+});
+
+describe('learning', () => {
+  /** Input 0 feeds output 0 with weight 0.5; the link learns at the given rate. */
+  function learner(plasticity: number, weight = 0.5): Brain {
+    const links = [{ innovation: 0, from: 0, to: INPUT_COUNT, weight, enabled: true, plasticity }];
+    return compileBrain(links, []);
+  }
+
+  it('keeps a fixed weight when the learning rate is 0', () => {
+    const brain = learner(0);
+    brain.activation[0] = 1;
+    for (let i = 0; i < 50; i++) think(brain);
+    expect(brain.linkWeight[0]).toBe(0.5);
+    expect(brain.plasticLinks).toHaveLength(0);
+  });
+
+  it('strengthens a link whose ends are active together, and weakens it when they disagree', () => {
+    const together = learner(0.02);
+    together.activation[0] = 1;
+    for (let i = 0; i < 20; i++) think(together);
+    expect(together.linkWeight[0]!).toBeGreaterThan(0.5);
+
+    const apart = learner(0.02, -0.5);
+    apart.activation[0] = 1;
+    for (let i = 0; i < 20; i++) think(apart);
+    // Input +1 and output negative: the weight moves further negative, as Hebb's rule says.
+    expect(apart.linkWeight[0]!).toBeLessThan(-0.5);
+  });
+
+  it('never learns a weight past the limit, and leaves the inherited weight alone', () => {
+    const brain = learner(0.05, 3.9);
+    brain.activation[0] = 1;
+    for (let i = 0; i < 500; i++) think(brain);
+    expect(brain.linkWeight[0]!).toBeLessThanOrEqual(4);
+    expect(brain.links[0]!.weight).toBe(3.9);
+  });
+
+  it('does not pass what was learned to the young, but does pass the learning rate', () => {
+    const innovations = new Innovations();
+    const rng = new Rng('baldwin');
+    const parent = learner(0.03);
+    parent.activation[0] = 1;
+    for (let i = 0; i < 100; i++) think(parent);
+    expect(parent.linkWeight[0]!).toBeGreaterThan(0.6);
+    const child = mutateBrain(parent, 0.1, rng, innovations, only({}));
+    expect(child.linkWeight[0]).toBe(0.5);
+    expect(child.links[0]!.plasticity).toBeCloseTo(0.03, 6);
+    expect(child.plasticLinks).toHaveLength(1);
+  });
+
+  it('mutates learning rates within 0 and the maximum', () => {
+    const innovations = new Innovations();
+    const rng = new Rng('plast');
+    const cfg = only({ plasticityChangeChance: 1, plasticityChangeScale: 0.05, maxPlasticity: 0.04 });
+    let brain = learner(0.02);
+    const seen = new Set<number>();
+    for (let i = 0; i < 200; i++) {
+      brain = mutateBrain(brain, 0.1, rng, innovations, cfg);
+      const rate = brain.links[0]!.plasticity!;
+      seen.add(rate);
+      expect(rate).toBeGreaterThanOrEqual(0);
+      expect(rate).toBeLessThanOrEqual(Math.fround(0.04));
+    }
+    expect(seen.size).toBeGreaterThan(5);
   });
 });
