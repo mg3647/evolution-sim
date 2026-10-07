@@ -329,6 +329,42 @@ describe('learning', () => {
     expect(brain.links[0]!.weight).toBe(3.9);
   });
 
+  it('pulls a learned weight back toward the inherited one when decay is on, and settles in between', () => {
+    const brain = learner(0.02);
+    brain.activation[0] = 1;
+    for (let i = 0; i < 400; i++) think(brain, 0.02);
+    // Gain per tick is rate x input x output; the pull balances it a little above the inherited weight.
+    expect(brain.linkWeight[0]!).toBeGreaterThan(0.5);
+    expect(brain.linkWeight[0]!).toBeLessThan(1.5);
+    // With nothing to learn from, it returns to the inherited weight.
+    brain.activation[0] = 0;
+    for (let i = 0; i < 1000; i++) think(brain, 0.02);
+    expect(brain.linkWeight[0]!).toBeCloseTo(0.5, 2);
+  });
+
+  it('lets the Learn output speed learning up, leave it, or reverse it', () => {
+    const after = (learnWeight: number | null): number => {
+      const links = [
+        { innovation: 0, from: 0, to: INPUT_COUNT, weight: 0.5, enabled: true, plasticity: 0.02 },
+        ...(learnWeight === null
+          ? []
+          : [{ innovation: 1, from: Input.Bias, to: INPUT_COUNT + Output.Learn, weight: learnWeight, enabled: true, plasticity: 0 }]),
+      ];
+      const brain = compileBrain(links, []);
+      brain.activation[0] = 1;
+      brain.activation[Input.Bias] = 1;
+      for (let i = 0; i < 20; i++) think(brain);
+      return brain.linkWeight[0]!;
+    };
+    const unwired = after(null);
+    expect(unwired).toBeGreaterThan(0.5);
+    // Learn at zero (a link of weight 0) is the same as no Learn link at all.
+    expect(after(0)).toBeCloseTo(unwired, 6);
+    expect(after(4)).toBeGreaterThan(unwired);
+    // Strongly negative: learning runs backwards, so the weight falls below where it started.
+    expect(after(-4)).toBeLessThan(0.5);
+  });
+
   it('does not pass what was learned to the young, but does pass the learning rate', () => {
     const innovations = new Innovations();
     const rng = new Rng('baldwin');

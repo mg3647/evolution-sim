@@ -12,6 +12,8 @@ export interface Creatures {
   id: Uint32Array;
   /** Id of the parent, or 0 for a creature with no parent. */
   parentId: Uint32Array;
+  /** Id of the other parent if it had two (it was born of mating), otherwise 0. */
+  otherParentId: Uint32Array;
   /** 0 for a creature with no parent, otherwise the parent's generation plus one. */
   generation: Uint32Array;
   /** Id of the parentless creature this one descends from; its own id if it has no parent. */
@@ -37,6 +39,12 @@ export interface Creatures {
   sick: Int32Array;
   /** 1 if the creature called on its last turn; others hear it on the next tick. */
   calling: Uint8Array;
+  /** Energy at its last turn, for working out how its energy has changed. */
+  energyLast: Float64Array;
+  /** Smoothed change in its energy, as a share of its maximum per tick; the Energy trend sense. */
+  trend: Float32Array;
+  /** How brightly it is displaying, 0 to 1; others see it. */
+  display: Float32Array;
   /** What it is holding; see Held. */
   held: Uint8Array;
   /** Energy of the food it is holding; 0 unless it holds food. */
@@ -67,6 +75,7 @@ export const HELD_LABELS: string[] = ['nothing', 'a branch', 'a stone', 'plant f
 const FIELDS = [
   'id',
   'parentId',
+  'otherParentId',
   'generation',
   'founder',
   'species',
@@ -81,6 +90,9 @@ const FIELDS = [
   'pain',
   'sick',
   'calling',
+  'energyLast',
+  'trend',
+  'display',
   'held',
   'heldEnergy',
   'heldFromX',
@@ -106,6 +118,8 @@ export interface SpawnOptions {
   shadow?: number[];
   age?: number;
   parentId?: number;
+  /** The second parent's id, for a child of two. */
+  otherParentId?: number;
   generation?: number;
   /** Id of the founding ancestor; the creature itself if not given. */
   founder?: number;
@@ -121,6 +135,7 @@ export function createCreatures(capacity: number): Creatures {
     nextId: 1,
     id: new Uint32Array(capacity),
     parentId: new Uint32Array(capacity),
+    otherParentId: new Uint32Array(capacity),
     generation: new Uint32Array(capacity),
     founder: new Uint32Array(capacity),
     species: new Uint32Array(capacity),
@@ -135,6 +150,9 @@ export function createCreatures(capacity: number): Creatures {
     pain: new Float32Array(capacity),
     sick: new Int32Array(capacity),
     calling: new Uint8Array(capacity),
+    energyLast: new Float64Array(capacity),
+    trend: new Float32Array(capacity),
+    display: new Float32Array(capacity),
     held: new Uint8Array(capacity),
     heldEnergy: new Float64Array(capacity),
     heldFromX: new Float32Array(capacity),
@@ -173,6 +191,7 @@ export function spawnCreature(c: Creatures, options: SpawnOptions): number {
   const i = c.count++;
   c.id[i] = c.nextId++;
   c.parentId[i] = options.parentId ?? 0;
+  c.otherParentId[i] = options.otherParentId ?? 0;
   c.generation[i] = options.generation ?? 0;
   c.founder[i] = options.founder ?? c.id[i]!;
   c.species[i] = options.species ?? 0;
@@ -187,6 +206,9 @@ export function spawnCreature(c: Creatures, options: SpawnOptions): number {
   c.pain[i] = 0;
   c.sick[i] = 0;
   c.calling[i] = 0;
+  c.energyLast[i] = options.energy;
+  c.trend[i] = 0;
+  c.display[i] = 0;
   c.held[i] = 0;
   c.heldEnergy[i] = 0;
   c.heldFromX[i] = 0;

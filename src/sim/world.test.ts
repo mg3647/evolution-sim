@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { compileBrain, Input, INPUT_COUNT, Output } from './brain';
 import { defaultConfig, type SimConfig } from './config';
 import { maxEnergyFor } from './genome';
 import { wrappedDelta } from './geometry';
@@ -187,6 +188,10 @@ describe('fighting', () => {
   it('kills, and leaves the body and its store behind as meat', () => {
     // Nothing to eat but each other, and no rot, so every death can be accounted for.
     const world = createWorld({ ...smallConfig, plantCapacity: 0, meatDecayRate: 0, attackDamage: 1, ...noReseed });
+    // Every creature bites whenever it can, so the test does not depend on what random wiring turns up.
+    world.creatures.brain = world.creatures.brain.map(() =>
+      compileBrain([{ innovation: 0, from: Input.Bias, to: INPUT_COUNT + Output.Attack, weight: 3, enabled: true }], []),
+    );
     let killed = 0;
     for (let i = 0; i < 400 && killed === 0; i++) {
       step(world);
@@ -282,6 +287,15 @@ describe('history', () => {
     const { plants } = world;
     for (let cell = 0; cell < plants.walls.length; cell++) {
       if ((cell % plants.cols) % 2 === 1) plants.walls[cell] = 1;
+    }
+    // Founders were placed before the walls went up: step any that stand in one out of it,
+    // since a child born to a parent stuck in a wall may rightly share its cell.
+    {
+      const { creatures: c } = world;
+      for (let i = 0; i < c.count; i++) {
+        const cx = Math.min(plants.cols - 1, Math.floor(c.x[i]! / plants.cellWidth));
+        if (cx % 2 === 1) c.x[i] = c.x[i]! - plants.cellWidth;
+      }
     }
     const seen = new Set<number>();
     let births = 0;

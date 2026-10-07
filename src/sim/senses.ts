@@ -17,6 +17,8 @@ const CROWD_FULL = 8;
 const PAIN_FULL = 0.3;
 /** A temperature difference of a tenth between here and the end of sight reads as fully warmer or colder. */
 const WARMER_GAIN = 10;
+/** A steady gain of two percent of its maximum energy per tick reads as fully rising. */
+const TREND_GAIN = 50;
 
 /**
  * Fills a brain's inputs with what a creature perceives. Vision is three
@@ -153,6 +155,7 @@ export class Senses {
       inputs[o + Ray.Hurt] = 0;
       inputs[o + Ray.ColourWarm] = 0;
       inputs[o + Ray.ColourGreen] = 0;
+      inputs[o + Ray.Display] = 0;
       this.nearest[ray] = Infinity;
     }
 
@@ -231,6 +234,7 @@ export class Senses {
       inputs[Input.Temperature] = 0;
       inputs[Input.WarmerAhead] = 0;
     }
+    inputs[Input.EnergyTrend] = Math.max(-1, Math.min(1, creatures.trend[i]! * TREND_GAIN));
     inputs[Input.Bias] = 1;
   }
 
@@ -298,6 +302,7 @@ export class Senses {
     const colour = TWO_PI * creatures.hue[j]!;
     inputs[o + Ray.ColourWarm] = Math.cos(colour);
     inputs[o + Ray.ColourGreen] = Math.sin(colour);
+    inputs[o + Ray.Display] = creatures.display[j]!;
     if (!config.socialSenses) return;
     // Plant-eaters read below zero and meat-eaters above, so neither looks like "nobody there".
     inputs[o + Ray.MeatEater] = creatures.diet[j]! * 2 - 1;

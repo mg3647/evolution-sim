@@ -40,8 +40,10 @@ export const Ray = {
   Items: 13,
   /** A block along the ray, stronger when nearer. Walls read on their own input. */
   Block: 14,
+  /** How brightly it is displaying (see the Display output); 0 if it is not, or if nobody is there. */
+  Display: 15,
 } as const;
-export const INPUTS_PER_RAY = 15;
+export const INPUTS_PER_RAY = 16;
 
 const AFTER_RAYS = RAY_COUNT * INPUTS_PER_RAY;
 export const Input = {
@@ -89,12 +91,31 @@ export const Input = {
   HoldingFood: AFTER_RAYS + 23,
   /** 1 while it is carrying a block. */
   HoldingBlock: AFTER_RAYS + 24,
-  Bias: AFTER_RAYS + 25,
+  /** Whether its energy has lately been rising (above zero) or falling (below): a smoothed reward signal. */
+  EnergyTrend: AFTER_RAYS + 25,
+  Bias: AFTER_RAYS + 26,
 } as const;
-export const INPUT_COUNT = AFTER_RAYS + 26;
+export const INPUT_COUNT = AFTER_RAYS + 27;
 
-export const Output = { Turn: 0, Thrust: 1, Reproduce: 2, Attack: 3, Emit: 4, Call: 5, Give: 6, Hold: 7 } as const;
-export const OUTPUT_COUNT = 8;
+export const Output = {
+  Turn: 0,
+  Thrust: 1,
+  Reproduce: 2,
+  Attack: 3,
+  Emit: 4,
+  Call: 5,
+  Give: 6,
+  Hold: 7,
+  /** At or above zero it is willing to mate with a willing creature in reach. */
+  Mate: 8,
+  /** Scales and signs how fast its links learn: 0 leaves learning as it is, 1 triples it, -1 reverses it. */
+  Learn: 9,
+  /** Below -0.5 it does not eat; at or above, it eats what is underfoot as before. */
+  Eat: 10,
+  /** Above zero it shows a bright signal to others, at a cost in energy. */
+  Display: 11,
+} as const;
+export const OUTPUT_COUNT = 12;
 
 /** Neuron ids below this are inputs and outputs; hidden neurons come after. */
 const FIXED_NODES = INPUT_COUNT + OUTPUT_COUNT;
@@ -120,6 +141,7 @@ export const INPUT_LABELS: string[] = [
     `Fire ${ray}`,
     `Branch or stone ${ray}`,
     `Block ${ray}`,
+    `Display ${ray}`,
   ]),
   'Creature behind',
   'Crowding',
@@ -146,6 +168,7 @@ export const INPUT_LABELS: string[] = [
   'Holding stone or branch',
   'Holding food',
   'Holding a block',
+  'Energy trend',
   'Bias',
 ];
 export const OUTPUT_LABELS: string[] = [
@@ -157,6 +180,10 @@ export const OUTPUT_LABELS: string[] = [
   'Call',
   'Give',
   'Hold',
+  'Mate',
+  'Learn',
+  'Eat',
+  'Display',
 ];
 
 export interface LinkGene {
@@ -193,6 +220,8 @@ export interface Brain {
   /** Indices into the compiled links of those that can learn, and how fast each does. Empty for most brains. */
   plasticLinks: Uint16Array;
   plasticRate: Float32Array;
+  /** The inherited weight of each of those links, which the live weight is pulled back toward. */
+  plasticBase: Float32Array;
   /** Share of the way each neuron moves toward its new value per tick: 1 / time constant. */
   rate: Float32Array;
 }
@@ -280,10 +309,12 @@ function compile(links: LinkGene[], hiddenIds: number[], hiddenTau: number[]): B
   });
   const plastic: number[] = [];
   const plasticRates: number[] = [];
+  const plasticBases: number[] = [];
   enabled.forEach((link, k) => {
     if ((link.plasticity ?? 0) > 0) {
       plastic.push(k);
       plasticRates.push(link.plasticity!);
+      plasticBases.push(link.weight);
     }
   });
   const nodes = FIXED_NODES + hiddenIds.length;
@@ -303,6 +334,7 @@ function compile(links: LinkGene[], hiddenIds: number[], hiddenTau: number[]): B
     sum: new Float32Array(nodes),
     plasticLinks: Uint16Array.from(plastic),
     plasticRate: Float32Array.from(plasticRates),
+    plasticBase: Float32Array.from(plasticBases),
     rate,
   };
 }
@@ -421,9 +453,11 @@ export function mutateBrain(
  * `activation[INPUT_COUNT..)` after. Every neuron reads the values from the
  * previous tick, so a signal crosses one link per tick. A hidden neuron with
  * a time constant above 1 moves only part of the way to its new value each
- * tick, so it changes slowly and keeps a memory of what came before.
+ * tick, so it changes slowly and keeps a memory of what came before. `decay`
+ * is the share of the gap between a learning link's live and inherited weight
+ * that closes each tick.
  */
-export function think(brain: Brain): void {
+export function think(brain: Brain, decay = 0): void {
   const { activation, sum, linkFrom, linkTo, linkWeight, rate } = brain;
   for (let n = INPUT_COUNT; n < sum.length; n++) sum[n] = 0;
   for (let k = 0; k < linkWeight.length; k++) {
@@ -435,13 +469,21 @@ export function think(brain: Brain): void {
     activation[n] = r >= 1 ? target : activation[n]! + (target - activation[n]!) * r;
   }
   // Learning: a link whose two ends are active together strengthens (or, if one
-  // end is negative, weakens). The live weight never grows past the limit, but
-  // a weight already beyond it is left alone. Children start from the genes.
-  const { plasticLinks, plasticRate } = brain;
+  // end is negative, weakens), scaled by the Learn output (1 + 2 x its value, so
+  // an unwired Learn leaves it as it was and a negative one unlearns), and every
+  // live weight is pulled back toward the weight it was born with. The live
+  // weight never grows past the limit, but a weight already beyond it is left
+  // alone. Children start from the genes.
+  const { plasticLinks, plasticRate, plasticBase } = brain;
+  if (plasticLinks.length === 0) return;
+  const modulation = 1 + 2 * activation[INPUT_COUNT + Output.Learn]!;
   for (let p = 0; p < plasticLinks.length; p++) {
     const k = plasticLinks[p]!;
     const old = linkWeight[k]!;
-    const next = old + plasticRate[p]! * activation[linkFrom[k]!]! * activation[linkTo[k]!]!;
+    const next =
+      old +
+      modulation * plasticRate[p]! * activation[linkFrom[k]!]! * activation[linkTo[k]!]! -
+      decay * (old - plasticBase[p]!);
     linkWeight[k] = Math.abs(next) > MAX_LIVE_WEIGHT && Math.abs(next) > Math.abs(old) ? old : next;
   }
 }

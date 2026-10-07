@@ -250,6 +250,8 @@ const KIN_HUE = 0.1;
 
 /** Health value that marks a creature struck down by an event this tick. */
 const STRUCK = -2;
+/** Share of the newest change in its energy that enters the smoothed trend each turn. */
+const TREND_SMOOTHING = 0.2;
 
 /** Add a creature with no parent at a random position. Returns the energy it embodies. */
 function spawnFounder(world: World, age: number): number {
@@ -380,10 +382,15 @@ export function step(world: World): void {
     const brain = creatures.brain[i]!;
 
     // Sense, then think. Outputs are in [-1, 1].
+    // How its energy has moved since its last turn, smoothed, is what it senses as a trend.
+    creatures.trend[i] =
+      creatures.trend[i]! * (1 - TREND_SMOOTHING) +
+      ((creatures.energy[i]! - creatures.energyLast[i]!) / maxEnergyFor(size, config)) * TREND_SMOOTHING;
+    creatures.energyLast[i] = creatures.energy[i]!;
     world.senses.sense(creatures, i, world.tick, brain.activation);
     const hurt = creatures.pain[i]! > 0;
     creatures.pain[i] = 0;
-    think(brain);
+    think(brain, config.plasticityDecay);
     const turn = brain.activation[INPUT_COUNT + Output.Turn]! * config.maxTurn;
     let thrust = (brain.activation[INPUT_COUNT + Output.Thrust]! + 1) / 2;
     thrustTotal += thrust;
@@ -394,6 +401,10 @@ export function step(world: World): void {
     const calling = brain.activation[INPUT_COUNT + Output.Call]! > 0;
     const giving = brain.activation[INPUT_COUNT + Output.Give]! > 0;
     const holding = brain.activation[INPUT_COUNT + Output.Hold]! > 0;
+    // Eating is on unless the brain shuts it off, so a brain that never uses the output eats as before.
+    const eating = brain.activation[INPUT_COUNT + Output.Eat]! >= -0.5;
+    const display = Math.max(0, brain.activation[INPUT_COUNT + Output.Display]!);
+    creatures.display[i] = display;
     creatures.calling[i] = calling ? 1 : 0;
     const sick = updateInfection(world, i);
     const diet = creatures.diet[i]!;
@@ -480,7 +491,7 @@ export function step(world: World): void {
     }
     const maxEnergy = maxEnergyFor(size, config);
     let energy = creatures.energy[i]!;
-    let mouthful = biteFor(size, config) * (1 - config.eatSlowdown * thrust);
+    let mouthful = eating ? biteFor(size, config) * (1 - config.eatSlowdown * thrust) : 0;
     const meatRate = config.meatBiteScale * meatDigestion(diet);
     const meatBite = Math.max(0, Math.min(mouthful * meatRate, plants.meat[cell]!, maxEnergy - energy));
     plants.meat[cell]! -= meatBite;
@@ -581,6 +592,7 @@ export function step(world: World): void {
         (attacking ? config.attackCost * size * size : 0) +
         (emitting ? config.scentCost : 0) +
         (calling ? config.callCost : 0) +
+        config.displayCost * display +
         (land.moveCost - 1) * moveCostFor(size, speed, thrust, config) +
         // In or beside a block's cell there is shelter from the heat and the cold.
         climateCostFor(felt, size, creatures.fur[i]!, config) * (plants.nearBlocks[cell]! > 0 ? 1 - config.shelter : 1) +
