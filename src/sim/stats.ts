@@ -114,6 +114,46 @@ export interface History {
   species: Map<number, Float32Array>;
   /** Where creatures have been; see DensityHistory. Not saved either. */
   density: DensityHistory;
+  /** Which species fills each diet and speed combination; see BehaviourHistory. Not saved either. */
+  behaviour: BehaviourHistory;
+}
+
+/** Cells along each axis of the behaviour map: diet from plants to meat, and speed from slow to fast. */
+export const BEHAVIOUR_DIET_BINS = 10;
+export const BEHAVIOUR_SPEED_BINS = 10;
+
+/**
+ * A map of body type against species, in the manner of the quality-diversity
+ * "map of elites": for each combination of diet and speed, how many
+ * creature-samples each species has contributed over the whole run. It is a
+ * way of looking at the population, not something that selects it: filled
+ * cells in many colours mean many kinds of creature, in many species.
+ */
+export interface BehaviourHistory {
+  /** Species counts per cell, cell = speedBin * BEHAVIOUR_DIET_BINS + dietBin. */
+  cells: Map<number, number>[];
+}
+
+export function createBehaviourHistory(): BehaviourHistory {
+  return { cells: Array.from({ length: BEHAVIOUR_DIET_BINS * BEHAVIOUR_SPEED_BINS }, () => new Map()) };
+}
+
+/** Count every creature into its cell of the behaviour map. Speed is binned on a log scale between the limits. */
+export function recordBehaviour(
+  behaviour: BehaviourHistory,
+  creatures: Creatures,
+  minSpeed: number,
+  maxSpeed: number,
+): void {
+  const span = Math.log(maxSpeed / minSpeed);
+  for (let i = 0; i < creatures.count; i++) {
+    const d = Math.min(BEHAVIOUR_DIET_BINS - 1, Math.floor(creatures.diet[i]! * BEHAVIOUR_DIET_BINS));
+    const along = span > 0 ? Math.log(creatures.speed[i]! / minSpeed) / span : 0;
+    const v = Math.min(BEHAVIOUR_SPEED_BINS - 1, Math.max(0, Math.floor(along * BEHAVIOUR_SPEED_BINS)));
+    const cell = behaviour.cells[v * BEHAVIOUR_DIET_BINS + d]!;
+    const species = creatures.species[i]!;
+    cell.set(species, (cell.get(species) ?? 0) + 1);
+  }
 }
 
 /** Side of the grid that density is counted on, in cells. */
@@ -379,6 +419,7 @@ export function createHistory(interval: number, capacity: number): History {
     blockMoves: new Map(),
     species: new Map(),
     density: createDensityHistory(),
+    behaviour: createBehaviourHistory(),
   };
 }
 

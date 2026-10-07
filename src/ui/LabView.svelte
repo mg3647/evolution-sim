@@ -9,6 +9,7 @@
   import type { HistoryData, LabData, ProfileGroup } from '../worker/protocol';
   import BrainCompare from './BrainCompare.svelte';
   import Chart, { type ChartEvent, type ChartSeries } from './Chart.svelte';
+  import BehaviourMap from './BehaviourMap.svelte';
   import DensityMap from './DensityMap.svelte';
   import DietHistogram from './DietHistogram.svelte';
 
@@ -346,6 +347,18 @@
       </p>
       {#if lab}
         <DensityMap grid={lab.density.grid} frames={lab.density.frames} ticks={lab.density.ticks} />
+      {/if}
+    </section>
+
+    <section class="card">
+      <h1>Kinds of creature</h1>
+      <p class="teaches">
+        Every combination of diet and speed that has existed, coloured by the species that filled it most. Many
+        coloured cells spread across the grid mean the world holds many kinds of creature; one blob means one
+        way of living. This only describes the population, it does not select for variety.
+      </p>
+      {#if lab}
+        <BehaviourMap dietBins={lab.behaviour.dietBins} speedBins={lab.behaviour.speedBins} cells={lab.behaviour.cells} />
       {/if}
     </section>
 

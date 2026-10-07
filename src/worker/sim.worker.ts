@@ -7,7 +7,7 @@ import { maxEnergyFor, temperatureStress } from '../sim/genome';
 import { cellIndexAt, temperatureAt } from '../sim/plants';
 import { RESTART_KEYS } from '../sim/presets';
 import { brainProfile } from '../sim/profile';
-import { DENSITY_GRID } from '../sim/stats';
+import { BEHAVIOUR_DIET_BINS, BEHAVIOUR_SPEED_BINS, DENSITY_GRID } from '../sim/stats';
 import { wrappedDelta } from '../sim/geometry';
 import { loadWorld, saveWorld, type SavedWorld } from '../sim/serialize';
 import { applyTool, clearWorldWalls, triggerWorldEvent, type World } from '../sim/world';
@@ -538,6 +538,23 @@ function sendLab(): void {
   const density = world.history.density;
   const lab: LabData = {
     dietBins,
+    behaviour: {
+      dietBins: BEHAVIOUR_DIET_BINS,
+      speedBins: BEHAVIOUR_SPEED_BINS,
+      cells: world.history.behaviour.cells.map((counts) => {
+        let samples = 0;
+        let species = 0;
+        let most = 0;
+        for (const [id, n] of counts) {
+          samples += n;
+          if (n > most) {
+            most = n;
+            species = id;
+          }
+        }
+        return { species, share: samples > 0 ? most / samples : 0, samples };
+      }),
+    },
     density: { grid: DENSITY_GRID, frames: density.frames.map((frame) => frame.slice()), ticks: density.ticks.slice() },
     biomes,
     tick: world.tick,

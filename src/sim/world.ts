@@ -101,7 +101,7 @@ import { buildSound, createSoundField, type SoundField } from './sound';
 import { SpatialHash } from './spatialHash';
 import { classifySpecies, createSpeciesState, type SpeciesState } from './species';
 import { createWiringTally, sampleWiring, type WiringTally } from './wiring';
-import { createHistory, meanOf, recordDensity, recordSample, spreadOf, type History } from './stats';
+import { createHistory, meanOf, recordBehaviour, recordDensity, recordSample, spreadOf, type History } from './stats';
 
 export interface World {
   config: SimConfig;
@@ -1004,6 +1004,7 @@ function sampleHistory(world: World): void {
     speciesCounts.set(creatures.species[i]!, (speciesCounts.get(creatures.species[i]!) ?? 0) + 1);
   }
   recordDensity(world.history.density, creatures, world.config.worldWidth, world.config.worldHeight, world.tick);
+  recordBehaviour(world.history.behaviour, creatures, world.config.minSpeed, world.config.maxSpeed);
   // Blocks moved since the previous sample, in all and by each species, as rates.
   const movesBySpecies = new Map<number, number>();
   let moves = 0;

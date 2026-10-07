@@ -328,6 +328,11 @@ export interface LabData {
   dietBins: number[];
   /** Where creatures have been: a square grid of counts per stretch of the run, oldest first. */
   density: { grid: number; frames: Float32Array[]; ticks: number[] };
+  /**
+   * For each cell of the diet-by-speed map (row = speed, slow first; column = diet, plants first), the species
+   * that has filled it most often over the run, and the cell's total creature-samples. Species 0 is the smaller ones lumped together.
+   */
+  behaviour: { dietBins: number; speedBins: number; cells: { species: number; share: number; samples: number }[] };
   tick: number;
   population: number;
   /** How many parentless creatures the world has had, and how many still have living descendants. */
