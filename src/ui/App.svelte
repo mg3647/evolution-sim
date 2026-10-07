@@ -85,9 +85,46 @@
   let lab = $state.raw<LabData | null>(null);
   /** Whether the full-screen Lab view is open. */
   let showLab = $state(false);
-  let seed = $state(defaultConfig.seed);
+  /** Where the settings are kept between visits. */
+  const SETTINGS_STORE = 'evolution-sim.settings';
+
+  /**
+   * The settings left by the last visit, over today's defaults. Only values
+   * that differ from the defaults are kept, so a default that changes in a
+   * later version reaches everyone who never touched it.
+   */
+  function rememberedSettings(): SimConfig {
+    const settings = { ...defaultConfig };
+    try {
+      const kept = JSON.parse(localStorage.getItem(SETTINGS_STORE) ?? '{}') as Record<string, unknown>;
+      const known = settings as unknown as Record<string, unknown>;
+      for (const [key, value] of Object.entries(kept)) {
+        // Anything unknown, or of the wrong kind, is left behind.
+        if (key in known && typeof value === typeof known[key]) known[key] = value;
+      }
+    } catch {
+      // Nothing remembered, or the browser will not say: start from the defaults.
+    }
+    return settings;
+  }
+
+  function rememberSettings(settings: SimConfig): void {
+    const changed: Record<string, unknown> = {};
+    for (const key of Object.keys(defaultConfig) as (keyof SimConfig)[]) {
+      if (settings[key] !== defaultConfig[key]) changed[key] = settings[key];
+    }
+    try {
+      localStorage.setItem(SETTINGS_STORE, JSON.stringify(changed));
+    } catch {
+      // A browser that will not store them just forgets them.
+    }
+  }
+
+  const remembered = rememberedSettings();
+  let seed = $state(remembered.seed);
   /** The settings in force. Restart-only ones take effect at the next restart. */
-  let settings = $state<SimConfig>({ ...defaultConfig });
+  let settings = $state<SimConfig>(remembered);
+  $effect(() => rememberSettings({ ...settings, seed }));
   /** Set when a world is loaded from a file, so the settings follow the file's. */
   let adoptLoadedSettings = false;
   let showScent = $state(false);
@@ -196,6 +233,20 @@
   function changeSetting(key: keyof SimConfig, value: number) {
     settings = { ...settings, [key]: value };
     if (!RESTART_KEYS.has(key)) client?.setConfig({ [key]: value });
+  }
+
+  function restartWorld() {
+    client?.init({ ...settings, seed });
+  }
+
+  /** Put every setting back to its default. Those a running world can take are applied at once. */
+  function resetSettings() {
+    settings = { ...defaultConfig, seed };
+    const live: Partial<SimConfig> = {};
+    for (const key of Object.keys(defaultConfig) as (keyof SimConfig)[]) {
+      if (!RESTART_KEYS.has(key)) (live as Record<string, unknown>)[key] = defaultConfig[key];
+    }
+    client?.setConfig(live);
   }
 
   function applyPreset(preset: Preset) {
@@ -423,7 +474,14 @@
         <h2>Settings</h2>
         <button class="drawer-close" onclick={() => (showSettingsDrawer = false)} type="button" aria-label="Close settings">✕</button>
       </div>
-      <SettingsPanel config={settings} onChange={changeSetting} onPreset={applyPreset} />
+      <SettingsPanel
+        config={settings}
+        running={snapshot?.config ?? null}
+        onChange={changeSetting}
+        onPreset={applyPreset}
+        onRestart={restartWorld}
+        onReset={resetSettings}
+      />
     </div>
   {/if}
 

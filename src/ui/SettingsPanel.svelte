@@ -6,6 +6,9 @@
     config,
     onChange,
     onPreset,
+    running,
+    onRestart,
+    onReset,
   }: {
     /** The settings in force, or about to be on the next restart. */
     config: SimConfig;
@@ -13,7 +16,47 @@
     onChange: (key: keyof SimConfig, value: number) => void;
     /** Called when a preset is chosen; it replaces every setting and restarts the world. */
     onPreset: (preset: Preset) => void;
+    /** The settings the running world was made with, or null before there is one. */
+    running: SimConfig | null;
+    /** Called to start a new world with the settings as they stand. */
+    onRestart: () => void;
+    /** Called to put every setting back to its default. */
+    onReset: () => void;
   } = $props();
+
+  /** Whether the user has been asked to confirm replacing their changes with a preset, or resetting them. */
+  let confirming = $state<'preset' | 'reset' | null>(null);
+
+  /** A setting that only takes effect at a restart, and whose value here is not the running world's. */
+  const isWaiting = (key: keyof SimConfig) => running !== null && RESTART_KEYS.has(key) && config[key] !== running[key];
+  /** Every setting, with or without a slider, that is waiting for a restart. */
+  const waitingTotal = $derived(
+    running === null ? 0 : [...RESTART_KEYS].filter((key) => key !== 'seed' && config[key] !== running[key]).length,
+  );
+  /** Every setting, with or without a slider, that is off its default. */
+  const changedEverywhere = $derived(
+    (Object.keys(defaultConfig) as (keyof SimConfig)[]).filter(
+      (key) => key !== 'seed' && config[key] !== defaultConfig[key],
+    ).length,
+  );
+
+  function loadPreset() {
+    if (changedEverywhere > 0 && confirming !== 'preset') {
+      confirming = 'preset';
+      return;
+    }
+    confirming = null;
+    onPreset(preset);
+  }
+
+  function resetAll() {
+    if (confirming !== 'reset') {
+      confirming = 'reset';
+      return;
+    }
+    confirming = null;
+    onReset();
+  }
 
   let presetId = $state(PRESETS[0]!.id);
   const preset = $derived(PRESETS.find((p) => p.id === presetId) ?? PRESETS[0]!);
@@ -72,18 +115,52 @@
   );
 </script>
 
+<section class="apply">
+  <button class="primary" onclick={onRestart} title="Start a new world using the settings as they stand in this panel">
+    Restart with these settings
+  </button>
+  <p>
+    {#if waitingTotal > 0}
+      <b class="waiting-count">{waitingTotal}</b>
+      {waitingTotal === 1 ? 'setting is' : 'settings are'} waiting for a restart. The running world still uses the
+      old {waitingTotal === 1 ? 'value' : 'values'}.
+    {:else}
+      Nothing is waiting: the running world already uses every setting shown here.
+    {/if}
+  </p>
+  <p>Your settings are remembered in this browser and come back when you reopen the page.</p>
+  <div class="reset">
+    <button onclick={resetAll} disabled={changedEverywhere === 0}>Reset all to defaults</button>
+    {#if confirming === 'reset'}
+      <span class="confirm">
+        This puts your {changedEverywhere} changed {changedEverywhere === 1 ? 'setting' : 'settings'} back to default.
+        <button onclick={resetAll}>Reset</button>
+        <button onclick={() => (confirming = null)}>Cancel</button>
+      </span>
+    {/if}
+  </div>
+</section>
+
 <section>
   <h2>Presets</h2>
   <div class="preset">
-    <select bind:value={presetId} aria-label="Preset">
+    <select bind:value={presetId} aria-label="Preset" onchange={() => (confirming = null)}>
       {#each PRESETS as p (p.id)}
         <option value={p.id}>{p.label}</option>
       {/each}
     </select>
-    <button onclick={() => onPreset(preset)} title="Replace every setting with this preset and start a new world">
-      Apply and restart
+    <button onclick={loadPreset} title="Replace every setting with this preset and start a new world">
+      Load preset
     </button>
   </div>
+  {#if confirming === 'preset'}
+    <p class="confirm">
+      This replaces your {changedEverywhere} changed {changedEverywhere === 1 ? 'setting' : 'settings'} and starts a new
+      world.
+      <button onclick={loadPreset}>Replace them</button>
+      <button onclick={() => (confirming = null)}>Cancel</button>
+    </p>
+  {/if}
   <p>{preset.description}</p>
 </section>
 
@@ -100,7 +177,8 @@
   </label>
   <p class="note">
     Click <span class="info-demo">i</span> beside a setting for what it does. Most settings take effect at once;
-    those marked <span class="restart">restart</span> apply the next time you press Restart. A value in
+    those marked <span class="restart">restart</span> apply to the next world, and show
+    <span class="restart waiting">waiting for restart</span> until you restart. A value in
     <span class="accent">colour</span> has been moved off its default.
   </p>
 </section>
@@ -128,7 +206,11 @@
             i
           </button>
           <span class="name">
-            {setting.label}{#if restart}<span class="restart">restart</span>{/if}
+            {setting.label}{#if isWaiting(setting.key)}<span
+                class="restart waiting"
+                title="The running world still uses {format(running?.[setting.key] as number)}. Press Restart with these settings to use {format(config[setting.key] as number)}."
+                >waiting for restart</span
+              >{:else if restart}<span class="restart">restart</span>{/if}
           </span>
           <input
             type="range"
@@ -152,6 +234,11 @@
               {format(setting.max)} ·
               {restart ? 'applies on the next restart' : 'applies at once'}
             </p>
+            {#if isWaiting(setting.key)}
+              <p class="facts waiting-note">
+                Waiting for a restart: the running world still uses {format(running?.[setting.key] as number)}.
+              </p>
+            {/if}
             {#if isChanged(setting.key)}
               <button onclick={() => onChange(setting.key, defaultConfig[setting.key] as number)}>
                 Back to default
@@ -351,6 +438,41 @@
   .accent {
     color: var(--accent);
     font-weight: 600;
+  }
+
+  .restart.waiting {
+    border-color: #e8c468;
+    color: #e8c468;
+  }
+
+  .waiting-count,
+  .explainer .waiting-note {
+    color: #e8c468;
+  }
+
+  .primary {
+    width: 100%;
+    padding: 6px 10px;
+    font-weight: 600;
+  }
+
+  .reset {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    font-size: 12px;
+  }
+
+  .confirm {
+    color: var(--text);
+    font-size: 12px;
+  }
+
+  .confirm button {
+    margin-left: 4px;
+    font-size: 12px;
   }
 
   .explainer {
