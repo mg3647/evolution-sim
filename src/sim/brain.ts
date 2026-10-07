@@ -38,8 +38,10 @@ export const Ray = {
   Fire: 12,
   /** A branch or stone lying along the ray, stronger when nearer. */
   Items: 13,
+  /** A block along the ray, stronger when nearer. Walls read on their own input. */
+  Block: 14,
 } as const;
-export const INPUTS_PER_RAY = 14;
+export const INPUTS_PER_RAY = 15;
 
 const AFTER_RAYS = RAY_COUNT * INPUTS_PER_RAY;
 export const Input = {
@@ -85,9 +87,11 @@ export const Input = {
   HoldingTool: AFTER_RAYS + 22,
   /** How much food it is holding, up to 1 for a full load. */
   HoldingFood: AFTER_RAYS + 23,
-  Bias: AFTER_RAYS + 24,
+  /** 1 while it is carrying a block. */
+  HoldingBlock: AFTER_RAYS + 24,
+  Bias: AFTER_RAYS + 25,
 } as const;
-export const INPUT_COUNT = AFTER_RAYS + 25;
+export const INPUT_COUNT = AFTER_RAYS + 26;
 
 export const Output = { Turn: 0, Thrust: 1, Reproduce: 2, Attack: 3, Emit: 4, Call: 5, Give: 6, Hold: 7 } as const;
 export const OUTPUT_COUNT = 8;
@@ -112,6 +116,7 @@ export const INPUT_LABELS: string[] = [
     `Green or violet ${ray}`,
     `Fire ${ray}`,
     `Branch or stone ${ray}`,
+    `Block ${ray}`,
   ]),
   'Creature behind',
   'Crowding',
@@ -137,6 +142,7 @@ export const INPUT_LABELS: string[] = [
   'Stored food underfoot',
   'Holding stone or branch',
   'Holding food',
+  'Holding a block',
   'Bias',
 ];
 export const OUTPUT_LABELS: string[] = [

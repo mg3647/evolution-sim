@@ -166,8 +166,14 @@ export interface Snapshot {
   items: Uint8Array;
   /** Wildfires started since the world began, cells burned in all, and cells burning now. */
   fires: { started: number; cellsBurned: number; burning: number };
+  // Per cell: 0 for no block, 1 for a block nobody has moved, 2 for one a creature has moved.
+  blocks: Uint8Array;
+  // Per cell: for a moved block, the species of the creature that last moved it.
+  blockSpecies: Uint32Array;
+  /** Blocks in the world, how many a creature has moved, pushes and set-downs since the world began, and the longest straight run of moved blocks. */
+  blockInfo: { total: number; built: number; pushed: number; setDown: number; longestLine: number };
   /** Creatures holding each kind of thing right now, and carrying totals since the world began. */
-  holding: { branch: number; stone: number; food: number };
+  holding: { branch: number; stone: number; food: number; block: number };
   carry: { pickups: number; plantsDropped: number; meatDropped: number; haul: number };
   environment: EnvironmentView;
 
@@ -237,6 +243,13 @@ export interface HistoryData {
   shareForaging: Float32Array;
   shareChasing: Float32Array;
   shareFleeing: Float32Array;
+  blockMoveRate: Float32Array;
+  longestBuiltLine: Float32Array;
+  builtBlocks: Float32Array;
+  shelteredShare: Float32Array;
+  blockHolders: Float32Array;
+  /** Blocks moved per 1,000 ticks by the species that moved most, most first; the rest are summed under id 0. */
+  blockMoves: { id: number; counts: Float32Array }[];
   /** Members of the largest species at every sample, largest first; the rest are summed under id 0. */
   species: { id: number; counts: Float32Array }[];
 }

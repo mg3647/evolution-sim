@@ -47,6 +47,11 @@ function sample(tick: number): Sample {
     shareForaging: 0,
     shareChasing: 0,
     shareFleeing: 0,
+    blockMoveRate: 0,
+    longestBuiltLine: 0,
+    builtBlocks: 0,
+    shelteredShare: 0,
+    blockHolders: 0,
   };
 }
 

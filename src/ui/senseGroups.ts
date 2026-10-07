@@ -9,7 +9,7 @@ export const SENSE_GROUP_HINTS: Record<SenseGroup, string> = {
   Social: 'What it can tell about other creatures: kin, size, diet, colour, scent and calls',
   Body: 'Its own state: energy, health, thirst, age, pain and sickness',
   Climate: 'Season, daylight, temperature, water and fire',
-  Items: 'Stones, branches and stored food, on the ground and in its grip',
+  Items: 'Stones, branches, blocks and stored food, on the ground and in its grip',
 };
 
 /** What each ray reports, by its place within the ray's block of inputs. */
@@ -28,6 +28,7 @@ const RAY_GROUPS: Record<number, SenseGroup> = {
   [Ray.ColourGreen]: 'Social',
   [Ray.Fire]: 'Climate',
   [Ray.Items]: 'Items',
+  [Ray.Block]: 'Items',
 };
 
 const OTHER_GROUPS: Record<number, SenseGroup> = {
@@ -55,6 +56,7 @@ const OTHER_GROUPS: Record<number, SenseGroup> = {
   [Input.StoreUnderfoot]: 'Items',
   [Input.HoldingTool]: 'Items',
   [Input.HoldingFood]: 'Items',
+  [Input.HoldingBlock]: 'Items',
   [Input.Bias]: 'Body',
 };
 

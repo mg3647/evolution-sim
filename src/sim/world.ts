@@ -10,6 +10,18 @@ import {
   think,
 } from './brain';
 import { BIOME_TRAITS } from './biomes';
+import {
+  addBlock,
+  canHoldBlock,
+  createBlockTally,
+  freeCellNear,
+  isSolid,
+  longestBuiltLine,
+  pushBlock,
+  removeBlock,
+  scatterBlocks,
+  type BlockTally,
+} from './blocks';
 import type { SimConfig } from './config';
 import {
   createCreatures,
@@ -121,6 +133,10 @@ export interface World {
   defended: number;
   /** Wildfires so far, and how much is burning now. */
   fires: FireTally;
+  /** What creatures have done with blocks since the world was created. */
+  blockTally: BlockTally;
+  /** Blocks moved since the last history sample, by the species of the mover. */
+  blockMoves: Record<number, number>;
   /**
    * Carrying since the world was created: things picked up, plant food and
    * meat set down (as energy), and the distance food was carried, weighted
@@ -236,7 +252,8 @@ function spawnFounder(world: World, age: number): number {
   // Founders start on dry land where there is any; a few tries is plenty.
   let x = rng.range(0, config.worldWidth);
   let y = rng.range(0, config.worldHeight);
-  for (let tries = 0; tries < 20 && world.plants.water[cellIndexAt(world.plants, x, y)] === 1; tries++) {
+  const taken = (at: number) => world.plants.water[at] === 1 || world.plants.blocks[at] === 1;
+  for (let tries = 0; tries < 20 && taken(cellIndexAt(world.plants, x, y)); tries++) {
     x = rng.range(0, config.worldWidth);
     y = rng.range(0, config.worldHeight);
   }
@@ -276,6 +293,8 @@ export function createWorld(config: SimConfig): World {
     reseeded: 0,
     defended: 0,
     fires: createFireTally(),
+    blockTally: createBlockTally(),
+    blockMoves: {},
     carry: { pickups: 0, plantsDropped: 0, meatDropped: 0, haul: 0 },
     parents: { count: 0, size: 0, speed: 0, sensorRange: 0, diet: 0 },
     social: { calling: 0, calls: 0, given: 0, givenToKin: 0 },
@@ -291,6 +310,7 @@ export function createWorld(config: SimConfig): World {
   };
 
   scatterItems(plants, config, rng);
+  scatterBlocks(plants, config, rng);
   for (let i = 0; i < config.initialCreatures; i++) {
     // Spread starting ages so the founders don't all die of old age at once.
     spawnFounder(world, rng.int(0, Math.floor(config.maxAge / 2)));
@@ -331,7 +351,7 @@ export function step(world: World): void {
   );
   burn(plants, config, world.rng, ledger, world.fires);
   decayMeat(plants, config.meatDecayRate, ledger);
-  spoilStores(plants, config.storeDecay, ledger);
+  spoilStores(plants, config.storeDecay, ledger, config.shelter);
   spreadScent(env, plants, config);
   world.hash.build(creatures.x, creatures.y, creatures.count);
   world.social.calling = buildSound(world.sound, creatures);
@@ -407,21 +427,34 @@ export function step(world: World): void {
       strideFor(size, speed, config) *
       thrust *
       (swimming ? config.swimSpeed : 1) *
-      (creatures.held[i] !== Held.Nothing ? 1 - config.carrySlow : 1);
+      (creatures.held[i] === Held.Block
+        ? 1 - config.blockWeight
+        : creatures.held[i] !== Held.Nothing
+          ? 1 - config.carrySlow
+          : 1);
     creatures.heading[i] = heading;
     // Rounded to stored precision first, so the cell checked is the cell it lands in.
     const toX = Math.fround(wrap(creatures.x[i]! + Math.cos(heading) * distance, config.worldWidth));
     const toY = Math.fround(wrap(creatures.y[i]! + Math.sin(heading) * distance, config.worldHeight));
     const fromX = creatures.x[i]!;
     const fromY = creatures.y[i]!;
-    // A wall stops a creature entering its cell; one already inside may walk
-    // out. A blocked creature slides along the wall instead of stopping dead.
-    if (plants.walls[cellIndexAt(plants, toX, toY)] === 0 || plants.walls[cellIndexAt(plants, fromX, fromY)] === 1) {
+    // A wall or a block stops a creature entering its cell; one already
+    // inside may walk out. Walking into a block shoves it one cell on if
+    // there is room beyond. A creature that is stopped slides along the
+    // obstacle instead of stopping dead.
+    const fromCell = cellIndexAt(plants, fromX, fromY);
+    const toCell = cellIndexAt(plants, toX, toY);
+    if (!isSolid(plants, toCell) || isSolid(plants, fromCell)) {
       creatures.x[i] = toX;
       creatures.y[i] = toY;
-    } else if (plants.walls[cellIndexAt(plants, toX, fromY)] === 0) {
+    } else if (pushBlock(plants, fromCell, toCell, creatures.species[i]!)) {
       creatures.x[i] = toX;
-    } else if (plants.walls[cellIndexAt(plants, fromX, toY)] === 0) {
+      creatures.y[i] = toY;
+      world.blockTally.pushed++;
+      world.blockMoves[creatures.species[i]!] = (world.blockMoves[creatures.species[i]!] ?? 0) + 1;
+    } else if (!isSolid(plants, cellIndexAt(plants, toX, fromY))) {
+      creatures.x[i] = toX;
+    } else if (!isSolid(plants, cellIndexAt(plants, fromX, toY))) {
       creatures.y[i] = toY;
     }
 
@@ -458,11 +491,15 @@ export function step(world: World): void {
     // Hold: pick up what is underfoot when empty-handed (a stone, else a
     // branch, else a load of meat, else of plants), and keep hold of it.
     // Letting go sets it down here: food becomes a store that slowly spoils.
+    // A block is grabbed from the cell it is facing, and set down there too.
     const held = creatures.held[i]!;
     if (holding && held === Held.Nothing) {
       const load = biteFor(size, config) * config.carryMouthfuls;
       const least = biteFor(size, config);
-      if (plants.stones[cell]! > 0) {
+      const front = cellInFront(world, i);
+      if (front !== cell && removeBlock(plants, front)) {
+        creatures.held[i] = Held.Block;
+      } else if (plants.stones[cell]! > 0) {
         plants.stones[cell]!--;
         creatures.held[i] = Held.Stone;
       } else if (plants.branches[cell]! > 0 && plants.fire[cell] === 0) {
@@ -485,6 +522,15 @@ export function step(world: World): void {
         world.carry.pickups++;
         creatures.heldFromX[i] = creatures.x[i]!;
         creatures.heldFromY[i] = creatures.y[i]!;
+      }
+    } else if (!holding && held === Held.Block) {
+      // Only where there is room: otherwise it keeps hold.
+      const front = cellInFront(world, i);
+      if (front !== cell && canHoldBlock(plants, front)) {
+        addBlock(plants, front, creatures.species[i]!, true);
+        creatures.held[i] = Held.Nothing;
+        world.blockTally.setDown++;
+        world.blockMoves[creatures.species[i]!] = (world.blockMoves[creatures.species[i]!] ?? 0) + 1;
       }
     } else if (!holding && held !== Held.Nothing) {
       setDown(world, i, cell);
@@ -527,7 +573,8 @@ export function step(world: World): void {
         (emitting ? config.scentCost : 0) +
         (calling ? config.callCost : 0) +
         (land.moveCost - 1) * moveCostFor(size, speed, thrust, config) +
-        climateCostFor(felt, size, creatures.fur[i]!, config) +
+        // In or beside a block's cell there is shelter from the heat and the cold.
+        climateCostFor(felt, size, creatures.fur[i]!, config) * (plants.nearBlocks[cell]! > 0 ? 1 - config.shelter : 1) +
         defenseCostFor(size, creatures.defense[i]!, config) +
         senseCostFor(creatures.sensorRange[i]!, config) +
         brainCost(brain, config));
@@ -622,12 +669,27 @@ export function step(world: World): void {
   if (world.tick % world.history.interval === 0) sampleHistory(world);
 }
 
+/** The cell one cell's length ahead of creature i, the way it is heading. */
+function cellInFront(world: World, i: number): number {
+  const { creatures, plants, config } = world;
+  const heading = creatures.heading[i]!;
+  return cellIndexAt(
+    plants,
+    wrap(creatures.x[i]! + Math.cos(heading) * plants.cellWidth, config.worldWidth),
+    wrap(creatures.y[i]! + Math.sin(heading) * plants.cellHeight, config.worldHeight),
+  );
+}
+
 /** Creature i lets go of what it holds, into the cell it stands on. */
 function setDown(world: World, i: number, cell: number): void {
   const { creatures, plants, config } = world;
   const held = creatures.held[i]!;
   const energy = creatures.heldEnergy[i]!;
-  if (held === Held.Stone) {
+  if (held === Held.Block) {
+    // A block falls where its carrier fell, or beside it; with no room at all it is lost.
+    const at = freeCellNear(plants, cell);
+    if (at >= 0) addBlock(plants, at, creatures.species[i]!, true);
+  } else if (held === Held.Stone) {
     if (plants.stones[cell]! < 255) plants.stones[cell]!++;
   } else if (held === Held.Branch) {
     if (plants.branches[cell]! < 255) plants.branches[cell]!++;
@@ -703,7 +765,7 @@ export function triggerWorldEvent(world: World, kind: EventKind): void {
 }
 
 /** Tools the user applies at a point, or along a drag, on the map. */
-export type ToolKind = 'meteor' | 'plague' | 'wall' | 'erase' | 'fertilise' | 'blight' | 'fire' | 'rain';
+export type ToolKind = 'meteor' | 'plague' | 'wall' | 'erase' | 'fertilise' | 'blight' | 'fire' | 'rain' | 'block';
 
 /**
  * Apply a hand tool. (x, y) is where the pointer is now; (fromX, fromY) is
@@ -746,8 +808,21 @@ export function applyTool(
       infected++;
     }
     noteOutbreak(env, world.tick, infected);
+  } else if (tool === 'block') {
+    // One block under the pointer, where there is room for it.
+    const cell = cellIndexAt(plants, wrap(x, config.worldWidth), wrap(y, config.worldHeight));
+    if (canHoldBlock(plants, cell)) addBlock(plants, cell);
   } else if (tool === 'wall' || tool === 'erase') {
     wallLine(plants, config, fromX, fromY, x, y, tool === 'wall' ? 1 : 0);
+    // Erasing takes blocks away along the same line.
+    if (tool === 'erase') {
+      const steps = Math.max(1, Math.ceil(Math.hypot(x - fromX, y - fromY) / (plants.cellWidth / 2)));
+      for (let k = 0; k <= steps; k++) {
+        const px = wrap(fromX + ((x - fromX) * k) / steps, config.worldWidth);
+        const py = wrap(fromY + ((y - fromY) * k) / steps, config.worldHeight);
+        removeBlock(plants, cellIndexAt(plants, px, py));
+      }
+    }
   } else {
     paintFertility(env, plants, config, x, y, config.brushRadius, tool === 'fertilise' ? 1 : 0);
     world.plantCapacityTotal = applyFertility(plants, config, world.ledger);
@@ -789,8 +864,8 @@ function giveBirth(world: World, parent: number, energy: number): number {
   const gap = config.creatureRadius * (creatures.size[parent]! + genes.size);
   let childX = wrap(creatures.x[parent]! + Math.cos(behind) * gap, config.worldWidth);
   let childY = wrap(creatures.y[parent]! + Math.sin(behind) * gap, config.worldHeight);
-  // Not into a wall, though: a child born inside one could walk out the far side.
-  if (world.plants.walls[cellIndexAt(world.plants, childX, childY)] === 1) {
+  // Not into a wall or a block, though: a child born inside one could walk out the far side.
+  if (isSolid(world.plants, cellIndexAt(world.plants, childX, childY))) {
     childX = creatures.x[parent]!;
     childY = creatures.y[parent]!;
   }
@@ -843,11 +918,15 @@ function sampleHistory(world: World): void {
   let meatEaters = 0;
   let toolHolders = 0;
   let foodHolders = 0;
+  let blockHolders = 0;
+  let sheltered = 0;
   for (let i = 0; i < creatures.count; i++) {
     if (creatures.diet[i]! > 0.5) meatEaters++;
     const held = creatures.held[i]!;
     if (held === Held.Stone || held === Held.Branch) toolHolders++;
+    else if (held === Held.Block) blockHolders++;
     else if (held !== Held.Nothing) foodHolders++;
+    if (world.plants.nearBlocks[cellIndexAt(world.plants, creatures.x[i]!, creatures.y[i]!)]! > 0) sheltered++;
     links += enabledLinks(creatures.brain[i]!);
     neurons += creatures.brain[i]!.hiddenIds.length;
   }
@@ -883,6 +962,17 @@ function sampleHistory(world: World): void {
     speciesCounts.set(creatures.species[i]!, (speciesCounts.get(creatures.species[i]!) ?? 0) + 1);
   }
   recordDensity(world.history.density, creatures, world.config.worldWidth, world.config.worldHeight, world.tick);
+  // Blocks moved since the previous sample, in all and by each species, as rates.
+  const movesBySpecies = new Map<number, number>();
+  let moves = 0;
+  for (const [species, moved] of Object.entries(world.blockMoves)) {
+    movesBySpecies.set(Number(species), (moved * 1000) / elapsed);
+    moves += moved;
+  }
+  // A species that moved some before and none now still needs its zero.
+  for (const id of world.history.blockMoves.keys()) if (!movesBySpecies.has(id)) movesBySpecies.set(id, 0);
+  let built = 0;
+  for (let cell = 0; cell < world.plants.blockBuilt.length; cell++) built += world.plants.blockBuilt[cell]!;
 
   recordSample(world.history, {
     deathsStarved: perThousand(deaths.starved, then.starved),
@@ -903,6 +993,11 @@ function sampleHistory(world: World): void {
     shareForaging: lab.foraging / acted,
     shareChasing: lab.chasing / acted,
     shareFleeing: lab.fleeing / acted,
+    blockMoveRate: (moves * 1000) / elapsed,
+    longestBuiltLine: longestBuiltLine(world.plants),
+    builtBlocks: built,
+    shelteredShare: sheltered / count,
+    blockHolders,
     tick: world.tick,
     population: creatures.count,
     plantFill: world.plantCapacityTotal > 0 ? totalPlantEnergy(world.plants) / world.plantCapacityTotal : 0,
@@ -929,7 +1024,8 @@ function sampleHistory(world: World): void {
     spreadDiet,
     spreadFur: spreadOf(creatures.fur, creatures),
     spreadDefense: spreadOf(creatures.defense, creatures),
-  }, speciesCounts);
+  }, speciesCounts, movesBySpecies);
+  world.blockMoves = {};
   world.parents = { count: 0, size: 0, speed: 0, sensorRange: 0, diet: 0 };
   lab.sampledAt = world.tick;
   lab.deathsThen = { ...deaths };
@@ -982,6 +1078,9 @@ export function hashWorld(world: World): number {
   h = hashBytes(h, bytesOf(plants.capacity));
   h = hashBytes(h, bytesOf(plants.scent));
   h = hashBytes(h, plants.walls);
+  h = hashBytes(h, plants.blocks);
+  h = hashBytes(h, bytesOf(plants.blockSpecies));
+  h = hashBytes(h, plants.blockBuilt);
   h = hashBytes(h, bytesOf(plants.store));
   h = hashBytes(h, plants.branches);
   h = hashBytes(h, plants.stones);

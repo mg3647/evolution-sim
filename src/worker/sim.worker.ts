@@ -41,6 +41,8 @@ const SPECIES_SHOWN = 8;
 const FOUNDERS_SHOWN = 12;
 /** Species drawn separately in the stream chart; smaller ones are summed. */
 const STREAM_SPECIES = 12;
+/** Species drawn separately in the chart of blocks moved. */
+const BLOCK_SPECIES = 8;
 
 let runner: SimRunner | null = null;
 let loopTimer: ReturnType<typeof setTimeout> | null = null;
@@ -164,7 +166,7 @@ function sendSnapshot(now: number): void {
   let dietTotal = 0;
   let furTotal = 0;
   let defenseTotal = 0;
-  const holding = { branch: 0, stone: 0, food: 0 };
+  const holding = { branch: 0, stone: 0, food: 0, block: 0 };
   let meatEaters = 0;
   let infected = 0;
   let maxGeneration = 0;
@@ -192,6 +194,7 @@ function sendSnapshot(now: number): void {
     defenseTotal += c.defense[i]!;
     if (c.held[i] === Held.Branch) holding.branch++;
     else if (c.held[i] === Held.Stone) holding.stone++;
+    else if (c.held[i] === Held.Block) holding.block++;
     else if (c.held[i] !== Held.Nothing) holding.food++;
     if (c.diet[i]! > 0.5) meatEaters++;
     sizeTotal += size;
@@ -209,7 +212,17 @@ function sendSnapshot(now: number): void {
   const fire = new Uint8Array(cells);
   const ash = new Uint8Array(cells);
   const items = new Uint8Array(cells);
+  const blocks = new Uint8Array(cells);
+  const blockSpecies = new Uint32Array(cells);
+  let blockTotal = 0;
+  let blockBuilt = 0;
+  for (let i = 0; i < p.blocks.length; i++) {
+    blockTotal += p.blocks[i]!;
+    blockBuilt += p.blockBuilt[i]!;
+  }
   for (let i = 0; i < cells; i++) {
+    blocks[i] = p.blocks[i]! + p.blockBuilt[i]!;
+    blockSpecies[i] = p.blockSpecies[i]!;
     fire[i] = p.fire[i]! > 0 ? 1 : 0;
     ash[i] = p.ash[i]! * 255;
     items[i] = (p.branches[i]! > 0 ? 1 : 0) | (p.stones[i]! > 0 ? 2 : 0) | (p.store[i]! >= 1 ? 4 : 0);
@@ -253,6 +266,15 @@ function sendSnapshot(now: number): void {
     ash,
     items,
     fires: { ...world.fires },
+    blocks,
+    blockSpecies,
+    blockInfo: {
+      total: blockTotal,
+      built: blockBuilt,
+      pushed: world.blockTally.pushed,
+      setDown: world.blockTally.setDown,
+      longestLine: world.history.count > 0 ? world.history.longestBuiltLine[world.history.count - 1]! : 0,
+    },
     holding,
     carry: { ...world.carry },
     environment: {
@@ -278,8 +300,30 @@ function sendSnapshot(now: number): void {
     rendered: rendering,
     species: speciesViews(world),
   };
-  post({ type: 'snapshot', snapshot }, [creatures.buffer, plants.buffer, meat.buffer, scent.buffer, temperature.buffer, fire.buffer, ash.buffer, items.buffer]);
+  post({ type: 'snapshot', snapshot }, [creatures.buffer, plants.buffer, meat.buffer, scent.buffer, temperature.buffer, fire.buffer, ash.buffer, items.buffer, blocks.buffer, blockSpecies.buffer]);
   lastSnapshotTime = now;
+}
+
+/** The per-species series with the largest totals, largest first, and the rest summed under id 0. */
+function topSeries(
+  perSpecies: Map<number, Float32Array>,
+  count: number,
+  shown: number,
+): { id: number; counts: Float32Array }[] {
+  const ranked = [...perSpecies]
+    .map(([id, series]) => {
+      let total = 0;
+      for (let k = 0; k < count; k++) total += series[k]!;
+      return { id, series, total };
+    })
+    .sort((a, b) => b.total - a.total || a.id - b.id);
+  const top = ranked.slice(0, shown).map((entry) => ({ id: entry.id, counts: entry.series.slice(0, count) }));
+  if (ranked.length > shown) {
+    const others = new Float32Array(count);
+    for (const entry of ranked.slice(shown)) for (let k = 0; k < count; k++) others[k]! += entry.series[k]!;
+    top.push({ id: 0, counts: others });
+  }
+  return top;
 }
 
 /** Send the history if it changed since it was last sent. */
@@ -332,8 +376,15 @@ function sendHistory(now: number): void {
     shareForaging: h.shareForaging.slice(0, h.count),
     shareChasing: h.shareChasing.slice(0, h.count),
     shareFleeing: h.shareFleeing.slice(0, h.count),
+    blockMoveRate: h.blockMoveRate.slice(0, h.count),
+    longestBuiltLine: h.longestBuiltLine.slice(0, h.count),
+    builtBlocks: h.builtBlocks.slice(0, h.count),
+    shelteredShare: h.shelteredShare.slice(0, h.count),
+    blockHolders: h.blockHolders.slice(0, h.count),
+    blockMoves: [],
     species: [],
   };
+  history.blockMoves = topSeries(h.blockMoves, h.count, BLOCK_SPECIES);
   // The species with the most member-samples are drawn separately; the rest are summed.
   const ranked = [...h.species]
     .map(([id, series]) => {

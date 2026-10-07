@@ -58,8 +58,8 @@ export interface Creatures {
 }
 
 /** What a creature can hold: one thing at a time. */
-export const Held = { Nothing: 0, Branch: 1, Stone: 2, Plants: 3, Meat: 4 } as const;
-export const HELD_LABELS: string[] = ['nothing', 'a branch', 'a stone', 'plant food', 'meat'];
+export const Held = { Nothing: 0, Branch: 1, Stone: 2, Plants: 3, Meat: 4, Block: 5 } as const;
+export const HELD_LABELS: string[] = ['nothing', 'a branch', 'a stone', 'plant food', 'meat', 'a block'];
 
 /** Every per-creature array, so growing and removing cannot miss one. */
 const FIELDS = [

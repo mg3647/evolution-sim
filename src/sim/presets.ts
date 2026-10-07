@@ -16,6 +16,7 @@ export const RESTART_KEYS: ReadonlySet<keyof SimConfig> = new Set<keyof SimConfi
   'waterShare',
   'biomeSize',
   'branchDensity',
+  'blockDensity',
   'stoneDensity',
   'riverWidth',
   'moistureReach',
@@ -192,8 +193,8 @@ export const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
   {
-    title: 'Fire and carrying',
-    about: 'Wildfire, the branches that feed it, and what creatures can pick up.',
+    title: 'Fire, carrying and blocks',
+    about: 'Wildfire, the branches that feed it, what creatures can pick up, and the blocks they can build with.',
     settings: [
       { key: 'fireChance', label: 'Lightning', hint: 'Chance each tick that lightning strikes somewhere; 0 means no fires start on their own', more: 'A strike starts a fire only where it is hot and there is something to burn.', min: 0, max: 0.02, step: 0.0005 },
       { key: 'fireSpread', label: 'Fire spread', hint: 'Chance each tick that fire catches in a neighbouring cell with enough to burn', more: 'At 0 every fire stays in one cell. At 0.015 fires burn out in patches; at 0.03 each burning cell lights nearly three others and fires run across whole forests.', min: 0, max: 0.1, step: 0.005 },
@@ -202,6 +203,9 @@ export const SETTING_GROUPS: SettingGroup[] = [
       { key: 'fireMinHeat', label: 'Heat needed for lightning fires', hint: 'Lightning only starts a fire where it is at least this hot at that moment', min: -1, max: 1.5, step: 0.05 },
       { key: 'ashGrowth', label: 'Richness of ash', hint: 'How many times faster plants regrow on fresh ash', min: 0, max: 6, step: 0.5 },
       { key: 'branchRegrowTicks', label: 'Branch fall (ticks)', hint: 'Ticks for each forest cell to get about one chance at a new branch; 0 stops branches falling', min: 0, max: 20000, step: 500 },
+      { key: 'shelter', label: 'Shelter of a block', hint: 'How much a block shelters what is in or beside its cell: the share cut from the cost of heat and cold there, and from how fast stored food spoils', more: 'At 0 a block is only an obstacle. Higher gives creatures a reason to stay by blocks, and to bring blocks to where they live.', min: 0, max: 0.95, step: 0.05 },
+      { key: 'blockWeight', label: 'Weight of a block', hint: 'Share of its speed a creature loses while it carries a block', min: 0, max: 0.9, step: 0.05 },
+      { key: 'blockDensity', label: 'Blocks', hint: 'Share of land cells that start with a block on them; desert and tundra get more', more: 'Blocks stop movement like walls, but creatures can push them, pick them up and set them down.', min: 0, max: 0.08, step: 0.005 },
       { key: 'carrySlow', label: 'Weight of a load', hint: 'Share of its speed a creature loses while it holds anything', more: 'Lower makes carrying cheaper, so more creatures keep hold of things.', min: 0, max: 0.6, step: 0.05 },
       { key: 'carryMouthfuls', label: 'Size of a load of food', hint: 'How much food a creature picks up at once, in mouthfuls', min: 1, max: 30, step: 1 },
     ],

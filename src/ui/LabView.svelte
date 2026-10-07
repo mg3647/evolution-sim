@@ -1,7 +1,7 @@
 <script lang="ts">
   import type uPlot from 'uplot';
   import { speciesHue } from '../render/renderer';
-  import { streamSeries as seriesOfStream } from './speciesColors';
+  import { speciesColor, streamSeries as seriesOfStream } from './speciesColors';
   import { BIOME_GROUND } from '../render/renderer';
   import { BIOME_LABELS } from '../sim/biomes';
   import { INPUT_COUNT, INPUT_LABELS, OUTPUT_LABELS } from '../sim/brain';
@@ -192,6 +192,39 @@
     ),
   );
   const diversityData = $derived<uPlot.AlignedData | null>(history && [history.tick, history.diversity]);
+  /** Blocks moved, by the species that moved them. The chart is rebuilt when the set of species changes. */
+  const blockKey = $derived(history ? history.blockMoves.map((s) => s.id).join(',') : '');
+  const blockSeries = $derived<ChartSeries[]>(
+    (history?.blockMoves ?? []).map((s) => ({
+      label: s.id === 0 ? 'Other species' : `Species ${s.id}`,
+      color: speciesColor(s.id),
+    })),
+  );
+  const blockData = $derived<uPlot.AlignedData | null>(
+    history && history.blockMoves.length > 0
+      ? [history.tick, ...history.blockMoves.map((s) => smooth(s.counts))]
+      : null,
+  );
+  const LINE_SERIES: ChartSeries[] = [
+    { label: 'Longest built line (cells)', color: '#c478ff' },
+    { label: 'Blocks creatures have moved', color: '#8a9aa9', axis: 'right' },
+  ];
+  const lineData = $derived<uPlot.AlignedData | null>(
+    history && [history.tick, history.longestBuiltLine, history.builtBlocks],
+  );
+  const SHELTER_SERIES: ChartSeries[] = [
+    { label: 'Beside a block %', color: '#7fd6c2' },
+    { label: 'Carrying a block %', color: '#c478ff' },
+  ];
+  const shelterData = $derived.by<uPlot.AlignedData | null>(() => {
+    if (!history) return null;
+    return [
+      history.tick,
+      history.shelteredShare.map((share) => share * 100),
+      history.blockHolders.map((n, k) => (100 * n) / Math.max(1, history.population[k]!)),
+    ];
+  });
+
   const CARRY_SERIES: ChartSeries[] = [
     { label: 'Holding a stone or branch %', color: '#b0b0b6' },
     { label: 'Holding food %', color: '#e8d678' },
@@ -353,6 +386,32 @@
         takes over, and climbs back as mutations build up again.
       </p>
       <Chart {events} title="Gene spread" note="The average spread (standard deviation) of size, speed, sensor range and diet." series={DIVERSITY_SERIES} data={diversityData} />
+    </section>
+
+    <section class="card wide">
+      <h1>Building</h1>
+      <p class="teaches">
+        Whether creatures are doing anything with blocks. A creature moves a block by walking into it or by picking
+        it up and setting it down. Moving blocks by accident scatters them; moving them on purpose would show as
+        more creatures staying beside blocks, and as blocks ending up in lines.
+      </p>
+      <div class="charts three">
+        {#if blockData}
+          {#key blockKey}
+            <Chart {events} stacked title="Blocks moved per 1,000 ticks" note="By the species that moved them. Running averages." series={blockSeries} data={blockData} />
+          {/key}
+        {:else}
+          <p class="empty">No creature has moved a block yet.</p>
+        {/if}
+        <Chart
+          {events}
+          title="What they have built"
+          note="The longest straight run of touching blocks that creatures moved, and how many blocks have been moved at all."
+          series={LINE_SERIES}
+          data={lineData}
+        />
+        <Chart {events} title="Creatures and blocks" note="The share of creatures in or beside a block's cell, where there is shelter, and the share carrying one." series={SHELTER_SERIES} data={shelterData} />
+      </div>
     </section>
 
     <section class="card">
@@ -620,6 +679,10 @@
     outline: 1px solid var(--accent);
     outline-offset: 6px;
     border-radius: 4px;
+  }
+
+  .charts.three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .scroll {

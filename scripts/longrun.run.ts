@@ -94,6 +94,19 @@ interface Summary {
   newbornEnergy: number;
   parentAge: number;
   plantFill: number;
+  /**
+   * Blocks: pushes and set-downs per creature per 1,000 ticks, the mean share
+   * of creatures carrying one, the share of creatures in or beside a block's
+   * cell against the share of land that is, the longest straight run of
+   * blocks creatures moved, and the share of blocks any creature has moved.
+   */
+  blockPushes: number;
+  blockSetDowns: number;
+  holdingBlock: number;
+  shelteredCreatures: number;
+  shelteredLand: number;
+  longestLine: number;
+  builtShare: number;
   /** Mean fur and defense genes overall. */
   meanFur: number;
   meanDefense: number;
@@ -124,10 +137,13 @@ function run(seed: string): Summary {
   let furSum = 0;
   let defenseSum = 0;
   let birthsBefore = 0;
+  let blocksBefore = { ...world.blockTally };
+  let shelteredSum = 0;
+  let shelteredLandSum = 0;
   let creatureTicks = 0;
   let newborns = 0;
   let newbornFill = 0;
-  const heldSum = [0, 0, 0, 0, 0];
+  const heldSum = [0, 0, 0, 0, 0, 0];
   let carryBefore = { ...world.carry };
   const zero = () => new Array<number>(BIOME_COUNT).fill(0);
   const biomeCount = zero();
@@ -157,6 +173,7 @@ function run(seed: string): Summary {
       reseededBefore = world.reseeded;
       firesBefore = { ...world.fires };
       birthsBefore = world.births;
+      blocksBefore = { ...world.blockTally };
       carryBefore = { ...world.carry };
     }
     if (tick > from) {
@@ -191,13 +208,21 @@ function run(seed: string): Summary {
     let fur = 0;
     let defense = 0;
     const here = zero();
+    let land = 0;
+    let landSheltered = 0;
+    let sheltered = 0;
     for (let cell = 0; cell < world.plants.biome.length; cell++) {
-      if (world.plants.water[cell] === 0) biomeLand[world.plants.biome[cell]!]!++;
+      if (world.plants.water[cell] === 1) continue;
+      biomeLand[world.plants.biome[cell]!]!++;
+      land++;
+      if (world.plants.nearBlocks[cell]! > 0) landSheltered++;
     }
+    shelteredLandSum += landSheltered / Math.max(1, land);
     for (let i = 0; i < c.count; i++) {
       const cell = cellIndexAt(world.plants, c.x[i]!, c.y[i]!);
       const ground = groundHue(world.plants, cell, world.config);
       const biome = world.plants.biome[cell]!;
+      if (world.plants.nearBlocks[cell]! > 0) sheltered++;
       here[biome]!++;
       biomeFur[biome]! += c.fur[i]!;
       biomeSize[biome]! += c.size[i]!;
@@ -220,6 +245,7 @@ function run(seed: string): Summary {
     dietSum += diet / Math.max(1, c.count);
     hiddenSum += hidden / Math.max(1, c.count);
     furSum += fur / Math.max(1, c.count);
+    shelteredSum += sheltered / Math.max(1, c.count);
     defenseSum += defense / Math.max(1, c.count);
     for (let biome = 0; biome < BIOME_COUNT; biome++) {
       biomeCount[biome]! += here[biome]!;
@@ -265,6 +291,15 @@ function run(seed: string): Summary {
     hidden: hiddenSum / samples,
     meanFur: furSum / samples,
     meanDefense: defenseSum / samples,
+    blockPushes: ((world.blockTally.pushed - blocksBefore.pushed) * 1000) / Math.max(1, creatureTicks),
+    blockSetDowns: ((world.blockTally.setDown - blocksBefore.setDown) * 1000) / Math.max(1, creatureTicks),
+    holdingBlock: heldSum[Held.Block]! / samples,
+    shelteredCreatures: shelteredSum / samples,
+    shelteredLand: shelteredLandSum / samples,
+    longestLine: world.history.longestBuiltLine[world.history.count - 1]!,
+    builtShare:
+      world.history.builtBlocks[world.history.count - 1]! /
+      Math.max(1, world.plants.blocks.reduce((a, b) => a + b, 0)),
     birthRate: ((world.births - birthsBefore) * 1000) / Math.max(1, creatureTicks),
     lifespan: mean(world.history.lifespan, world.history.tick, world.history.count, from),
     parentAge: mean(world.history.generationLength, world.history.tick, world.history.count, from),
@@ -339,6 +374,9 @@ it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
 
         `tps=${Math.round(s.ticksPerSecond)}`,
       ].join(' '),
+    );
+    console.log(
+      `    blocks: pushes=${s.blockPushes.toFixed(2)}/creature/kt setDowns=${s.blockSetDowns.toFixed(3)}/creature/kt holding=${(s.holdingBlock * 100).toFixed(2)}% shelteredCreatures=${percent(s.shelteredCreatures)} shelteredLand=${percent(s.shelteredLand)} longestLine=${s.longestLine} builtShare=${percent(s.builtShare)}`,
     );
     for (const [k, b] of s.biomes.entries()) {
       console.log(

@@ -40,7 +40,8 @@
     { id: 'meteor', label: 'Meteor', hint: 'Click to strike: kills everything and burns the ground inside the ring' },
     { id: 'plague', label: 'Plague', hint: 'Click to infect the creatures inside the ring; it then spreads by contact' },
     { id: 'wall', label: 'Wall', hint: 'Drag to draw a wall that creatures cannot cross' },
-    { id: 'erase', label: 'Erase wall', hint: 'Drag over a wall to remove that part of it' },
+    { id: 'block', label: 'Block', hint: 'Click or drag to place blocks: solid like a wall, but creatures can push, carry and set them down' },
+    { id: 'erase', label: 'Erase', hint: 'Drag over walls or blocks to remove them' },
     { id: 'fertilise', label: 'Fertilise', hint: 'Drag to make land fully fertile; plants then grow there' },
     { id: 'blight', label: 'Blight', hint: 'Drag to make land barren; plants there die' },
     { id: 'fire', label: 'Fire', hint: 'Click or drag to set light to land that has plants or branches on it' },
@@ -184,10 +185,12 @@
   /** Cells holding each kind of resource, counted only while the Resources view is on. */
   const resourceCounts = $derived.by<Record<ResourceKind, number> | null>(() => {
     if (!showResources || !snapshot || !snapshot.rendered) return null;
-    const counts: Record<ResourceKind, number> = { meat: 0, branch: 0, store: 0, stone: 0 };
-    const { items, meat } = snapshot;
+    const counts: Record<ResourceKind, number> = { block: 0, built: 0, meat: 0, branch: 0, store: 0, stone: 0 };
+    const { items, meat, blocks } = snapshot;
     for (let i = 0; i < items.length; i++) {
-      const here = resourcesIn(items[i]!, meat[i]!);
+      const here = resourcesIn(items[i]!, meat[i]!, blocks[i]!);
+      if (here.block) counts.block++;
+      if (here.built) counts.built++;
       if (here.meat) counts.meat++;
       if (here.branch) counts.branch++;
       if (here.store) counts.store++;
@@ -586,7 +589,7 @@
             <div class="legend-item" title="Creatures holding something right now">
               <span class="legend-note">
                 Held: {count(snapshot?.holding.stone)} stone, {count(snapshot?.holding.branch)} branch,
-                {count(snapshot?.holding.food)} food
+                {count(snapshot?.holding.food)} food, {count(snapshot?.holding.block)} block
               </span>
             </div>
             <div class="legend-heading">Everything else</div>
@@ -643,6 +646,22 @@
           <div class="legend-item" title="Stones lie in deserts">
             <svg width="20" height="20" viewBox="0 0 20 20"><rect width="20" height="20" fill="#b0b0b6"/></svg>
             <span>Stone</span>
+          </div>
+          <div class="legend-item" title="A block is solid like a wall, but creatures can push it, pick it up and set it down. Being beside one is shelter from heat and cold.">
+            <svg width="20" height="20" viewBox="0 0 20 20">
+              <rect x="2" y="2" width="16" height="16" fill="#4e4840" />
+              <rect x="2" y="2" width="13" height="13" fill="#cfc7bc" />
+              <rect x="5" y="5" width="10" height="10" fill="#9a9086" />
+            </svg>
+            <span>Block</span>
+          </div>
+          <div class="legend-item" title="A block that a creature has moved takes the colour of that creature's species">
+            <svg width="20" height="20" viewBox="0 0 20 20">
+              <rect x="2" y="2" width="16" height="16" fill="#5a3a7a" />
+              <rect x="2" y="2" width="13" height="13" fill="#e0c4ff" />
+              <rect x="5" y="5" width="10" height="10" fill="#b888e0" />
+            </svg>
+            <span>Block a creature moved</span>
           </div>
           <div class="legend-item" title="Plant food a creature carried here and set down; it spoils slowly">
             <svg width="20" height="20" viewBox="0 0 20 20"><rect width="20" height="20" fill="#e8d678"/></svg>
@@ -753,6 +772,18 @@
           <div title="Creatures holding a stone (stronger bite) or a branch (takes part of bites aimed at them) right now">
             <dt>Holding a tool</dt>
             <dd>{snapshot ? `${count(snapshot.holding.stone)} stone, ${count(snapshot.holding.branch)} branch` : '-'}</dd>
+          </div>
+          <div title="Blocks a creature has moved, out of all the blocks in the world">
+            <dt>Blocks moved</dt>
+            <dd>{snapshot ? `${count(snapshot.blockInfo.built)} of ${count(snapshot.blockInfo.total)}` : '-'}</dd>
+          </div>
+          <div title="The longest straight run of touching blocks that creatures have moved, in cells. A run of several is the start of a wall.">
+            <dt>Longest built line</dt>
+            <dd>{count(snapshot?.blockInfo.longestLine)}</dd>
+          </div>
+          <div title="Creatures carrying a block right now">
+            <dt>Carrying a block</dt>
+            <dd>{count(snapshot?.holding.block)}</dd>
           </div>
           <div title="Creatures holding a load of food right now">
             <dt>Holding food</dt>

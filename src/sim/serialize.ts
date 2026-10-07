@@ -4,6 +4,7 @@ import { createCreatures, type Creatures } from './creatures';
 import type { ActiveEvent, LogEntry } from './environment';
 import type { EnergyLedger } from './ledger';
 import { Lineage, type LineageNode } from './lineage';
+import { rebuildNearBlocks } from './blocks';
 import { classifyBiomes, waterDerived } from './plants';
 import { Rng, type RngState } from './rng';
 import { Senses } from './senses';
@@ -19,7 +20,7 @@ import type { World } from './world';
  */
 
 /** Bumped whenever the saved layout changes; older files are refused. */
-export const SAVE_VERSION = 13;
+export const SAVE_VERSION = 14;
 
 /** Per-creature number arrays, saved up to the live count. */
 const CREATURE_FIELDS = [
@@ -53,7 +54,7 @@ const CREATURE_FIELDS = [
   'mutationRate',
 ] as const;
 
-const FIELD_ARRAYS = ['fertility', 'capacity', 'energy', 'meat', 'scent', 'walls', 'water', 'temperature', 'branches', 'stones', 'fire', 'ash', 'store'] as const;
+const FIELD_ARRAYS = ['fertility', 'capacity', 'energy', 'meat', 'scent', 'walls', 'water', 'temperature', 'branches', 'stones', 'fire', 'ash', 'store', 'blocks', 'blockSpecies', 'blockBuilt'] as const;
 
 interface SavedBrain {
   links: LinkGene[];
@@ -79,6 +80,8 @@ export interface SavedWorld {
   reseeded: number;
   defended: number;
   fires: World['fires'];
+  blockTally: World['blockTally'];
+  blockMoves: World['blockMoves'];
   carry: World['carry'];
   parents: World['parents'];
   social: World['social'];
@@ -131,6 +134,8 @@ export function saveWorld(world: World): SavedWorld {
     reseeded: world.reseeded,
     defended: world.defended,
     fires: { ...world.fires },
+    blockTally: { ...world.blockTally },
+    blockMoves: { ...world.blockMoves },
     carry: { ...world.carry },
     parents: { ...world.parents },
     social: { ...world.social },
@@ -181,6 +186,10 @@ export function loadWorld(saved: SavedWorld): World {
     walls: new Uint8Array(saved.field.walls),
     temperature: new Float32Array(saved.field.temperature),
     biome: new Uint8Array(cells),
+    blocks: new Uint8Array(saved.field.blocks),
+    blockSpecies: new Uint32Array(saved.field.blockSpecies),
+    blockBuilt: new Uint8Array(saved.field.blockBuilt),
+    nearBlocks: new Uint8Array(cells),
     store: new Float64Array(saved.field.store),
     branches: new Uint8Array(saved.field.branches),
     stones: new Uint8Array(saved.field.stones),
@@ -195,6 +204,7 @@ export function loadWorld(saved: SavedWorld): World {
 
   // Biomes follow from temperature and wetness, so they are rebuilt, not saved.
   classifyBiomes(plants, config);
+  rebuildNearBlocks(plants);
 
   const count = saved.creatures.count;
   const creatures: Creatures = createCreatures(Math.max(16, count));
@@ -242,6 +252,8 @@ export function loadWorld(saved: SavedWorld): World {
     reseeded: saved.reseeded,
     defended: saved.defended,
     fires: { ...saved.fires },
+    blockTally: { ...saved.blockTally },
+    blockMoves: { ...saved.blockMoves },
     carry: { ...saved.carry },
     parents: { ...saved.parents },
     deaths: { ...saved.deaths },

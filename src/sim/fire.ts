@@ -68,9 +68,10 @@ export function dropBranches(field: PlantField, config: SimConfig, rng: Rng): vo
   }
 }
 
-/** Whether a cell has enough to burn: plants, or a branch. Water, walls and fresh ash do not burn. */
+/** Whether a cell has enough to burn: plants, or a branch. Water, walls, blocks and fresh ash do not burn. */
 function fuel(field: PlantField, cell: number, config: SimConfig): number {
-  if (field.water[cell] === 1 || field.walls[cell] === 1 || field.ash[cell]! >= ASH_FIREBREAK) return 0;
+  if (field.water[cell] === 1 || field.walls[cell] === 1 || field.blocks[cell] === 1) return 0;
+  if (field.ash[cell]! >= ASH_FIREBREAK) return 0;
   if (field.branches[cell]! > 0) return 1;
   return config.plantCapacity > 0 ? Math.min(1, field.energy[cell]! / config.plantCapacity) : 0;
 }

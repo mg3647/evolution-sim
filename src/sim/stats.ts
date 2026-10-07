@@ -71,6 +71,20 @@ export interface History {
   shareForaging: Float32Array;
   shareChasing: Float32Array;
   shareFleeing: Float32Array;
+  /**
+   * Blocks moved by creatures per 1,000 ticks since the previous sample, the
+   * longest straight run of blocks creatures have moved, how many blocks have
+   * ever been moved, the share of creatures in or beside a block's cell, and
+   * the number carrying a block.
+   */
+  blockMoveRate: Float32Array;
+  longestBuiltLine: Float32Array;
+  builtBlocks: Float32Array;
+  shelteredShare: Float32Array;
+  blockHolders: Float32Array;
+
+  /** Blocks moved per 1,000 ticks by each species, by species id. Not saved, like `species`. */
+  blockMoves: Map<number, Float32Array>;
 
   /**
    * Members of each species at every sample, by species id. Not part of a
@@ -195,6 +209,11 @@ export const HISTORY_SERIES = [
   'shareForaging',
   'shareChasing',
   'shareFleeing',
+  'blockMoveRate',
+  'longestBuiltLine',
+  'builtBlocks',
+  'shelteredShare',
+  'blockHolders',
 ] as const;
 
 export interface Sample {
@@ -242,6 +261,11 @@ export interface Sample {
   shareForaging: number;
   shareChasing: number;
   shareFleeing: number;
+  blockMoveRate: number;
+  longestBuiltLine: number;
+  builtBlocks: number;
+  shelteredShare: number;
+  blockHolders: number;
 }
 
 export function createHistory(interval: number, capacity: number): History {
@@ -293,6 +317,12 @@ export function createHistory(interval: number, capacity: number): History {
     shareForaging: new Float32Array(capacity),
     shareChasing: new Float32Array(capacity),
     shareFleeing: new Float32Array(capacity),
+    blockMoveRate: new Float32Array(capacity),
+    longestBuiltLine: new Float32Array(capacity),
+    builtBlocks: new Float32Array(capacity),
+    shelteredShare: new Float32Array(capacity),
+    blockHolders: new Float32Array(capacity),
+    blockMoves: new Map(),
     species: new Map(),
     density: createDensityHistory(),
   };
@@ -300,41 +330,57 @@ export function createHistory(interval: number, capacity: number): History {
 
 /**
  * Add a sample. `speciesCounts`, if given, is the number of members of each
- * living species, by id.
+ * living species, by id; `blockMoves` is the blocks each species moved per
+ * 1,000 ticks since the previous sample.
  */
-export function recordSample(history: History, sample: Sample, speciesCounts?: Map<number, number>): void {
+export function recordSample(
+  history: History,
+  sample: Sample,
+  speciesCounts?: Map<number, number>,
+  blockMoves?: Map<number, number>,
+): void {
   if (history.count === history.tick.length) {
     const kept = Math.ceil(history.count / 2);
     for (const name of HISTORY_SERIES) {
       const series = history[name];
       for (let i = 0; i < kept; i++) series[i] = series[i * 2]!;
     }
-    for (const [id, series] of history.species) {
-      let any = false;
-      for (let i = 0; i < kept; i++) {
-        series[i] = series[i * 2]!;
-        if (series[i]! > 0) any = true;
-      }
-      series.fill(0, kept);
-      // A species with no members at any sample still kept is forgotten.
-      if (!any) history.species.delete(id);
-    }
+    for (const perSpecies of [history.species, history.blockMoves]) thin(perSpecies, kept);
     history.count = kept;
     history.interval *= 2;
   }
   const i = history.count++;
   for (const name of HISTORY_SERIES) history[name][i] = sample[name];
-  if (speciesCounts) {
-    for (const [id, members] of speciesCounts) {
-      let series = history.species.get(id);
-      if (!series) {
-        series = new Float32Array(history.tick.length);
-        history.species.set(id, series);
-      }
-      series[i] = members;
-    }
-  }
+  if (speciesCounts) write(history.species, speciesCounts, i, history.tick.length);
+  if (blockMoves) write(history.blockMoves, blockMoves, i, history.tick.length);
   history.version++;
+}
+
+/** Keep every other sample of each per-species series, and forget a species left with nothing. */
+function thin(perSpecies: Map<number, Float32Array>, kept: number): void {
+  for (const [id, series] of perSpecies) {
+    let any = false;
+    for (let i = 0; i < kept; i++) {
+      series[i] = series[i * 2]!;
+      if (series[i]! > 0) any = true;
+    }
+    series.fill(0, kept);
+    // A species with nothing at any sample still kept is forgotten.
+    if (!any) perSpecies.delete(id);
+  }
+}
+
+/** Write one sample's value for each species, starting a series for a species not seen before. */
+function write(perSpecies: Map<number, Float32Array>, values: Map<number, number>, at: number, capacity: number): void {
+  for (const [id, value] of values) {
+    let series = perSpecies.get(id);
+    if (!series) {
+      if (value === 0) continue;
+      series = new Float32Array(capacity);
+      perSpecies.set(id, series);
+    }
+    series[at] = value;
+  }
 }
 
 /** Mean of a gene across living creatures, or 0 when there are none. */

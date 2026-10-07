@@ -117,6 +117,7 @@ export class Senses {
       let water = 0;
       let fire = 0;
       let items = 0;
+      let block = 0;
       for (const t of GROUND_SAMPLES) {
         let px = turn === 0 ? x + cosHeading * range * t : x + dx * t;
         let py = turn === 0 ? y + sinHeading * range * t : y + dy * t;
@@ -127,6 +128,7 @@ export class Senses {
         meat += field.meat[cell]!;
         // A nearer wall or shore reads stronger.
         if (field.walls[cell]) wall = Math.max(wall, 1.5 - t);
+        if (field.blocks[cell]) block = Math.max(block, 1.5 - t);
         if (field.water[cell]) water = Math.max(water, 1.5 - t);
         if (field.fire[cell]) fire = Math.max(fire, 1.5 - t);
         if (field.stones[cell] || field.branches[cell]) items = Math.max(items, 1.5 - t);
@@ -142,6 +144,7 @@ export class Senses {
       inputs[o + Ray.Wall] = Math.min(1, wall);
       inputs[o + Ray.Fire] = Math.min(1, fire);
       inputs[o + Ray.Items] = Math.min(1, items);
+      inputs[o + Ray.Block] = Math.min(1, block);
       inputs[o + Ray.Near] = 0;
       inputs[o + Ray.Kin] = 0;
       inputs[o + Ray.Bigger] = 0;
@@ -182,6 +185,7 @@ export class Senses {
     inputs[Input.StoreUnderfoot] = Math.min(1, field.store[cell]! * plantScale);
     const held = creatures.held[i]!;
     inputs[Input.HoldingTool] = held === Held.Stone ? 1 : held === Held.Branch ? -1 : 0;
+    inputs[Input.HoldingBlock] = held === Held.Block ? 1 : 0;
     inputs[Input.HoldingFood] =
       held === Held.Plants || held === Held.Meat
         ? Math.min(1, creatures.heldEnergy[i]! / (config.biteSize * creatures.size[i]! ** 2 * config.carryMouthfuls))

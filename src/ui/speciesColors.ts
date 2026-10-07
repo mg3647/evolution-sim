@@ -1,6 +1,5 @@
 import { speciesHue } from '../render/renderer';
 import type { HistoryData } from '../worker/protocol';
-import type { ChartSeries } from './Chart.svelte';
 
 /** A hex colour for a hue, saturation and lightness in [0, 1]; the charts need hex. */
 export function hslToHex(h: number, s: number, l: number): string {
@@ -21,7 +20,7 @@ export function speciesColor(id: number): string {
 }
 
 /** The series of the species stream chart, one per species the history follows. */
-export function streamSeries(history: HistoryData | null): ChartSeries[] {
+export function streamSeries(history: HistoryData | null): { label: string; color: string }[] {
   return (history?.species ?? []).map((s) => ({
     label: s.id === 0 ? 'Smaller species' : `Species ${s.id}`,
     color: speciesColor(s.id),

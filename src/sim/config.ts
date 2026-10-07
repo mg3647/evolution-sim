@@ -326,6 +326,17 @@ export interface SimConfig {
    * to reach water and the population collapsed.
    */
   birthWaterShare: number;
+
+  /** Share of land cells that start with a block on them. Desert and tundra get more, other land less. */
+  blockDensity: number;
+  /** Share of its stride a creature loses while it carries a block. */
+  blockWeight: number;
+  /**
+   * How much a block shelters what is in or beside its cell: the share cut
+   * from a creature's cost of heat and cold there, and from how fast stored
+   * food spoils. 0 makes blocks give no shelter.
+   */
+  shelter: number;
 }
 
 export const defaultConfig: SimConfig = {
@@ -499,4 +510,8 @@ export const defaultConfig: SimConfig = {
   storeDecay: 0.00005,
 
   birthWaterShare: 0,
+
+  blockDensity: 0.01,
+  blockWeight: 0.4,
+  shelter: 0.5,
 };

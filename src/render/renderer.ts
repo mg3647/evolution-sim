@@ -79,7 +79,7 @@ const PICK_RADIUS = 14;
 const CLICK_SLOP = 4;
 const SELECTION_COLOR = 0xffffff;
 /** Tools that keep applying as the pointer is dragged; the others apply once per click. */
-const DRAG_TOOLS: ReadonlySet<ToolKind> = new Set(['wall', 'erase', 'fertilise', 'blight', 'fire', 'rain']);
+const DRAG_TOOLS: ReadonlySet<ToolKind> = new Set(['wall', 'erase', 'fertilise', 'blight', 'fire', 'rain', 'block']);
 /** Colours of fire (it flickers between the two), of fresh ash, and of branches and stones on the ground. */
 const FIRE_COLORS: readonly Rgb[] = [
   [255, 150, 40],
@@ -98,6 +98,8 @@ const ITEM_OPACITY = 0.45;
  * cell so it can be seen from afar. Later kinds are drawn over earlier ones.
  */
 export const RESOURCE_KINDS = [
+  { id: 'block', label: 'Blocks, unmoved', color: [198, 198, 204] },
+  { id: 'built', label: 'Blocks creatures moved', color: [196, 120, 255] },
   { id: 'meat', label: 'Meat', color: [255, 84, 112] },
   { id: 'branch', label: 'Branches', color: [255, 158, 44] },
   { id: 'store', label: 'Food stores', color: [250, 230, 80] },
@@ -113,8 +115,10 @@ const RESOURCE_GROUND = 0.4;
 const RESOURCE_WATER = [26, 38, 52] as const;
 
 /** Which kinds of resource lie in a cell, as the page receives it. */
-export function resourcesIn(items: number, meat: number): Record<ResourceKind, boolean> {
+export function resourcesIn(items: number, meat: number, block: number): Record<ResourceKind, boolean> {
   return {
+    block: block === 1,
+    built: block === 2,
     meat: meat / 255 >= RESOURCE_MEAT_SHOWN,
     branch: (items & 1) !== 0,
     store: (items & 4) !== 0,
@@ -131,6 +135,7 @@ const TOOL_COLORS: Record<ToolKind, number> = {
   blight: 0xb08a5a,
   fire: 0xff9628,
   rain: 0x6db3ff,
+  block: 0xb9ad9c,
 };
 /** Ring drawn around creatures infected with the plague. */
 const SICK_COLOR = 0xb6ff3c;
@@ -139,6 +144,10 @@ const CALL_COLOR = 0x9fd8ff;
 /** Ring drawn around creatures with defenses, and the least defense that shows one. */
 const DEFENSE_COLOR = 0xffffff;
 const DEFENSE_SHOWN = 0.25;
+/** A block nobody has moved: its face, its lit edges and its shaded edges. */
+const BLOCK_FACE = 0x9a9086;
+const BLOCK_LIT = 0xcfc7bc;
+const BLOCK_SHADE = 0x4e4840;
 /** How creatures outside a highlight are drawn. */
 const FADED_COLOR = 0x6a737d;
 const FADED_ALPHA = 0.3;
@@ -216,6 +225,9 @@ export class WorldRenderer {
   private app = new Application();
   private camera = new Container();
   private plantSprite = new Sprite();
+  private blockLayer = new Graphics();
+  /** What the blocks looked like when last drawn, so they are redrawn only when one changes. */
+  private blockSignature = -1;
   private overlay = new Graphics();
   private creatureLayer = new Container();
   private selectionRing = new Graphics();
@@ -249,6 +261,7 @@ export class WorldRenderer {
     this.meatEaterTexture = createCreatureTexture(true);
     this.camera.addChild(
       this.plantSprite,
+      this.blockLayer,
       this.overlay,
       this.creatureLayer,
       this.selectionRing,
@@ -281,6 +294,7 @@ export class WorldRenderer {
       this.cameraMoved = true;
     }
     this.drawPlants(snapshot);
+    this.drawBlocks(snapshot);
     this.drawCreatures(snapshot);
   }
 
@@ -342,7 +356,7 @@ export class WorldRenderer {
   /** One pixel per plant cell, stretched over the world. */
   private drawPlants(snapshot: Snapshot): void {
     const { plantCols: cols, plantRows: rows, plants, meat, scent, walls, water, temperature, biome } = snapshot;
-    const { fire, ash, items } = snapshot;
+    const { fire, ash, items, blocks } = snapshot;
     const scentOpacity = this.showScent ? SCENT_OPACITY / 255 : 0;
     const canvas = this.plantCanvas;
     const ctx = canvas.getContext('2d')!;
@@ -433,10 +447,10 @@ export class WorldRenderer {
       // so it can be found; a common one would flood the map, so it keeps to its cell.
       for (const kind of RESOURCE_KINDS) {
         let marked = 0;
-        for (let i = 0; i < plants.length; i++) if (resourcesIn(items[i]!, meat[i]!)[kind.id]) marked++;
+        for (let i = 0; i < plants.length; i++) if (resourcesIn(items[i]!, meat[i]!, blocks[i]!)[kind.id]) marked++;
         const reach = marked <= plants.length * RESOURCE_SCARCE ? 1 : 0;
         for (let i = 0; i < plants.length; i++) {
-          if (!resourcesIn(items[i]!, meat[i]!)[kind.id]) continue;
+          if (!resourcesIn(items[i]!, meat[i]!, blocks[i]!)[kind.id]) continue;
           const cx = i % cols;
           const cy = (i - cx) / cols;
           for (let dy = -reach; dy <= reach; dy++) {
@@ -457,6 +471,39 @@ export class WorldRenderer {
     ctx.putImageData(this.plantImage, 0, 0);
     this.plantSprite.texture.source.update();
     this.plantSprite.setSize(this.worldWidth, this.worldHeight);
+  }
+
+  /**
+   * Blocks are drawn as raised squares, one cell each: lit along the top and
+   * left, shaded along the bottom and right. One a creature has moved takes
+   * the colour of that creature's species.
+   */
+  private drawBlocks(snapshot: Snapshot): void {
+    const { blocks, blockSpecies, plantCols: cols, plantRows: rows } = snapshot;
+    let signature = cols * 31 + rows;
+    for (let i = 0; i < blocks.length; i++) {
+      if (blocks[i]) signature = (Math.imul(signature, 16777619) ^ (i * 4 + blocks[i]!) ^ (blockSpecies[i]! << 8)) | 0;
+    }
+    if (signature === this.blockSignature) return;
+    this.blockSignature = signature;
+    const g = this.blockLayer;
+    g.clear();
+    const w = this.worldWidth / cols;
+    const h = this.worldHeight / rows;
+    const edge = Math.min(w, h) * 0.18;
+    for (let i = 0; i < blocks.length; i++) {
+      if (!blocks[i]) continue;
+      const x = (i % cols) * w;
+      const y = Math.floor(i / cols) * h;
+      const built = blocks[i] === 2;
+      const hue = speciesHue(blockSpecies[i]!);
+      const face = built ? hsvToRgb(hue, 0.5, 0.82) : BLOCK_FACE;
+      const lit = built ? hsvToRgb(hue, 0.3, 1) : BLOCK_LIT;
+      const shade = built ? hsvToRgb(hue, 0.6, 0.45) : BLOCK_SHADE;
+      g.rect(x, y, w, h).fill(shade);
+      g.rect(x, y, w - edge, h - edge).fill(lit);
+      g.rect(x + edge, y + edge, w - edge * 2, h - edge * 2).fill(face);
+    }
   }
 
   private drawCreatures(snapshot: Snapshot): void {
@@ -552,7 +599,7 @@ export class WorldRenderer {
         ? config.meteorRadius
         : this.tool === 'plague'
           ? config.plagueToolRadius
-          : this.tool === 'wall' || this.tool === 'erase' || this.tool === 'fire'
+          : this.tool === 'wall' || this.tool === 'erase' || this.tool === 'fire' || this.tool === 'block'
             ? config.plantCellSize
             : config.brushRadius;
     cursor.circle(x, y, radius).stroke({ color: TOOL_COLORS[this.tool], pixelLine: true });
