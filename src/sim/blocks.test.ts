@@ -327,7 +327,8 @@ describe('a whole world with blocks', () => {
     expect(h.longestBuiltLine[h.count - 1]).toBeGreaterThanOrEqual(1);
     expect(h.shelteredShare[h.count - 1]).toBeGreaterThanOrEqual(0);
     expect(h.shelteredShare[h.count - 1]).toBeLessThanOrEqual(1);
-  });
+    // Two full runs: slow enough to pass the default 5 seconds when the machine is busy.
+  }, 30000);
 
   it('survives saving and loading', () => {
     const world = createWorld(small);
