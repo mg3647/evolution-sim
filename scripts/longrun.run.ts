@@ -110,6 +110,9 @@ interface Summary {
    * and how full of plants the world is.
    */
   birthRate: number;
+  /** Share of the period's births that had two parents, and of those the share between close kin. */
+  sexualShare: number;
+  kinShare: number;
   lifespan: number;
   newbornEnergy: number;
   parentAge: number;
@@ -157,6 +160,7 @@ function run(seed: string): Summary {
   let furSum = 0;
   let defenseSum = 0;
   let birthsBefore = 0;
+  let matingBefore = { ...world.mating };
   let blocksBefore = { ...world.blockTally };
   let shelteredSum = 0;
   let shelteredLandSum = 0;
@@ -193,6 +197,7 @@ function run(seed: string): Summary {
       reseededBefore = world.reseeded;
       firesBefore = { ...world.fires };
       birthsBefore = world.births;
+      matingBefore = { ...world.mating };
       blocksBefore = { ...world.blockTally };
       carryBefore = { ...world.carry };
     }
@@ -321,6 +326,8 @@ function run(seed: string): Summary {
       world.history.builtBlocks[world.history.count - 1]! /
       Math.max(1, world.plants.blocks.reduce((a, b) => a + b, 0)),
     birthRate: ((world.births - birthsBefore) * 1000) / Math.max(1, creatureTicks),
+    sexualShare: (world.mating.sexual - matingBefore.sexual) / Math.max(1, world.births - birthsBefore),
+    kinShare: (world.mating.kin - matingBefore.kin) / Math.max(1, world.mating.sexual - matingBefore.sexual),
     lifespan: mean(world.history.lifespan, world.history.tick, world.history.count, from),
     parentAge: mean(world.history.generationLength, world.history.tick, world.history.count, from),
     plantFill: mean(world.history.plantFill, world.history.tick, world.history.count, from),
@@ -437,7 +444,7 @@ it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
         `hidden=${s.hidden.toFixed(2)}`,
         `fur=${s.meanFur.toFixed(2)}`,
         `defense=${s.meanDefense.toFixed(2)}`,
-        `births=${s.birthRate.toFixed(2)}/creature/kt lifespan=${s.lifespan.toFixed(0)} parentAge=${s.parentAge.toFixed(0)} newbornEnergy=${percent(s.newbornEnergy)} plants=${percent(s.plantFill)}`,
+        `births=${s.birthRate.toFixed(2)}/creature/kt sexual=${percent(s.sexualShare)} kin=${percent(s.kinShare)} lifespan=${s.lifespan.toFixed(0)} parentAge=${s.parentAge.toFixed(0)} newbornEnergy=${percent(s.newbornEnergy)} plants=${percent(s.plantFill)}`,
         `holding stone/branch/food=${(s.holdingStone * 100).toFixed(1)}%/${(s.holdingBranch * 100).toFixed(1)}%/${(s.holdingFood * 100).toFixed(1)}% haul=${s.haulDistance.toFixed(0)}`,
 
         `tps=${Math.round(s.ticksPerSecond)}`,

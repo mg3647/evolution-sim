@@ -53,6 +53,24 @@ export function founderGenes(rng: Rng, config: SimConfig): Genes {
 }
 
 /**
+ * The genes of a child of two: each gene comes whole from one parent or the
+ * other at random (the mutation rate is their average), before mutation.
+ */
+export function crossGenes(a: Genes, b: Genes, rng: Rng): Genes {
+  const pick = <K extends keyof Genes>(key: K): number => (rng.chance(0.5) ? a[key] : b[key]);
+  return {
+    size: pick('size'),
+    speed: pick('speed'),
+    sensorRange: pick('sensorRange'),
+    diet: pick('diet'),
+    hue: pick('hue'),
+    fur: pick('fur'),
+    defense: pick('defense'),
+    mutationRate: Math.fround((a.mutationRate + b.mutationRate) / 2),
+  };
+}
+
+/**
  * A mutated copy for a child. Size, speed and the mutation rate change by a
  * random factor, so a change is proportional to the current value.
  */

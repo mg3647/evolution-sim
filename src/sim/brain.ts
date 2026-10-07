@@ -447,6 +447,32 @@ export function mutateBrain(
   return compile(links, hiddenIds, hiddenTau);
 }
 
+/** Chance that a link switched off in either parent is switched off in the child (NEAT's 75%). */
+const INHERIT_DISABLED = 0.75;
+
+/**
+ * The brain of a child of two, before mutation, after NEAT's crossover. One
+ * parent, chosen at random, gives the structure: all its links and hidden
+ * neurons, as NEAT takes unmatched genes from the fitter parent (here nobody
+ * is fitter, so nobody is favoured). A link both parents have, found by its
+ * innovation id, comes whole (weight and learning rate together) from either
+ * at random, and stays switched off with probability 0.75 if either parent
+ * had it off. The child's links are therefore a subset of the donor's, so
+ * the caps on links and neurons hold without trimming.
+ */
+export function crossoverBrain(a: Brain, b: Brain, rng: Rng): Brain {
+  const [donor, other] = rng.chance(0.5) ? [a, b] : [b, a];
+  const theirs = new Map(other.links.map((link) => [link.innovation, link]));
+  const links = donor.links.map((link): LinkGene => {
+    const match = theirs.get(link.innovation);
+    if (!match) return { ...link };
+    const from = rng.chance(0.5) ? link : match;
+    const off = !link.enabled || !match.enabled;
+    return { ...from, enabled: off ? !rng.chance(INHERIT_DISABLED) : true };
+  });
+  return compile(links, donor.hiddenIds.slice(), donor.hiddenTau.slice());
+}
+
 /**
  * Run the brain for one tick. The caller writes the inputs into
  * `activation[0..INPUT_COUNT)` first and reads the outputs from

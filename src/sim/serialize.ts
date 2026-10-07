@@ -148,6 +148,8 @@ export interface SavedWorld {
   ledger: EnergyLedger;
   history: { interval: number; count: number } & Record<(typeof HISTORY_SERIES)[number], number[]>;
   births: number;
+  /** Births of two parents so far; absent in saves from before mating. */
+  mating?: World['mating'];
   reseeded: number;
   defended: number;
   fires: World['fires'];
@@ -213,6 +215,7 @@ export function saveWorld(world: World): SavedWorld {
     ledger: { ...world.ledger },
     history: savedHistory,
     births: world.births,
+    mating: { ...world.mating },
     reseeded: world.reseeded,
     defended: world.defended,
     fires: { ...world.fires },
@@ -352,6 +355,9 @@ export function loadWorld(savedWorld: SavedWorld): World {
     ledger: { ...saved.ledger },
     history,
     births: saved.births,
+    mating: { sexual: saved.mating?.sexual ?? 0, kin: saved.mating?.kin ?? 0 },
+    mateCandidates: [],
+    mateWishers: new Set(),
     reseeded: saved.reseeded,
     defended: saved.defended,
     fires: { ...saved.fires },
