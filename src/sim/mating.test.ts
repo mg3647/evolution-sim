@@ -185,12 +185,29 @@ describe('mating in the world', () => {
     expect(world.births).toBe(0);
   });
 
-  it('falls back to breeding alone when no mate is near, if both ways are allowed', () => {
+  it('keeps a creature that wants a mate waiting for one, even if it could breed alone', () => {
     const world = pairWorld({ reproductionMode: 1 });
     world.creatures.x[1] = 300;
     step(world);
     expect(world.mating.sexual).toBe(0);
-    expect(world.births).toBe(2);
+    expect(world.births).toBe(0);
+    // A creature that does not want a mate breeds alone in the same world.
+    const away = pairWorld({ reproductionMode: 1 });
+    away.creatures.x[1] = 300;
+    for (let i = 0; i < 2; i++) away.creatures.brain[i] = compileBrain([link(0, Input.Bias, INPUT_COUNT + Output.Mate, -3)], []);
+    step(away);
+    expect(away.births).toBe(2);
+  });
+
+  it('mates only within the mating reach', () => {
+    const near = pairWorld({ reproductionMode: 2, mateReach: 20 });
+    near.creatures.x[1] = 230;
+    step(near);
+    expect(near.births).toBe(0);
+    const far = pairWorld({ reproductionMode: 2, mateReach: 40 });
+    far.creatures.x[1] = 230;
+    step(far);
+    expect(far.mating.sexual).toBe(1);
   });
 
   it('lets a creature refuse: Mate switched off means no mating', () => {

@@ -357,7 +357,6 @@ export function loadWorld(savedWorld: SavedWorld): World {
     births: saved.births,
     mating: { sexual: saved.mating?.sexual ?? 0, kin: saved.mating?.kin ?? 0 },
     mateCandidates: [],
-    mateWishers: new Set(),
     reseeded: saved.reseeded,
     defended: saved.defended,
     fires: { ...saved.fires },

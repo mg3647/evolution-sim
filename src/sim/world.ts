@@ -138,9 +138,8 @@ export interface World {
   births: number;
   /** Births of two parents, and how many of those were between close relatives (parent and child, or siblings). */
   mating: { sexual: number; kin: number };
-  /** Creatures willing and able to mate this tick, and which of those would also breed alone; rebuilt every tick. */
+  /** Creatures willing and able to mate this tick; rebuilt every tick. */
   mateCandidates: number[];
-  mateWishers: Set<number>;
   reseeded: number;
   /** Genes of every creature that gave birth since the last history sample, summed, with the number of births. */
   parents: { count: number; size: number; speed: number; sensorRange: number; diet: number };
@@ -311,7 +310,6 @@ export function createWorld(config: SimConfig): World {
     births: 0,
     mating: { sexual: 0, kin: 0 },
     mateCandidates: [],
-    mateWishers: new Set(),
     reseeded: 0,
     defended: 0,
     fires: createFireTally(),
@@ -382,7 +380,6 @@ export function step(world: World): void {
   // Children born this tick are appended past `alive` and first act next tick.
   const alive = creatures.count;
   world.mateCandidates.length = 0;
-  world.mateWishers.clear();
   let thrustTotal = 0;
   // On a sampling tick, what each creature is doing is tallied for the Lab.
   const lab = world.lab;
@@ -635,8 +632,9 @@ export function step(world: World): void {
       }
     }
 
-    // Breeding alone is wished with Reproduce; breeding with a mate is wished with Mate. Alone, the
-    // birth is now. With a mate, who is near enough and willing is settled once everyone has moved.
+    // Breeding alone is wished with Reproduce; breeding with a mate is wished with Mate, and a
+    // creature that wishes for a mate waits for one rather than breeding alone. Alone, the birth is
+    // now; with a mate, who is near enough and willing is settled once everyone has moved.
     if (
       energy >= config.reproduceThreshold * maxEnergy &&
       age >= config.minReproduceAge &&
@@ -647,7 +645,6 @@ export function step(world: World): void {
         if (wantsChild) energy -= giveBirth(world, i, energy);
       } else if (mateWilling) {
         world.mateCandidates.push(i);
-        if (wantsChild) world.mateWishers.add(i);
       }
     }
     creatures.energy[i] = energy;
@@ -910,11 +907,10 @@ function closeKin(creatures: Creatures, a: number, b: number): boolean {
 /**
  * Pair up the creatures that want to mate. They are taken in a random order
  * (drawn from the world's own random numbers, so runs repeat), and each is
- * paired with the closest other willing creature within reach of a bite,
+ * paired with the closest other willing creature within mating reach,
  * which also must be able to breed and, if the world sets a limit, be alike
  * enough. A pair that cannot afford a child is left as it was. A creature
- * that finds no mate breeds alone if it also wished to, in a world that
- * allows both.
+ * that finds no mate waits, keeping its energy, and tries again next tick.
  */
 function pairUp(world: World): void {
   const { creatures, config, rng, hash } = world;
@@ -927,7 +923,7 @@ function pairUp(world: World): void {
   const done = new Set<number>();
   // The hash holds positions from the start of the tick; a creature moves less than this since.
   const slack = 4 * config.creatureRadius * config.maxSize + 2 * config.creatureSpeed * config.maxSpeed;
-  const reach = config.attackReach;
+  const reach = config.mateReach;
   for (const a of candidates) {
     if (done.has(a) || !canBreed(world, a)) continue;
     let best = -1;
@@ -959,12 +955,6 @@ function pairUp(world: World): void {
       creatures.energy[best]! -= (given * offerB) / (offerA + offerB);
       done.add(a);
       done.add(best);
-    }
-  }
-  if (config.reproductionMode === 1) {
-    for (const a of candidates) {
-      if (done.has(a) || !world.mateWishers.has(a) || !canBreed(world, a)) continue;
-      creatures.energy[a]! -= giveBirth(world, a, creatures.energy[a]!);
     }
   }
 }

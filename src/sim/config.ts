@@ -165,6 +165,8 @@ export interface SimConfig {
    * willing creatures are in reach, together; 2 only together.
    */
   reproductionMode: number;
+  /** How close, edge to edge, two willing creatures must be to mate. */
+  mateReach: number;
   /**
    * Two creatures only mate if their brains and bodies differ by less than
    * this (see mateDistance). 0 lets any two mate.
@@ -459,6 +461,7 @@ export const defaultConfig: SimConfig = {
   birthCost: 0.25,
   minReproduceAge: 150,
   reproductionMode: 0,
+  mateReach: 40,
   mateBarrier: 0,
   displayCost: 0.03,
   maxCreatures: 10000,
