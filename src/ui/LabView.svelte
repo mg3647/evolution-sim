@@ -241,11 +241,11 @@
     ];
   });
   const RATE_SERIES: ChartSeries[] = [
-    { label: 'Mean learning rate', color: '#e8c468' },
+    { label: 'Mean learning rate (x1000)', color: '#e8c468' },
     { label: 'Mean time constant (ticks)', color: '#6cb6ff', axis: 'right' },
   ];
   const rateData = $derived<uPlot.AlignedData | null>(
-    history && [history.tick, history.meanPlasticity, history.meanTau],
+    history && [history.tick, history.meanPlasticity.map((rate) => rate * 1000), history.meanTau],
   );
 
   const ACTIVITY_SERIES: ChartSeries[] = [
@@ -475,7 +475,7 @@
       </div>
     </section>
 
-    <section class="card">
+    <section class="card wide">
       <h1>Learning and slow neurons</h1>
       <p class="teaches">
         Whether evolution has used two brain features that start switched off. A link that can learn strengthens
@@ -488,7 +488,7 @@
       </div>
     </section>
 
-    <section class="card">
+    <section class="card wide">
       <h1>Is the wiring selected, or just drifting?</h1>
       <p class="teaches">
         Every brain link keeps a running count of how many samples it has been in the population. A link can last
