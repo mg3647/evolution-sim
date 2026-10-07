@@ -391,6 +391,7 @@ function sendHistory(now: number): void {
     wiringShadowActivity: h.wiringShadowActivity.slice(0, h.count),
     wiringSurvival: h.wiringSurvival.slice(0, h.count),
     wiringShadowSurvival: h.wiringShadowSurvival.slice(0, h.count),
+    recurrentShare: h.recurrentShare.slice(0, h.count),
     blockMoves: [],
     species: [],
   };

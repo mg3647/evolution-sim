@@ -4,6 +4,7 @@ import {
   compileBrain,
   enabledLinks,
   founderBrain,
+  hasLoop,
   Innovations,
   INPUT_COUNT,
   INPUT_LABELS,
@@ -355,5 +356,25 @@ describe('learning', () => {
       expect(rate).toBeLessThanOrEqual(Math.fround(0.04));
     }
     expect(seen.size).toBeGreaterThan(5);
+  });
+});
+
+describe('hasLoop', () => {
+  const link = (from: number, to: number, enabled = true) => ({ innovation: from * 1000 + to, from, to, weight: 1, enabled });
+  const H1 = FIXED;
+  const H2 = FIXED + 1;
+
+  it('is false for a brain with no loop, however deep', () => {
+    expect(hasLoop(compileBrain([link(0, INPUT_COUNT)], []))).toBe(false);
+    expect(hasLoop(compileBrain([link(0, H1), link(H1, H2), link(H2, INPUT_COUNT)], [H1, H2]))).toBe(false);
+  });
+
+  it('finds a neuron feeding itself, and a longer loop', () => {
+    expect(hasLoop(compileBrain([link(0, H1), link(H1, H1)], [H1]))).toBe(true);
+    expect(hasLoop(compileBrain([link(0, H1), link(H1, H2), link(H2, H1)], [H1, H2]))).toBe(true);
+  });
+
+  it('ignores a loop whose link is switched off', () => {
+    expect(hasLoop(compileBrain([link(0, H1), link(H1, H1, false)], [H1]))).toBe(false);
   });
 });

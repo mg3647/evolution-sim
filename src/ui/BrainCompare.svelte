@@ -94,7 +94,7 @@
       <BrainGraph
         brain={typical.view}
         strength={typical.strength}
-        note="On average {side.group.profile.meanLinks.toFixed(1)} links and {side.group.profile.meanHidden.toFixed(1)} hidden neurons each. {typical.view.linkWeight.length === 0 ? 'No link is shared by half the group: its members are wired in many different ways.' : ''}"
+        note="On average {side.group.profile.meanLinks.toFixed(1)} links and {side.group.profile.meanHidden.toFixed(1)} hidden neurons each; {Math.round(side.group.profile.recurrentShare * 100)}% have a loop that can keep a state. {typical.view.linkWeight.length === 0 ? 'No link is shared by half the group: its members are wired in many different ways.' : ''}"
       />
     {:else}
       <p class="empty">No creatures in this group right now.</p>

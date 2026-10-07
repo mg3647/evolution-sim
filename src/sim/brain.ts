@@ -446,6 +446,33 @@ export function think(brain: Brain): void {
   }
 }
 
+/**
+ * Whether the enabled links contain a loop (including a neuron feeding
+ * itself). Only a brain with a loop can carry anything over from one tick
+ * to the next beyond a slow neuron's own lag.
+ */
+export function hasLoop(brain: Brain): boolean {
+  const nodes = brain.activation.length;
+  const outgoing: number[][] = Array.from({ length: nodes }, () => []);
+  for (let k = 0; k < brain.linkFrom.length; k++) {
+    // Inputs are set from outside, so a link into one cannot exist; start from links between other neurons.
+    if (brain.linkFrom[k]! >= INPUT_COUNT) outgoing[brain.linkFrom[k]!]!.push(brain.linkTo[k]!);
+  }
+  // Depth-first search: 0 unvisited, 1 on the current path, 2 finished.
+  const state = new Uint8Array(nodes);
+  const visit = (n: number): boolean => {
+    state[n] = 1;
+    for (const next of outgoing[n]!) {
+      if (state[next] === 1) return true;
+      if (state[next] === 0 && visit(next)) return true;
+    }
+    state[n] = 2;
+    return false;
+  };
+  for (let n = INPUT_COUNT; n < nodes; n++) if (state[n] === 0 && visit(n)) return true;
+  return false;
+}
+
 /** Number of links that are switched on. */
 export function enabledLinks(brain: Brain): number {
   return brain.linkWeight.length;

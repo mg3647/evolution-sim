@@ -62,6 +62,7 @@ function sample(tick: number): Sample {
     wiringShadowActivity: 0,
     wiringSurvival: 0,
     wiringShadowSurvival: 0,
+    recurrentShare: 0,
   };
 }
 

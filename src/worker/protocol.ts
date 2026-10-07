@@ -258,6 +258,7 @@ export interface HistoryData {
   wiringShadowActivity: Float32Array;
   wiringSurvival: Float32Array;
   wiringShadowSurvival: Float32Array;
+  recurrentShare: Float32Array;
   /** Blocks moved per 1,000 ticks by the species that moved most, most first; the rest are summed under id 0. */
   blockMoves: { id: number; counts: Float32Array }[];
   /** Members of the largest species at every sample, largest first; the rest are summed under id 0. */

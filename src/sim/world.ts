@@ -2,6 +2,7 @@ import {
   brainCost,
   enabledLinks,
   founderBrain,
+  hasLoop,
   type Brain,
   Innovations,
   Input,
@@ -952,6 +953,7 @@ function sampleHistory(world: World): void {
   let plasticLinks = 0;
   let tauTotal = 0;
   let slowNeurons = 0;
+  let looped = 0;
   for (let i = 0; i < creatures.count; i++) {
     if (creatures.diet[i]! > 0.5) meatEaters++;
     const held = creatures.held[i]!;
@@ -962,6 +964,7 @@ function sampleHistory(world: World): void {
     links += enabledLinks(creatures.brain[i]!);
     neurons += creatures.brain[i]!.hiddenIds.length;
     const brain = creatures.brain[i]!;
+    if (hasLoop(brain)) looped++;
     plasticLinks += brain.plasticLinks.length;
     for (let k = 0; k < brain.plasticRate.length; k++) plasticityTotal += brain.plasticRate[k]!;
     for (const tau of brain.hiddenTau) {
@@ -1042,6 +1045,7 @@ function sampleHistory(world: World): void {
     plasticLinkShare: links > 0 ? plasticLinks / links : 0,
     meanTau: neurons > 0 ? tauTotal / neurons : 1,
     slowNeuronShare: neurons > 0 ? slowNeurons / neurons : 0,
+    recurrentShare: looped / count,
     wiringLive: wiring.live,
     wiringShadowLive: wiring.shadowLive,
     wiringActivity: wiring.meanActivity,

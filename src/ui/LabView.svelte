@@ -228,6 +228,7 @@
   const BRAIN_SERIES: ChartSeries[] = [
     { label: 'Links that can learn %', color: '#7fd6c2' },
     { label: 'Slow neurons %', color: '#c478ff' },
+    { label: 'Brains with a loop %', color: '#e8c468' },
   ];
   const brainFeatureData = $derived.by<uPlot.AlignedData | null>(() => {
     if (!history) return null;
@@ -235,6 +236,7 @@
       history.tick,
       history.plasticLinkShare.map((share) => share * 100),
       history.slowNeuronShare.map((share) => share * 100),
+      history.recurrentShare.map((share) => share * 100),
     ];
   });
   const RATE_SERIES: ChartSeries[] = [

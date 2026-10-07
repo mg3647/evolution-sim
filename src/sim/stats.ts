@@ -101,6 +101,9 @@ export interface History {
   wiringSurvival: Float32Array;
   wiringShadowSurvival: Float32Array;
 
+  /** Share of creatures whose brain contains a loop, so it can keep a state from one tick to the next. */
+  recurrentShare: Float32Array;
+
   /** Blocks moved per 1,000 ticks by each species, by species id. Not saved, like `species`. */
   blockMoves: Map<number, Float32Array>;
 
@@ -242,6 +245,7 @@ export const HISTORY_SERIES = [
   'wiringShadowActivity',
   'wiringSurvival',
   'wiringShadowSurvival',
+  'recurrentShare',
 ] as const;
 
 export interface Sample {
@@ -304,6 +308,7 @@ export interface Sample {
   wiringShadowActivity: number;
   wiringSurvival: number;
   wiringShadowSurvival: number;
+  recurrentShare: number;
 }
 
 export function createHistory(interval: number, capacity: number): History {
@@ -370,6 +375,7 @@ export function createHistory(interval: number, capacity: number): History {
     wiringShadowActivity: new Float32Array(capacity),
     wiringSurvival: new Float32Array(capacity),
     wiringShadowSurvival: new Float32Array(capacity),
+    recurrentShare: new Float32Array(capacity),
     blockMoves: new Map(),
     species: new Map(),
     density: createDensityHistory(),
