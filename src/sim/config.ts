@@ -90,6 +90,12 @@ export interface SimConfig {
   weightChangeScale: number;
   /** Per birth: chance that each link's weight is replaced outright. */
   weightResetChance: number;
+  /**
+   * Links added by mutation start with a weight of this standard deviation
+   * (founders' links always use 1). Small makes a new link nearly neutral, to
+   * be strengthened later if it helps.
+   */
+  newLinkWeightScale: number;
   /** Per birth: chances of gaining a link, splitting a link with a new neuron, and toggling a link. */
   addLinkChance: number;
   addNeuronChance: number;
@@ -109,6 +115,12 @@ export interface SimConfig {
   plasticityChangeChance: number;
   plasticityChangeScale: number;
   maxPlasticity: number;
+  /**
+   * Share of the gap between a learning link's live weight and the weight it
+   * was born with that closes each tick, so what is learned fades unless it is
+   * used. 0 never forgets.
+   */
+  plasticityDecay: number;
   /** Energy a creature of size 1 spends per tick just staying alive. */
   upkeepCost: number;
   /** Share of upkeep that every body pays regardless of its size. */
@@ -154,6 +166,20 @@ export interface SimConfig {
   birthCost: number;
   /** Creatures younger than this many ticks cannot reproduce. */
   minReproduceAge: number;
+  /**
+   * How creatures reproduce: 0 alone, as before; 1 either alone or, when two
+   * willing creatures are in reach, together; 2 only together.
+   */
+  reproductionMode: number;
+  /** How close, edge to edge, two willing creatures must be to mate. */
+  mateReach: number;
+  /**
+   * Two creatures only mate if their brains and bodies differ by less than
+   * this (see mateDistance). 0 lets any two mate.
+   */
+  mateBarrier: number;
+  /** Energy per tick a creature spends on a full Display; less when it shows less. */
+  displayCost: number;
   /** No births happen while the population is at this size. */
   maxCreatures: number;
   /** Below this population, new parentless creatures are added. */
@@ -376,7 +402,7 @@ export const defaultConfig: SimConfig = {
   riverWidth: 2,
   moistureBoost: 0.5,
   moistureReach: 6,
-  thirstRate: 0.0004,
+  thirstRate: 0.0001,
   drinkRate: 0.02,
   swimSpeed: 0.5,
   swimCost: 1.5,
@@ -408,8 +434,9 @@ export const defaultConfig: SimConfig = {
   weightChangeChance: 0.5,
   weightChangeScale: 4,
   weightResetChance: 0.02,
-  addLinkChance: 0.1,
-  addNeuronChance: 0.03,
+  newLinkWeightScale: 0.1,
+  addLinkChance: 0.3,
+  addNeuronChance: 0.06,
   toggleLinkChance: 0.03,
   tauChangeChance: 0.05,
   tauChangeScale: 0.5,
@@ -417,6 +444,7 @@ export const defaultConfig: SimConfig = {
   plasticityChangeChance: 0.03,
   plasticityChangeScale: 0.01,
   maxPlasticity: 0.05,
+  plasticityDecay: 0.002,
   upkeepCost: 0.12,
   upkeepFixedShare: 0.5,
   moveCost: 0.05,
@@ -439,6 +467,10 @@ export const defaultConfig: SimConfig = {
   offspringShare: 0.5,
   birthCost: 0.25,
   minReproduceAge: 150,
+  reproductionMode: 0,
+  mateReach: 40,
+  mateBarrier: 0,
+  displayCost: 0.03,
   maxCreatures: 10000,
   minPopulation: 20,
 
@@ -502,8 +534,8 @@ export const defaultConfig: SimConfig = {
   seasonTempSwing: 0.25,
   dayTempSwing: 0.15,
   iceAgeChill: 0.4,
-  comfortBand: 0.35,
-  temperatureCost: 1.5,
+  comfortBand: 0.5,
+  temperatureCost: 0.75,
   furWarmth: 0.6,
   furHeat: 0.4,
   sizeWarmth: 0.3,

@@ -3,7 +3,7 @@
 A 2D world of creatures whose bodies and brains evolve under natural selection
 alone: no fitness score, just a closed energy economy. Runs in the browser.
 
-Status: v3. Creatures have 71 senses and 8 actions: besides what is below,
+Status: v3. Creatures have 75 senses and 12 actions: besides what is below,
 they see what others eat, whether they are approaching or hurt, feel what is
 behind them, crowding and pain, hear and make calls, give energy to one
 another, and see less far at night. Plants regrow on a fertility map. Creatures see with
@@ -105,3 +105,10 @@ enabled for the repository with "GitHub Actions" as the source.
   same browser.)
 - Every constant lives in `src/sim/config.ts`. The settings panel's sliders,
   hints and presets are in `src/sim/presets.ts`.
+
+Creatures can also reproduce with a mate (Settings, Life and breeding: how
+creatures reproduce): two willing creatures in reach each pay half the usual
+share and the child gets a NEAT-style cross of both brains and a mix of both
+bodies. They can show a costly Display others see, switch eating off, and
+modulate how fast their links learn; links that learn drift back to their
+inherited weight unless used. Saves from versions 14 and 15 still open.

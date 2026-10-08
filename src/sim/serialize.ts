@@ -1,4 +1,4 @@
-import { compileBrain, Innovations, type InnovationsData, type LinkGene } from './brain';
+import { compileBrain, INPUT_COUNT, Innovations, type InnovationsData, type LinkGene, OUTPUT_COUNT } from './brain';
 import { defaultConfig, type SimConfig } from './config';
 import { createCreatures, type Creatures } from './creatures';
 import type { ActiveEvent, LogEntry } from './environment';
@@ -20,11 +20,13 @@ import type { World } from './world';
  */
 
 /** Bumped whenever the saved layout changes. */
-export const SAVE_VERSION = 15;
+export const SAVE_VERSION = 16;
 /**
  * Oldest save this version still opens. Saves from 14 on load with the newer
  * fields at their neutral values (settings added since take their defaults,
- * neurons answer at once, links do not learn), so they play as they did before.
+ * neurons answer at once, links do not learn, nothing is displayed, eating is
+ * on, mating is off), so they play as they did before. Brains from before 16
+ * are renumbered to make room for the new senses and actions.
  */
 export const OLDEST_LOADABLE_VERSION = 14;
 
@@ -32,6 +34,7 @@ export const OLDEST_LOADABLE_VERSION = 14;
 const CREATURE_FIELDS = [
   'id',
   'parentId',
+  'otherParentId',
   'generation',
   'founder',
   'species',
@@ -45,6 +48,9 @@ const CREATURE_FIELDS = [
   'hydration',
   'pain',
   'calling',
+  'energyLast',
+  'trend',
+  'display',
   'held',
   'heldEnergy',
   'heldFromX',
@@ -59,6 +65,51 @@ const CREATURE_FIELDS = [
   'defense',
   'mutationRate',
 ] as const;
+
+/** The brain layout before save version 16: ray size, and counts of inputs, outputs and the neurons before the hidden ones. */
+const OLD_RAY_INPUTS = 15;
+const OLD_AFTER_RAYS = 3 * OLD_RAY_INPUTS;
+const OLD_INPUTS = OLD_AFTER_RAYS + 26;
+const OLD_FIXED = OLD_INPUTS + 8;
+/** Inputs after the rays that were already there: all but Bias, which moved to make room for the energy trend. */
+const OLD_BIAS = OLD_AFTER_RAYS + 25;
+const NEW_RAY_INPUTS = 16;
+const NEW_AFTER_RAYS = 3 * NEW_RAY_INPUTS;
+
+/** Where a neuron of a save from before version 16 sits in the current layout. */
+function moveNeuron(n: number): number {
+  if (n < OLD_AFTER_RAYS) return Math.floor(n / OLD_RAY_INPUTS) * NEW_RAY_INPUTS + (n % OLD_RAY_INPUTS);
+  if (n < OLD_BIAS) return NEW_AFTER_RAYS + (n - OLD_AFTER_RAYS);
+  if (n === OLD_BIAS) return INPUT_COUNT - 1;
+  if (n < OLD_FIXED) return INPUT_COUNT + (n - OLD_INPUTS);
+  return INPUT_COUNT + OUTPUT_COUNT + (n - OLD_FIXED);
+}
+
+/** A save from before version 16 with every brain renumbered to the current inputs and outputs. */
+function renumberBrains(saved: SavedWorld): SavedWorld {
+  return {
+    ...saved,
+    innovations: {
+      ...saved.innovations,
+      links: saved.innovations.links.map(([key, id]) => {
+        const [from, to] = key.split('>').map(Number);
+        return [`${moveNeuron(from!)}>${moveNeuron(to!)}`, id] as [string, number];
+      }),
+      splits: saved.innovations.splits.map(([link, node]) => [link, moveNeuron(node)] as [number, number]),
+      nextNode: moveNeuron(saved.innovations.nextNode),
+    },
+    creatures: {
+      ...saved.creatures,
+      brains: saved.creatures.brains.map((brain) => ({
+        ...brain,
+        links: brain.links.map((link) => ({ ...link, from: moveNeuron(link.from), to: moveNeuron(link.to) })),
+        hiddenIds: brain.hiddenIds.map(moveNeuron),
+        // What each neuron was last doing is not carried over; the brain restarts from rest.
+        activation: [],
+      })),
+    },
+  };
+}
 
 const FIELD_ARRAYS = ['fertility', 'capacity', 'energy', 'meat', 'scent', 'walls', 'water', 'temperature', 'branches', 'stones', 'fire', 'ash', 'store', 'blocks', 'blockSpecies', 'blockBuilt'] as const;
 
@@ -97,6 +148,10 @@ export interface SavedWorld {
   ledger: EnergyLedger;
   history: { interval: number; count: number } & Record<(typeof HISTORY_SERIES)[number], number[]>;
   births: number;
+  /** Births of two parents so far; absent in saves from before mating. */
+  mating?: World['mating'];
+  /** Brain changes counted at births; absent in older saves. */
+  structural?: World['structural'];
   reseeded: number;
   defended: number;
   fires: World['fires'];
@@ -162,6 +217,8 @@ export function saveWorld(world: World): SavedWorld {
     ledger: { ...world.ledger },
     history: savedHistory,
     births: world.births,
+    mating: { ...world.mating },
+    structural: { ...world.structural },
     reseeded: world.reseeded,
     defended: world.defended,
     fires: { ...world.fires },
@@ -192,7 +249,8 @@ export function saveWorld(world: World): SavedWorld {
 }
 
 /** Rebuild a world from saved data. Throws if the data is not a save this version can read. */
-export function loadWorld(saved: SavedWorld): World {
+export function loadWorld(savedWorld: SavedWorld): World {
+  const saved = savedWorld && savedWorld.version >= OLDEST_LOADABLE_VERSION && savedWorld.version < 16 ? renumberBrains(savedWorld) : savedWorld;
   if (!saved || typeof saved !== 'object' || !(saved.version >= OLDEST_LOADABLE_VERSION && saved.version <= SAVE_VERSION)) {
     throw new Error(
       `This file is not a saved world this version can read (expected save version ${SAVE_VERSION}).`,
@@ -242,14 +300,16 @@ export function loadWorld(saved: SavedWorld): World {
   const creatures: Creatures = createCreatures(Math.max(16, count));
   creatures.count = count;
   creatures.nextId = saved.creatures.nextId;
-  for (const name of CREATURE_FIELDS) creatures[name].set(saved.creatures[name]);
+  // A field added since the save was made starts at its value for a newborn.
+  for (const name of CREATURE_FIELDS) if (saved.creatures[name]) creatures[name].set(saved.creatures[name]);
+  if (!saved.creatures.energyLast) creatures.energyLast.set(creatures.energy.subarray(0, count));
   creatures.brain = saved.creatures.brains.map((savedBrain) => {
     const brain = compileBrain(
       savedBrain.links.map((link) => ({ ...link })),
       savedBrain.hiddenIds.slice(),
       savedBrain.hiddenTau?.slice(),
     );
-    brain.activation.set(savedBrain.activation);
+    if (savedBrain.activation.length === brain.activation.length) brain.activation.set(savedBrain.activation);
     if (savedBrain.liveWeights) brain.linkWeight.set(savedBrain.liveWeights);
     return brain;
   });
@@ -298,6 +358,9 @@ export function loadWorld(saved: SavedWorld): World {
     ledger: { ...saved.ledger },
     history,
     births: saved.births,
+    structural: { links: saved.structural?.links ?? 0, neurons: saved.structural?.neurons ?? 0 },
+    mating: { sexual: saved.mating?.sexual ?? 0, kin: saved.mating?.kin ?? 0 },
+    mateCandidates: [],
     reseeded: saved.reseeded,
     defended: saved.defended,
     fires: { ...saved.fires },

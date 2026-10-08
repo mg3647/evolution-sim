@@ -1,5 +1,6 @@
 import {
   brainCost,
+  crossoverBrain,
   enabledLinks,
   founderBrain,
   hasLoop,
@@ -38,6 +39,7 @@ import {
   biteFor,
   bodyEnergyFor,
   climateCostFor,
+  crossGenes,
   defenseCostFor,
   founderGenes,
   maxEnergyFor,
@@ -83,6 +85,7 @@ import {
 import { wrap, wrappedDelta } from './geometry';
 import { createLedger, type EnergyLedger } from './ledger';
 import { Lineage } from './lineage';
+import { mateDistance } from './mating';
 import {
   cellIndexAt,
   createPlantField,
@@ -133,6 +136,12 @@ export interface World {
   history: History;
   /** Cumulative counts since the world was created. */
   births: number;
+  /** Brain changes seen at births of one parent so far: links and neurons added by mutation (a neuron split counts once, not as its two links). */
+  structural: { links: number; neurons: number };
+  /** Births of two parents, and how many of those were between close relatives (parent and child, or siblings). */
+  mating: { sexual: number; kin: number };
+  /** Creatures willing and able to mate this tick; rebuilt every tick. */
+  mateCandidates: number[];
   reseeded: number;
   /** Genes of every creature that gave birth since the last history sample, summed, with the number of births. */
   parents: { count: number; size: number; speed: number; sensorRange: number; diet: number };
@@ -250,6 +259,8 @@ const KIN_HUE = 0.1;
 
 /** Health value that marks a creature struck down by an event this tick. */
 const STRUCK = -2;
+/** Share of the newest change in its energy that enters the smoothed trend each turn. */
+const TREND_SMOOTHING = 0.2;
 
 /** Add a creature with no parent at a random position. Returns the energy it embodies. */
 function spawnFounder(world: World, age: number): number {
@@ -299,6 +310,9 @@ export function createWorld(config: SimConfig): World {
     ledger: createLedger(),
     history: createHistory(config.statsInterval, config.statsCapacity),
     births: 0,
+    structural: { links: 0, neurons: 0 },
+    mating: { sexual: 0, kin: 0 },
+    mateCandidates: [],
     reseeded: 0,
     defended: 0,
     fires: createFireTally(),
@@ -368,6 +382,7 @@ export function step(world: World): void {
 
   // Children born this tick are appended past `alive` and first act next tick.
   const alive = creatures.count;
+  world.mateCandidates.length = 0;
   let thrustTotal = 0;
   // On a sampling tick, what each creature is doing is tallied for the Lab.
   const lab = world.lab;
@@ -380,10 +395,15 @@ export function step(world: World): void {
     const brain = creatures.brain[i]!;
 
     // Sense, then think. Outputs are in [-1, 1].
+    // How its energy has moved since its last turn, smoothed, is what it senses as a trend.
+    creatures.trend[i] =
+      creatures.trend[i]! * (1 - TREND_SMOOTHING) +
+      ((creatures.energy[i]! - creatures.energyLast[i]!) / maxEnergyFor(size, config)) * TREND_SMOOTHING;
+    creatures.energyLast[i] = creatures.energy[i]!;
     world.senses.sense(creatures, i, world.tick, brain.activation);
     const hurt = creatures.pain[i]! > 0;
     creatures.pain[i] = 0;
-    think(brain);
+    think(brain, config.plasticityDecay);
     const turn = brain.activation[INPUT_COUNT + Output.Turn]! * config.maxTurn;
     let thrust = (brain.activation[INPUT_COUNT + Output.Thrust]! + 1) / 2;
     thrustTotal += thrust;
@@ -394,6 +414,10 @@ export function step(world: World): void {
     const calling = brain.activation[INPUT_COUNT + Output.Call]! > 0;
     const giving = brain.activation[INPUT_COUNT + Output.Give]! > 0;
     const holding = brain.activation[INPUT_COUNT + Output.Hold]! > 0;
+    // Eating is on unless the brain shuts it off, so a brain that never uses the output eats as before.
+    const eating = brain.activation[INPUT_COUNT + Output.Eat]! >= -0.5;
+    const display = Math.max(0, brain.activation[INPUT_COUNT + Output.Display]!);
+    creatures.display[i] = display;
     creatures.calling[i] = calling ? 1 : 0;
     const sick = updateInfection(world, i);
     const diet = creatures.diet[i]!;
@@ -480,7 +504,7 @@ export function step(world: World): void {
     }
     const maxEnergy = maxEnergyFor(size, config);
     let energy = creatures.energy[i]!;
-    let mouthful = biteFor(size, config) * (1 - config.eatSlowdown * thrust);
+    let mouthful = eating ? biteFor(size, config) * (1 - config.eatSlowdown * thrust) : 0;
     const meatRate = config.meatBiteScale * meatDigestion(diet);
     const meatBite = Math.max(0, Math.min(mouthful * meatRate, plants.meat[cell]!, maxEnergy - energy));
     plants.meat[cell]! -= meatBite;
@@ -581,6 +605,7 @@ export function step(world: World): void {
         (attacking ? config.attackCost * size * size : 0) +
         (emitting ? config.scentCost : 0) +
         (calling ? config.callCost : 0) +
+        config.displayCost * display +
         (land.moveCost - 1) * moveCostFor(size, speed, thrust, config) +
         // In or beside a block's cell there is shelter from the heat and the cold.
         climateCostFor(felt, size, creatures.fur[i]!, config) * (plants.nearBlocks[cell]! > 0 ? 1 - config.shelter : 1) +
@@ -610,13 +635,20 @@ export function step(world: World): void {
       }
     }
 
+    // Breeding alone is wished with Reproduce; breeding with a mate is wished with Mate, and a
+    // creature that wishes for a mate waits for one rather than breeding alone. Alone, the birth is
+    // now; with a mate, who is near enough and willing is settled once everyone has moved.
     if (
-      wantsChild &&
       energy >= config.reproduceThreshold * maxEnergy &&
       age >= config.minReproduceAge &&
       creatures.count < config.maxCreatures
     ) {
-      energy -= giveBirth(world, i, energy);
+      const mateWilling = brain.activation[INPUT_COUNT + Output.Mate]! >= 0;
+      if (config.reproductionMode === 0 || (config.reproductionMode === 1 && !mateWilling)) {
+        if (wantsChild) energy -= giveBirth(world, i, energy);
+      } else if (mateWilling) {
+        world.mateCandidates.push(i);
+      }
     }
     creatures.energy[i] = energy;
     // Health is read here, after any bites taken earlier this tick, so healing never hides a kill.
@@ -624,6 +656,7 @@ export function step(world: World): void {
   }
 
   world.activity = alive > 0 ? thrustTotal / alive : 0;
+  if (world.mateCandidates.length > 0) pairUp(world);
 
   // Deaths. Backwards, so a removal only moves an already-checked creature.
   for (let i = creatures.count - 1; i >= 0; i--) {
@@ -695,8 +728,8 @@ function setDown(world: World, i: number, cell: number): void {
   const held = creatures.held[i]!;
   const energy = creatures.heldEnergy[i]!;
   if (held === Held.Block) {
-    // A block falls where its carrier fell, or beside it; with no room at all it is lost.
-    const at = freeCellNear(plants, cell);
+    // A block falls where its carrier fell, or on the nearest dry free cell within a dozen; with no room at all it is lost.
+    const at = freeCellNear(plants, cell, 12);
     if (at >= 0) addBlock(plants, at, creatures.species[i]!, true);
   } else if (held === Held.Stone) {
     if (plants.stones[cell]! < 255) plants.stones[cell]!++;
@@ -847,28 +880,129 @@ export function clearWorldWalls(world: World): void {
  * holds `energy`. Returns the energy the parent gives up.
  */
 function giveBirth(world: World, parent: number, energy: number): number {
+  return bear(world, parent, -1, energy * world.config.offspringShare);
+}
+
+/**
+ * A creature at index `a` may breed now: enough energy, old enough, alive, and room in the world.
+ * Also true of a mating candidate that has since been bitten or given something away.
+ */
+function canBreed(world: World, a: number): boolean {
+  const { creatures, config } = world;
+  return (
+    creatures.health[a]! > 0 &&
+    creatures.energy[a]! >= config.reproduceThreshold * maxEnergyFor(creatures.size[a]!, config) &&
+    creatures.age[a]! >= config.minReproduceAge &&
+    creatures.count < config.maxCreatures
+  );
+}
+
+/** Two creatures are close kin if one is the other's parent, or they share a parent. */
+function closeKin(creatures: Creatures, a: number, b: number): boolean {
+  const idA = creatures.id[a]!;
+  const idB = creatures.id[b]!;
+  const parentsA = [creatures.parentId[a]!, creatures.otherParentId[a]!];
+  const parentsB = [creatures.parentId[b]!, creatures.otherParentId[b]!];
+  if (parentsA.includes(idB) || parentsB.includes(idA)) return true;
+  return parentsA.some((parent) => parent !== 0 && parentsB.includes(parent));
+}
+
+/**
+ * Pair up the creatures that want to mate. They are taken in a random order
+ * (drawn from the world's own random numbers, so runs repeat), and each is
+ * paired with the closest other willing creature within mating reach,
+ * which also must be able to breed and, if the world sets a limit, be alike
+ * enough. A pair that cannot afford a child is left as it was. A creature
+ * that finds no mate waits, keeping its energy, and tries again next tick.
+ */
+function pairUp(world: World): void {
+  const { creatures, config, rng, hash } = world;
+  const candidates = world.mateCandidates;
+  const isCandidate = new Set(candidates);
+  for (let k = candidates.length - 1; k > 0; k--) {
+    const j = rng.int(0, k + 1);
+    [candidates[k], candidates[j]] = [candidates[j]!, candidates[k]!];
+  }
+  const done = new Set<number>();
+  // The hash holds positions from the start of the tick; a creature moves less than this since.
+  const slack = 4 * config.creatureRadius * config.maxSize + 2 * config.creatureSpeed * config.maxSpeed;
+  const reach = config.mateReach;
+  for (const a of candidates) {
+    if (done.has(a) || !canBreed(world, a)) continue;
+    let best = -1;
+    let bestGap = Infinity;
+    hash.query(creatures.x[a]!, creatures.y[a]!, reach + slack, (b) => {
+      if (b === a || done.has(b) || !isCandidate.has(b) || !canBreed(world, b)) return;
+      const dx = wrappedDelta(creatures.x[a]!, creatures.x[b]!, config.worldWidth);
+      const dy = wrappedDelta(creatures.y[a]!, creatures.y[b]!, config.worldHeight);
+      const gap = Math.hypot(dx, dy) - config.creatureRadius * (creatures.size[a]! + creatures.size[b]!);
+      if (gap > reach || gap >= bestGap) return;
+      if (
+        config.mateBarrier > 0 &&
+        mateDistance(genesOf(creatures, a), creatures.brain[a]!, genesOf(creatures, b), creatures.brain[b]!) >=
+          config.mateBarrier
+      ) {
+        return;
+      }
+      best = b;
+      bestGap = gap;
+    });
+    if (best < 0) continue;
+    // Each offers half the usual share, so a child of two starts with what a child of one does.
+    const offerA = (creatures.energy[a]! * config.offspringShare) / 2;
+    const offerB = (creatures.energy[best]! * config.offspringShare) / 2;
+    const carrier = rng.chance(0.5) ? a : best;
+    const given = bear(world, carrier, carrier === a ? best : a, offerA + offerB);
+    if (given > 0) {
+      creatures.energy[a]! -= (given * offerA) / (offerA + offerB);
+      creatures.energy[best]! -= (given * offerB) / (offerA + offerB);
+      done.add(a);
+      done.add(best);
+    }
+  }
+}
+
+/**
+ * Bear a child to `carrier` and, if `other` is not -1, to `other` as well,
+ * from `offered` energy in all. The child is a mutated copy of the parent,
+ * or of a cross of the two. Returns the energy taken from the parents, or 0
+ * if there was too little to build a body.
+ */
+function bear(world: World, carrier: number, other: number, offered: number): number {
   const { config, rng, creatures, ledger } = world;
-  const parentGenes = genesOf(creatures, parent);
+  const parent = carrier;
+  const two = other >= 0;
+  const parentGenes = two
+    ? crossGenes(genesOf(creatures, carrier), genesOf(creatures, other), rng)
+    : genesOf(creatures, parent);
   const genes = mutateGenes(parentGenes, rng, config);
   const brain = mutateBrain(
-    creatures.brain[parent]!,
+    two ? crossoverBrain(creatures.brain[carrier]!, creatures.brain[other]!, rng) : creatures.brain[parent]!,
     parentGenes.mutationRate,
     rng,
     world.innovations,
     config,
   );
-  // The parent's share first builds the child's body; the rest is the child's
-  // starting store. A smaller child may not hold a full share, and the parent
-  // keeps what does not fit.
+  // Count what mutation added to the brain, for comparing with what the settings should give.
+  // Only for a child of one parent, whose brain is its parent's plus mutation.
+  if (!two) {
+    const parentBrain = creatures.brain[parent]!;
+    const newNeurons = Math.max(0, brain.hiddenIds.length - parentBrain.hiddenIds.length);
+    world.structural.neurons += newNeurons;
+    world.structural.links += Math.max(0, brain.links.length - parentBrain.links.length - 2 * newNeurons);
+  }
+  // The parents' share first builds the child's body; the rest is the child's
+  // starting store. A smaller child may not hold a full share, and the parents
+  // keep what does not fit.
   const body = bodyEnergyFor(genes.size, config);
   const childMax = maxEnergyFor(genes.size, config);
-  const given = Math.min(energy * config.offspringShare, (childMax + body) / (1 - config.birthCost));
+  const given = Math.min(offered, (childMax + body) / (1 - config.birthCost));
   const lost = given * config.birthCost;
   // Too little to build a body: no birth this tick.
   if (given - lost <= body) return 0;
   ledger.heatOut += lost;
 
-  // The child appears just behind the parent rather than on top of it.
+  // The child appears just behind the carrier rather than on top of it.
   const behind = creatures.heading[parent]! + Math.PI;
   const gap = config.creatureRadius * (creatures.size[parent]! + genes.size);
   let childX = wrap(creatures.x[parent]! + Math.cos(behind) * gap, config.worldWidth);
@@ -878,7 +1012,7 @@ function giveBirth(world: World, parent: number, energy: number): number {
     childX = creatures.x[parent]!;
     childY = creatures.y[parent]!;
   }
-  // Water is shared out, not made: the parent hands over a share of what its
+  // Water is shared out, not made: the carrier hands over a share of what its
   // body holds, and the child is as full as that makes a body its size. With
   // the share at zero a child is simply born as well watered as its parent.
   const parentBody = creatures.size[parent]! * creatures.size[parent]!;
@@ -889,6 +1023,8 @@ function giveBirth(world: World, parent: number, energy: number): number {
   const childWater = sharing
     ? Math.min(1, (parentWater * parentBody * config.birthWaterShare) / childBody)
     : parentWater;
+  // The carrier is the child's parent in the family tree, and gives it its species and its
+  // founder; the other parent is recorded beside it. Which of the two carries is chance.
   const child = spawnCreature(creatures, {
     x: childX,
     y: childY,
@@ -897,38 +1033,50 @@ function giveBirth(world: World, parent: number, energy: number): number {
     genes,
     brain,
     parentId: creatures.id[parent]!,
-    generation: creatures.generation[parent]! + 1,
+    otherParentId: two ? creatures.id[other]! : 0,
+    generation: Math.max(creatures.generation[parent]!, two ? creatures.generation[other]! : 0) + 1,
     founder: creatures.founder[parent]!,
     species: creatures.species[parent]!,
     hydration: childWater,
-    shadow: shadowFor(world, parent, brain),
+    shadow: shadowFor(world, two ? [parent, other] : [parent], brain),
   });
   if (sharing) creatures.hydration[parent] = parentWater - (childWater * childBody) / parentBody;
   world.lineage.born(creatures.id[child]!, creatures.id[parent]!, world.tick, genes.hue);
   world.births++;
-  if (creatures.children[parent] === 0) {
-    world.lab.firstBirths++;
-    world.lab.firstBirthAge += creatures.age[parent]!;
+  if (two) {
+    world.mating.sexual++;
+    if (closeKin(creatures, parent, other)) world.mating.kin++;
   }
-  if (creatures.children[parent]! < 65535) creatures.children[parent]!++;
+  for (const p of two ? [parent, other] : [parent]) {
+    if (creatures.children[p] === 0) {
+      world.lab.firstBirths++;
+      world.lab.firstBirthAge += creatures.age[p]!;
+    }
+    if (creatures.children[p]! < 65535) creatures.children[p]!++;
+  }
   world.lab.births++;
-  world.lab.parentAge += creatures.age[parent]!;
+  const mates = two ? 2 : 1;
+  world.lab.parentAge += (creatures.age[parent]! + (two ? creatures.age[other]! : 0)) / mates;
   world.parents.count++;
-  world.parents.size += parentGenes.size;
-  world.parents.speed += parentGenes.speed;
-  world.parents.sensorRange += parentGenes.sensorRange;
-  world.parents.diet += parentGenes.diet;
+  // Of two parents, the average of their genes counts.
+  const mean = (key: 'size' | 'speed' | 'sensorRange' | 'diet') =>
+    (creatures[key][parent]! + (two ? creatures[key][other]! : 0)) / mates;
+  world.parents.size += mean('size');
+  world.parents.speed += mean('speed');
+  world.parents.sensorRange += mean('sensorRange');
+  world.parents.diet += mean('diet');
   return given;
 }
 
 /**
  * The neutral shadow of a newborn: a copy of a random living creature's
- * shadow, plus the links its brain gained that its parent's did not have.
+ * shadow, plus the links its brain gained that its parents' did not have.
  */
-function shadowFor(world: World, parent: number, brain: Brain): number[] {
+function shadowFor(world: World, parents: number[], brain: Brain): number[] {
   const { creatures } = world;
   const chosen = creatures.shadow[world.shadowRng.int(0, creatures.count)]!;
-  const had = new Set(creatures.brain[parent]!.links.map((link) => link.innovation));
+  // Links either parent had are inherited, not new, so crossover does not pass for innovation.
+  const had = new Set(parents.flatMap((parent) => creatures.brain[parent]!.links.map((link) => link.innovation)));
   const shadow = chosen.slice();
   const held = new Set(shadow);
   for (const link of brain.links) {

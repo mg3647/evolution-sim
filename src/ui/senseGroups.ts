@@ -6,8 +6,8 @@ export type SenseGroup = (typeof SENSE_GROUPS)[number];
 
 export const SENSE_GROUP_HINTS: Record<SenseGroup, string> = {
   Vision: 'The ground along its three rays and underfoot, and how near the creature on each ray is',
-  Social: 'What it can tell about other creatures: kin, size, diet, colour, scent and calls',
-  Body: 'Its own state: energy, health, thirst, age, pain and sickness',
+  Social: 'What it can tell about other creatures: kin, size, diet, colour, displays, scent and calls',
+  Body: 'Its own state: energy and whether it is rising, health, thirst, age, pain and sickness',
   Climate: 'Season, daylight, temperature, water and fire',
   Items: 'Stones, branches, blocks and stored food, on the ground and in its grip',
 };
@@ -26,6 +26,7 @@ const RAY_GROUPS: Record<number, SenseGroup> = {
   [Ray.Hurt]: 'Social',
   [Ray.ColourWarm]: 'Social',
   [Ray.ColourGreen]: 'Social',
+  [Ray.Display]: 'Social',
   [Ray.Fire]: 'Climate',
   [Ray.Items]: 'Items',
   [Ray.Block]: 'Items',
@@ -57,6 +58,7 @@ const OTHER_GROUPS: Record<number, SenseGroup> = {
   [Input.HoldingTool]: 'Items',
   [Input.HoldingFood]: 'Items',
   [Input.HoldingBlock]: 'Items',
+  [Input.EnergyTrend]: 'Body',
   [Input.Bias]: 'Body',
 };
 

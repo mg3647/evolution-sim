@@ -18,19 +18,19 @@ import type { Lineage, LineageNode } from './lineage';
  */
 const WIRING_BINS = 128;
 /** Weights differ by up to this much between two groups before the difference counts fully. */
-const WEIGHT_SCALE = 4;
+export const WEIGHT_SCALE = 4;
 
 function binOf(innovation: number): number {
   return Math.imul(innovation, 2654435761) >>> 25;
 }
 
 /** A difference of this much in a gene's average counts as 1 toward the threshold. */
-const SIZE_SCALE = 0.2;
-const SPEED_SCALE = 0.2;
-const SENSOR_SCALE = 0.35;
-const DIET_SCALE = 0.15;
-const FUR_SCALE = 0.25;
-const DEFENSE_SCALE = 0.25;
+export const SIZE_SCALE = 0.2;
+export const SPEED_SCALE = 0.2;
+export const SENSOR_SCALE = 0.35;
+export const DIET_SCALE = 0.15;
+export const FUR_SCALE = 0.25;
+export const DEFENSE_SCALE = 0.25;
 
 export interface SpeciesRecord {
   id: number;
