@@ -127,7 +127,7 @@ export const SETTING_GROUPS: SettingGroup[] = [
     title: 'Water and thirst',
     about: 'How badly creatures need water and what it is like to be in it.',
     settings: [
-      { key: 'thirstRate', label: 'Thirst', hint: 'Share of its water a creature loses each tick', more: 'At 0.0004 a creature lasts about 2,500 ticks without a drink. Higher ties creatures closer to water.', min: 0, max: 0.005, step: 0.0001 },
+      { key: 'thirstRate', label: 'Thirst', hint: 'Share of its water a creature loses each tick', more: 'At 0.0001 a creature lasts about 10,000 ticks without a drink. Higher ties creatures closer to water.', min: 0, max: 0.005, step: 0.0001 },
       { key: 'drinkRate', label: 'Drinking speed', hint: 'Share of its water a creature regains each tick in or beside water', min: 0.001, max: 0.1, step: 0.001 },
       { key: 'swimSpeed', label: 'Swimming speed', hint: 'How fast creatures move in water, compared with on land', min: 0.1, max: 1, step: 0.05 },
       { key: 'swimCost', label: 'Swimming cost', hint: 'How much more energy living costs while in water', min: 1, max: 4, step: 0.1 },
@@ -172,6 +172,7 @@ export const SETTING_GROUPS: SettingGroup[] = [
     settings: [
       { key: 'initialMutationRate', label: 'Starting mutation rate', hint: 'How much the first creatures’ children differ from them', more: 'The rate is itself inherited and evolves, so this only sets where it starts.', min: 0.01, max: 0.3, step: 0.01 },
       { key: 'addLinkChance', label: 'Chance of a new brain link', hint: 'Chance, at each birth, that the child’s brain gains a link', more: 'Higher makes behaviour change faster, and brains grow unless links are costly.', min: 0, max: 0.5, step: 0.01 },
+      { key: 'newLinkWeightScale', label: 'Strength of a new link', hint: 'How strong a newly added link starts, as the spread of its weight', more: 'Small makes new links nearly harmless, so they can spread by drift and be strengthened later; 1 makes each one a real change at once.', min: 0.01, max: 2, step: 0.01 },
       { key: 'addNeuronChance', label: 'Chance of a new neuron', hint: 'Chance, at each birth, that the child’s brain gains a hidden neuron', min: 0, max: 0.2, step: 0.005 },
       { key: 'tauChangeChance', label: 'Chance a neuron gets slower or faster', hint: 'Chance, at each birth, that each hidden neuron’s time constant shifts', more: 'A neuron with a time constant of 1 follows its inputs at once. A larger one changes slowly, so it can hold a state for many ticks: a mood, a plan, or a count.', min: 0, max: 0.5, step: 0.01 },
       { key: 'plasticityChangeChance', label: 'Chance a link can learn', hint: 'Chance, at each birth, that each brain link’s learning rate shifts', more: 'A link with a learning rate above 0 strengthens when the neurons at both ends are active together, so a creature can adapt during its life. What it learns is not passed to its young; only the learning rate is.', min: 0, max: 0.3, step: 0.01 },

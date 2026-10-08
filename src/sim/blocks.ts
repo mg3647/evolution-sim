@@ -127,15 +127,18 @@ export function pushBlock(field: PlantField, from: number, to: number, species: 
 }
 
 /** A free cell for a block at `cell` or, failing that, one of the eight around it; -1 if there is none. */
-export function freeCellNear(field: PlantField, cell: number): number {
+export function freeCellNear(field: PlantField, cell: number, reach = 1): number {
   if (canHoldBlock(field, cell)) return cell;
   const { cols, rows } = field;
   const cx = cell % cols;
   const cy = (cell - cx) / cols;
-  for (let dy = -1; dy <= 1; dy++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      const near = ((cy + dy + rows) % rows) * cols + ((cx + dx + cols) % cols);
-      if (canHoldBlock(field, near)) return near;
+  for (let r = 1; r <= reach; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const near = ((cy + dy + rows) % rows) * cols + ((cx + dx + cols) % cols);
+        if (canHoldBlock(field, near)) return near;
+      }
     }
   }
   return -1;

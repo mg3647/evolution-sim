@@ -105,3 +105,29 @@ describe('the Energy trend sense', () => {
     expect(starving.creatures.brain[0]!.activation[Input.EnergyTrend]!).toBeLessThan(0);
   });
 });
+
+describe('counting brain changes at births', () => {
+  it('counts links and neurons added by mutation, and keeps the count through a save', async () => {
+    const { saveWorld, loadWorld } = await import('./serialize');
+    const world = createWorld({
+      ...defaultConfig,
+      worldWidth: 600,
+      worldHeight: 600,
+      initialCreatures: 120,
+      minPopulation: 5,
+      addLinkChance: 0.5,
+      addNeuronChance: 0.2,
+      seed: 'count',
+    });
+    for (let i = 0; i < 1500; i++) step(world);
+    expect(world.births).toBeGreaterThan(50);
+    const births = world.births - world.mating.sexual;
+    // About the settings, per birth (a loose band: births are few and a link can fail to be new).
+    expect(world.structural.links / births).toBeGreaterThan(0.2);
+    expect(world.structural.links / births).toBeLessThan(0.7);
+    expect(world.structural.neurons / births).toBeGreaterThan(0.08);
+    expect(world.structural.neurons / births).toBeLessThan(0.3);
+    const copy = loadWorld(JSON.parse(JSON.stringify(saveWorld(world))));
+    expect(copy.structural).toEqual(world.structural);
+  });
+});

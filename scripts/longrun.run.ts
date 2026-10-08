@@ -26,7 +26,8 @@ import { defaultConfig, type SimConfig } from '../src/sim/config';
 import { brainProfile } from '../src/sim/profile';
 import { Held } from '../src/sim/creatures';
 import { daylightAt } from '../src/sim/environment';
-import { maxEnergyFor } from '../src/sim/genome';
+import { maxEnergyFor, upkeepFor } from '../src/sim/genome';
+import { SURVIVAL_AGE } from '../src/sim/wiring';
 import { cellIndexAt, groundHue, visibility } from '../src/sim/plants';
 import { createWorld, step } from '../src/sim/world';
 
@@ -82,6 +83,21 @@ interface Summary {
   hidden: number;
   /** Share of all deaths that were from plague, meteors and fire. */
   disasterShare: number;
+  /** Share of deaths from running out of energy (not counting the hot or cold ones), and the two together; thirst, heat or cold and disasters together are the abiotic share. */
+  starvedShare: number;
+  starvedOrTemperatureShare: number;
+  abioticShare: number;
+  /** Generations of the living at the end: mean and highest. */
+  generation: { mean: number; max: number };
+  /** Brain changes added by mutation per birth of one parent, as counted and as the settings should give, for links and neurons. */
+  structural: { links: number; neurons: number; expectedLinks: number; expectedNeurons: number };
+  /** Of links first carried at least 20 samples before the end: share still carried by anyone, and share carried with a weight beyond 0.3. */
+  linksStillCarried: number;
+  linksStillStrong: number;
+  /** Mean enabled links per creature, their energy cost as a share of one body's upkeep, and the share of all links that are switched off. */
+  linksPerCreature: number;
+  linkCostShare: number;
+  disabledShare: number;
   /** Wildfires started, and cells burned as a multiple of the map's cells, per 10,000 ticks. */
   firesPerTenThousand: number;
   burnedPerTenThousand: number;
@@ -300,6 +316,10 @@ function run(seed: string): Summary {
     temperatureShare: deaths > 0 ? d.temperature / deaths : 0,
     oldAgeShare: deaths > 0 ? d.oldAge / deaths : 0,
     disasterShare: deaths > 0 ? d.disaster / deaths : 0,
+    starvedShare: deaths > 0 ? d.starved / deaths : 0,
+    starvedOrTemperatureShare: deaths > 0 ? (d.starved + d.temperature) / deaths : 0,
+    abioticShare: deaths > 0 ? (d.thirst + d.temperature + d.disaster) / deaths : 0,
+    ...endOfRun(world),
     firesPerTenThousand: ((world.fires.started - firesBefore.started) * 10000) / Math.max(1, ticks - from),
     burnedPerTenThousand:
       ((world.fires.cellsBurned - firesBefore.cellsBurned) * 10000) /
@@ -411,6 +431,58 @@ function speciesLearning(world: ReturnType<typeof createWorld>): Summary['specie
     });
 }
 
+/** Measures that are only meaningful at the end of a run. */
+function endOfRun(world: ReturnType<typeof createWorld>) {
+  const c = world.creatures;
+  let generationSum = 0;
+  let generationMax = 0;
+  let links = 0;
+  let disabled = 0;
+  let upkeep = 0;
+  const carried = new Set<number>();
+  const strong = new Set<number>();
+  for (let i = 0; i < c.count; i++) {
+    generationSum += c.generation[i]!;
+    generationMax = Math.max(generationMax, c.generation[i]!);
+    upkeep += upkeepFor(c.size[i]!, world.config);
+    for (const link of c.brain[i]!.links) {
+      if (!link.enabled) {
+        disabled++;
+        continue;
+      }
+      links++;
+      carried.add(link.innovation);
+      if (Math.abs(link.weight) > 0.3) strong.add(link.innovation);
+    }
+  }
+  const births = Math.max(1, world.births - world.mating.sexual);
+  let old = 0;
+  let kept = 0;
+  let stronger = 0;
+  for (const [id, at] of world.wiring.realFirst) {
+    if (at > 1 && world.wiring.samples - at >= SURVIVAL_AGE) {
+      old++;
+      if (carried.has(id)) kept++;
+      if (strong.has(id)) stronger++;
+    }
+  }
+  const n = Math.max(1, c.count);
+  return {
+    generation: { mean: generationSum / n, max: generationMax },
+    structural: {
+      links: world.structural.links / births,
+      neurons: world.structural.neurons / births,
+      expectedLinks: world.config.addLinkChance,
+      expectedNeurons: world.config.addNeuronChance,
+    },
+    linksStillCarried: old > 0 ? kept / old : 0,
+    linksStillStrong: old > 0 ? stronger / old : 0,
+    linksPerCreature: links / n,
+    linkCostShare: upkeep > 0 ? (links * world.config.brainLinkCost) / upkeep : 0,
+    disabledShare: links + disabled > 0 ? disabled / (links + disabled) : 0,
+  };
+}
+
 const percent = (share: number) => `${Math.round(share * 100)}%`;
 
 it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
@@ -433,6 +505,10 @@ it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
         `temperatureShare=${percent(s.temperatureShare)}`,
         `oldAgeShare=${percent(s.oldAgeShare)}`,
         `disasterShare=${percent(s.disasterShare)}`,
+        `starvedShare=${percent(s.starvedShare)} abioticShare=${percent(s.abioticShare)} starved+temperature=${percent(s.starvedOrTemperatureShare)}`,
+        `generation mean/max=${s.generation.mean.toFixed(1)}/${s.generation.max}`,
+        `structural/birth links=${s.structural.links.toFixed(3)} (settings give ${s.structural.expectedLinks.toFixed(3)}) neurons=${s.structural.neurons.toFixed(3)} (settings give ${s.structural.expectedNeurons.toFixed(3)})`,
+        `newLinks still carried/strong=${percent(s.linksStillCarried)}/${percent(s.linksStillStrong)} links/creature=${s.linksPerCreature.toFixed(1)} linkCost=${percent(s.linkCostShare)}ofUpkeep disabled=${percent(s.disabledShare)}`,
         `fires=${s.firesPerTenThousand.toFixed(1)}/10kt burned=${(s.burnedPerTenThousand * 100).toFixed(2)}%/10kt`,
         `callers=${percent(s.callers)}`,
         `activity day/night=${s.dayActivity.toFixed(3)}/${s.nightActivity.toFixed(3)}`,
@@ -449,6 +525,40 @@ it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
 
         `tps=${Math.round(s.ticksPerSecond)}`,
       ].join(' '),
+    );
+    console.log(
+      'RESULT ' +
+        JSON.stringify({
+          seed: s.seed,
+          population: s.population.mean,
+          popMax: s.population.max,
+          atCap: s.atCap,
+          lifespan: s.lifespan,
+          parentAge: s.parentAge,
+          births: s.birthRate,
+          abiotic: s.abioticShare,
+          thirst: s.thirstShare,
+          temperature: s.temperatureShare,
+          starved: s.starvedShare,
+          starvedOrTemperature: s.starvedOrTemperatureShare,
+          killed: s.killShare,
+          oldAge: s.oldAgeShare,
+          hunters: s.hunters,
+          species: s.species.mean,
+          fur: s.meanFur,
+          hidden: s.hidden,
+          generationMean: s.generation.mean,
+          generationMax: s.generation.max,
+          structuralLinks: s.structural.links,
+          structuralNeurons: s.structural.neurons,
+          kept: s.wiring.survival,
+          keptShadow: s.wiring.shadowSurvival,
+          stillCarried: s.linksStillCarried,
+          stillStrong: s.linksStillStrong,
+          linkCost: s.linkCostShare,
+          disabled: s.disabledShare,
+          reseeded: s.reseeded,
+        }),
     );
     console.log(
       `    blocks: pushes=${s.blockPushes.toFixed(2)}/creature/kt setDowns=${s.blockSetDowns.toFixed(3)}/creature/kt holding=${(s.holdingBlock * 100).toFixed(2)}% shelteredCreatures=${percent(s.shelteredCreatures)} shelteredLand=${percent(s.shelteredLand)} longestLine=${s.longestLine} builtShare=${percent(s.builtShare)}`,

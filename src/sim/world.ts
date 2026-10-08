@@ -136,6 +136,8 @@ export interface World {
   history: History;
   /** Cumulative counts since the world was created. */
   births: number;
+  /** Brain changes seen at births of one parent so far: links and neurons added by mutation (a neuron split counts once, not as its two links). */
+  structural: { links: number; neurons: number };
   /** Births of two parents, and how many of those were between close relatives (parent and child, or siblings). */
   mating: { sexual: number; kin: number };
   /** Creatures willing and able to mate this tick; rebuilt every tick. */
@@ -308,6 +310,7 @@ export function createWorld(config: SimConfig): World {
     ledger: createLedger(),
     history: createHistory(config.statsInterval, config.statsCapacity),
     births: 0,
+    structural: { links: 0, neurons: 0 },
     mating: { sexual: 0, kin: 0 },
     mateCandidates: [],
     reseeded: 0,
@@ -725,8 +728,8 @@ function setDown(world: World, i: number, cell: number): void {
   const held = creatures.held[i]!;
   const energy = creatures.heldEnergy[i]!;
   if (held === Held.Block) {
-    // A block falls where its carrier fell, or beside it; with no room at all it is lost.
-    const at = freeCellNear(plants, cell);
+    // A block falls where its carrier fell, or on the nearest dry free cell within a dozen; with no room at all it is lost.
+    const at = freeCellNear(plants, cell, 12);
     if (at >= 0) addBlock(plants, at, creatures.species[i]!, true);
   } else if (held === Held.Stone) {
     if (plants.stones[cell]! < 255) plants.stones[cell]!++;
@@ -980,6 +983,14 @@ function bear(world: World, carrier: number, other: number, offered: number): nu
     world.innovations,
     config,
   );
+  // Count what mutation added to the brain, for comparing with what the settings should give.
+  // Only for a child of one parent, whose brain is its parent's plus mutation.
+  if (!two) {
+    const parentBrain = creatures.brain[parent]!;
+    const newNeurons = Math.max(0, brain.hiddenIds.length - parentBrain.hiddenIds.length);
+    world.structural.neurons += newNeurons;
+    world.structural.links += Math.max(0, brain.links.length - parentBrain.links.length - 2 * newNeurons);
+  }
   // The parents' share first builds the child's body; the rest is the child's
   // starting store. A smaller child may not hold a full share, and the parents
   // keep what does not fit.

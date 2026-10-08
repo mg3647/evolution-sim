@@ -293,6 +293,23 @@ describe('slow neurons', () => {
   });
 });
 
+describe('the strength of new links', () => {
+  it('starts links added by mutation at the configured spread, and leaves founders alone', () => {
+    const innovations = new Innovations();
+    const rng = new Rng('weights');
+    const cfg = only({ addLinkChance: 1, newLinkWeightScale: 0.05, maxLinks: 500 });
+    let brain = founderBrain(rng, innovations, cfg);
+    const founderWeights = brain.links.map((link) => link.weight);
+    const before = brain.links.length;
+    for (let k = 0; k < 120; k++) brain = mutateBrain(brain, 0.05, rng, innovations, cfg);
+    const added = brain.links.slice(before);
+    expect(added.length).toBeGreaterThan(50);
+    // Spread 0.05: nothing beyond five spreads.
+    expect(Math.max(...added.map((link) => Math.abs(link.weight)))).toBeLessThan(0.25);
+    expect(brain.links.slice(0, before).map((link) => link.weight)).toEqual(founderWeights);
+  });
+});
+
 describe('learning', () => {
   /** Input 0 feeds output 0 with weight 0.5; the link learns at the given rate. */
   function learner(plasticity: number, weight = 0.5): Brain {

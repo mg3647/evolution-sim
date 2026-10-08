@@ -150,6 +150,8 @@ export interface SavedWorld {
   births: number;
   /** Births of two parents so far; absent in saves from before mating. */
   mating?: World['mating'];
+  /** Brain changes counted at births; absent in older saves. */
+  structural?: World['structural'];
   reseeded: number;
   defended: number;
   fires: World['fires'];
@@ -216,6 +218,7 @@ export function saveWorld(world: World): SavedWorld {
     history: savedHistory,
     births: world.births,
     mating: { ...world.mating },
+    structural: { ...world.structural },
     reseeded: world.reseeded,
     defended: world.defended,
     fires: { ...world.fires },
@@ -355,6 +358,7 @@ export function loadWorld(savedWorld: SavedWorld): World {
     ledger: { ...saved.ledger },
     history,
     births: saved.births,
+    structural: { links: saved.structural?.links ?? 0, neurons: saved.structural?.neurons ?? 0 },
     mating: { sexual: saved.mating?.sexual ?? 0, kin: saved.mating?.kin ?? 0 },
     mateCandidates: [],
     reseeded: saved.reseeded,

@@ -353,7 +353,7 @@ export function founderBrain(rng: Rng, innovations: Innovations, config: SimConf
 }
 
 /** Add a link, or re-enable it if the brain already has one between these neurons. */
-function addLink(links: LinkGene[], from: number, to: number, rng: Rng, innovations: Innovations): void {
+function addLink(links: LinkGene[], from: number, to: number, rng: Rng, innovations: Innovations, scale = 1): void {
   const existing = links.find((link) => link.from === from && link.to === to);
   if (existing) {
     existing.enabled = true;
@@ -363,7 +363,7 @@ function addLink(links: LinkGene[], from: number, to: number, rng: Rng, innovati
     innovation: innovations.linkId(from, to),
     from,
     to,
-    weight: randomWeight(rng),
+    weight: randomWeight(rng) * scale,
     enabled: true,
     plasticity: 0,
   });
@@ -397,7 +397,7 @@ export function mutateBrain(
     const sources = FIXED_NODES + hiddenIds.length;
     const targets = OUTPUT_COUNT + hiddenIds.length;
     const pick = (index: number) => (index < FIXED_NODES ? index : hiddenIds[index - FIXED_NODES]!);
-    addLink(links, pick(rng.int(0, sources)), pick(INPUT_COUNT + rng.int(0, targets)), rng, innovations);
+    addLink(links, pick(rng.int(0, sources)), pick(INPUT_COUNT + rng.int(0, targets)), rng, innovations, config.newLinkWeightScale);
   }
 
   if (rng.chance(config.toggleLinkChance) && links.length > 0) {

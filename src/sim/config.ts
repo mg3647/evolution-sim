@@ -90,6 +90,12 @@ export interface SimConfig {
   weightChangeScale: number;
   /** Per birth: chance that each link's weight is replaced outright. */
   weightResetChance: number;
+  /**
+   * Links added by mutation start with a weight of this standard deviation
+   * (founders' links always use 1). Small makes a new link nearly neutral, to
+   * be strengthened later if it helps.
+   */
+  newLinkWeightScale: number;
   /** Per birth: chances of gaining a link, splitting a link with a new neuron, and toggling a link. */
   addLinkChance: number;
   addNeuronChance: number;
@@ -396,7 +402,7 @@ export const defaultConfig: SimConfig = {
   riverWidth: 2,
   moistureBoost: 0.5,
   moistureReach: 6,
-  thirstRate: 0.0004,
+  thirstRate: 0.0001,
   drinkRate: 0.02,
   swimSpeed: 0.5,
   swimCost: 1.5,
@@ -428,8 +434,9 @@ export const defaultConfig: SimConfig = {
   weightChangeChance: 0.5,
   weightChangeScale: 4,
   weightResetChance: 0.02,
-  addLinkChance: 0.1,
-  addNeuronChance: 0.03,
+  newLinkWeightScale: 0.1,
+  addLinkChance: 0.3,
+  addNeuronChance: 0.06,
   toggleLinkChance: 0.03,
   tauChangeChance: 0.05,
   tauChangeScale: 0.5,
@@ -527,8 +534,8 @@ export const defaultConfig: SimConfig = {
   seasonTempSwing: 0.25,
   dayTempSwing: 0.15,
   iceAgeChill: 0.4,
-  comfortBand: 0.35,
-  temperatureCost: 1.5,
+  comfortBand: 0.5,
+  temperatureCost: 0.75,
   furWarmth: 0.6,
   furHeat: 0.4,
   sizeWarmth: 0.3,
