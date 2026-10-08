@@ -1,4 +1,4 @@
-import { INPUT_COUNT, OUTPUT_COUNT } from './brain';
+import { hasLoop, INPUT_COUNT, OUTPUT_COUNT } from './brain';
 import type { Creatures } from './creatures';
 
 /**
@@ -24,6 +24,8 @@ export interface BrainProfile {
   count: number;
   meanLinks: number;
   meanHidden: number;
+  /** Share of members whose brain contains a loop. */
+  recurrentShare: number;
   /** Links at least `minShare` of members have, most common first. */
   links: ProfileLink[];
   /** Per input, the share of members whose brain has any link leading out of it. */
@@ -43,6 +45,7 @@ export function brainProfile(c: Creatures, indices: readonly number[], minShare 
   const seen = new Uint32Array(nodes * nodes);
   let linkTotal = 0;
   let hiddenTotal = 0;
+  let looped = 0;
   const inputMembers = new Uint32Array(INPUT_COUNT);
   /** Marks the inputs already counted for the current member, by its position + 1. */
   const inputSeen = new Uint32Array(INPUT_COUNT);
@@ -51,6 +54,7 @@ export function brainProfile(c: Creatures, indices: readonly number[], minShare 
     const brain = c.brain[i]!;
     linkTotal += brain.linkWeight.length;
     hiddenTotal += brain.hiddenIds.length;
+    if (hasLoop(brain)) looped++;
     for (let k = 0; k < brain.linkWeight.length; k++) {
       const from = Math.min(brain.linkFrom[k]!, HIDDEN_NODE);
       const to = Math.min(brain.linkTo[k]!, HIDDEN_NODE);
@@ -83,6 +87,7 @@ export function brainProfile(c: Creatures, indices: readonly number[], minShare 
     count,
     meanLinks: count > 0 ? linkTotal / count : 0,
     meanHidden: count > 0 ? hiddenTotal / count : 0,
+    recurrentShare: count > 0 ? looped / count : 0,
     links,
     inputUse: Array.from(inputMembers, (members) => (count > 0 ? members / count : 0)),
   };

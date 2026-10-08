@@ -3,10 +3,14 @@ import { defaultConfig, type SimConfig } from './config';
 import { createCreatures, spawnCreature } from './creatures';
 import { compileBrain } from './brain';
 import {
+  BEHAVIOUR_DIET_BINS,
+  BEHAVIOUR_SPEED_BINS,
+  createBehaviourHistory,
   createDensityHistory,
   createHistory,
   DENSITY_GRID,
   HISTORY_SERIES,
+  recordBehaviour,
   recordDensity,
   recordSample,
   type Sample,
@@ -154,5 +158,30 @@ describe('the density history', () => {
     const total = density.frames.reduce((sum, frame) => sum + frame.reduce((a, b) => a + b, 0), 0);
     expect(total).toBe(2 * per * 24);
     expect(density.ticks[density.ticks.length - 1]).toBe(per * 24 - 1);
+  });
+});
+
+describe('behaviour map', () => {
+  const genes = { size: 1, speed: 1, sensorRange: 1, diet: 0, hue: 0, fur: 0, defense: 0, mutationRate: 0.05 };
+
+  it('counts each creature into its diet and speed cell under its species', () => {
+    const creatures = createCreatures(8);
+    const add = (diet: number, speed: number, species: number) =>
+      spawnCreature(creatures, {
+        x: 0, y: 0, heading: 0, energy: 1, genes: { ...genes, diet, speed }, brain: compileBrain([], []), species,
+      });
+    add(0, 0.2, 1); // slowest plant-eater: bottom left
+    add(0.99, 4, 2); // fastest meat-eater: top right
+    add(0.99, 4, 2);
+    add(0.99, 4, 3);
+    const behaviour = createBehaviourHistory();
+    recordBehaviour(behaviour, creatures, 0.2, 4);
+    recordBehaviour(behaviour, creatures, 0.2, 4);
+    expect(behaviour.cells[0]!.get(1)).toBe(2);
+    const topRight = (BEHAVIOUR_SPEED_BINS - 1) * BEHAVIOUR_DIET_BINS + BEHAVIOUR_DIET_BINS - 1;
+    expect(behaviour.cells[topRight]!.get(2)).toBe(4);
+    expect(behaviour.cells[topRight]!.get(3)).toBe(2);
+    const total = behaviour.cells.reduce((sum, cell) => sum + [...cell.values()].reduce((a, b) => a + b, 0), 0);
+    expect(total).toBe(8);
   });
 });

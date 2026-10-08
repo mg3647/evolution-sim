@@ -69,6 +69,7 @@ export const KEY_SETTINGS: Partial<Record<keyof SimConfig, { tag: KeyTag; why: s
   thirstRate: { tag: 'Outcome', why: 'Decides how far from water creatures can live, and so how much of the map is used.' },
   birthCost: { tag: 'Outcome', why: 'Makes each birth dearer, which shifts the balance between many short lives and fewer long ones.' },
   birthWaterShare: { tag: 'Outcome', why: 'Any sharing leaves newborns dry; in testing it collapsed the population unless water was easy to reach.' },
+  speciesBrainScale: { tag: 'Outcome', why: 'Changes how many species every chart and list reports, without changing how creatures live.' },
   speciesThreshold: { tag: 'Outcome', why: 'Changes how many species every chart and list reports, without changing how creatures live.' },
   speciesMinMembers: { tag: 'Outcome', why: 'Changes how many species every chart and list reports, without changing how creatures live.' },
   plantGrowthRate: { tag: 'Pace', why: 'Faster regrowth lets populations recover sooner and stay put; slower forces them to keep moving.' },
@@ -168,6 +169,10 @@ export const SETTING_GROUPS: SettingGroup[] = [
       { key: 'initialMutationRate', label: 'Starting mutation rate', hint: 'How much the first creatures’ children differ from them', more: 'The rate is itself inherited and evolves, so this only sets where it starts.', min: 0.01, max: 0.3, step: 0.01 },
       { key: 'addLinkChance', label: 'Chance of a new brain link', hint: 'Chance, at each birth, that the child’s brain gains a link', more: 'Higher makes behaviour change faster, and brains grow unless links are costly.', min: 0, max: 0.5, step: 0.01 },
       { key: 'addNeuronChance', label: 'Chance of a new neuron', hint: 'Chance, at each birth, that the child’s brain gains a hidden neuron', min: 0, max: 0.2, step: 0.005 },
+      { key: 'tauChangeChance', label: 'Chance a neuron gets slower or faster', hint: 'Chance, at each birth, that each hidden neuron’s time constant shifts', more: 'A neuron with a time constant of 1 follows its inputs at once. A larger one changes slowly, so it can hold a state for many ticks: a mood, a plan, or a count.', min: 0, max: 0.5, step: 0.01 },
+      { key: 'plasticityChangeChance', label: 'Chance a link can learn', hint: 'Chance, at each birth, that each brain link’s learning rate shifts', more: 'A link with a learning rate above 0 strengthens when the neurons at both ends are active together, so a creature can adapt during its life. What it learns is not passed to its young; only the learning rate is.', min: 0, max: 0.3, step: 0.01 },
+      { key: 'maxPlasticity', label: 'Fastest learning rate', hint: 'The highest rate at which a link can learn', min: 0, max: 0.2, step: 0.005 },
+      { key: 'maxNeuronTau', label: 'Slowest neuron (ticks)', hint: 'The longest time constant a hidden neuron can evolve', min: 1, max: 100, step: 1 },
     ],
   },
   {
@@ -175,6 +180,7 @@ export const SETTING_GROUPS: SettingGroup[] = [
     about: 'How creatures are sorted into species. These change what the charts and lists count, not how creatures live.',
     settings: [
       { key: 'speciesThreshold', label: 'Species difference', hint: 'How different a branch of the family tree must be from the group it split from to count as its own species', more: '1 is a clear difference, such as 0.15 in diet or 20% in size. Lower counts more, smaller species; higher lumps them together.', min: 0.5, max: 6, step: 0.25 },
+      { key: 'speciesBrainScale', label: 'Species brain difference', hint: 'How different two branches’ brain wiring must be to count as 1 toward the species difference; 0 ignores the brain', more: 'At 0, species follow body and diet only, so two groups with the same bodies but different strategies are one species. Lower values count wiring more. At the default of 4, species counts stay close to what they were; at 1 there are noticeably more.', min: 0, max: 8, step: 0.25 },
       { key: 'speciesMinMembers', label: 'Species minimum members', hint: 'Fewest creatures a species, and the group it leaves behind, may have', more: 'Higher ignores small splinter groups, so the species list is shorter and steadier.', min: 2, max: 60, step: 1 },
       { key: 'speciesMinAge', label: 'Species minimum age (ticks)', hint: 'How long ago a branch must have split off before it can be its own species', min: 0, max: 30000, step: 500 },
     ],

@@ -94,6 +94,21 @@ export interface SimConfig {
   addLinkChance: number;
   addNeuronChance: number;
   toggleLinkChance: number;
+  /**
+   * Per birth: chance that each hidden neuron's time constant shifts, how far
+   * (as a factor, relative to 1), and the longest time constant, in ticks.
+   * Neurons start at 1, which answers at once, so slow neurons must evolve.
+   */
+  tauChangeChance: number;
+  tauChangeScale: number;
+  maxNeuronTau: number;
+  /**
+   * Per birth: chance that each link's learning rate shifts, how far, and the
+   * highest rate. 0 is a fixed weight, as before; learning must evolve.
+   */
+  plasticityChangeChance: number;
+  plasticityChangeScale: number;
+  maxPlasticity: number;
   /** Energy a creature of size 1 spends per tick just staying alive. */
   upkeepCost: number;
   /** Share of upkeep that every body pays regardless of its size. */
@@ -221,6 +236,12 @@ export interface SimConfig {
    * for example 0.15 in diet, or 20% in size.
    */
   speciesThreshold: number;
+  /**
+   * How different two branches' brain wiring must be to count as 1 toward the
+   * species threshold (0 to 2: links one group lacks, plus changed weights).
+   * 0 ignores the brain, so species follow body and diet only.
+   */
+  speciesBrainScale: number;
   /** A branch must have split off at least this many ticks ago to be its own species. */
   speciesMinAge: number;
   /** A species, and the group it leaves behind, must each have at least this many members. */
@@ -390,6 +411,12 @@ export const defaultConfig: SimConfig = {
   addLinkChance: 0.1,
   addNeuronChance: 0.03,
   toggleLinkChance: 0.03,
+  tauChangeChance: 0.05,
+  tauChangeScale: 0.5,
+  maxNeuronTau: 20,
+  plasticityChangeChance: 0.03,
+  plasticityChangeScale: 0.01,
+  maxPlasticity: 0.05,
   upkeepCost: 0.12,
   upkeepFixedShare: 0.5,
   moveCost: 0.05,
@@ -461,6 +488,7 @@ export const defaultConfig: SimConfig = {
 
   speciesInterval: 300,
   speciesThreshold: 2,
+  speciesBrainScale: 4,
   speciesMinAge: 6000,
   speciesMinMembers: 8,
 

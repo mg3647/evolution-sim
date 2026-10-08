@@ -80,6 +80,7 @@ describe('brainProfile', () => {
       count: 0,
       meanLinks: 0,
       meanHidden: 0,
+      recurrentShare: 0,
       links: [],
       inputUse: new Array(INPUT_COUNT).fill(0),
     });

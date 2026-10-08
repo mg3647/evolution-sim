@@ -99,6 +99,9 @@ export const OUTPUT_COUNT = 8;
 /** Neuron ids below this are inputs and outputs; hidden neurons come after. */
 const FIXED_NODES = INPUT_COUNT + OUTPUT_COUNT;
 
+/** Learning never pushes a weight's size past this. */
+const MAX_LIVE_WEIGHT = 4;
+
 const RAY_NAMES = ['left', 'ahead', 'right'];
 export const INPUT_LABELS: string[] = [
   ...RAY_NAMES.flatMap((ray) => [
@@ -163,12 +166,22 @@ export interface LinkGene {
   to: number;
   weight: number;
   enabled: boolean;
+  /**
+   * How fast the live weight follows the two neurons' activity during life
+   * (Hebbian learning). 0 keeps the weight fixed. Absent in older saves.
+   */
+  plasticity?: number;
 }
 
 export interface Brain {
   links: LinkGene[];
   /** Ids of the hidden neurons, ascending. */
   hiddenIds: number[];
+  /**
+   * Time constant of each hidden neuron, in ticks, in the same order as `hiddenIds`.
+   * 1 follows its input at once; larger values change slowly and hold a state.
+   */
+  hiddenTau: number[];
 
   // Compiled form of the enabled links, indexing into `activation`.
   linkFrom: Uint16Array;
@@ -177,6 +190,11 @@ export interface Brain {
   /** Current output of every neuron: inputs, then outputs, then hidden. */
   activation: Float32Array;
   sum: Float32Array;
+  /** Indices into the compiled links of those that can learn, and how fast each does. Empty for most brains. */
+  plasticLinks: Uint16Array;
+  plasticRate: Float32Array;
+  /** Share of the way each neuron moves toward its new value per tick: 1 / time constant. */
+  rate: Float32Array;
 }
 
 /**
@@ -245,11 +263,11 @@ export interface InnovationsData {
  * Build a brain from its genes, with activations at zero. The fast arrays are
  * derived from the genes, so call this after any change to links or neurons.
  */
-export function compileBrain(links: LinkGene[], hiddenIds: number[]): Brain {
-  return compile(links, hiddenIds);
+export function compileBrain(links: LinkGene[], hiddenIds: number[], hiddenTau?: number[]): Brain {
+  return compile(links, hiddenIds, hiddenTau ?? hiddenIds.map(() => 1));
 }
 
-function compile(links: LinkGene[], hiddenIds: number[]): Brain {
+function compile(links: LinkGene[], hiddenIds: number[], hiddenTau: number[]): Brain {
   const indexOf = (id: number) => (id < FIXED_NODES ? id : FIXED_NODES + hiddenIds.indexOf(id));
   const enabled = links.filter((link) => link.enabled);
   const linkFrom = new Uint16Array(enabled.length);
@@ -260,15 +278,32 @@ function compile(links: LinkGene[], hiddenIds: number[]): Brain {
     linkTo[k] = indexOf(link.to);
     linkWeight[k] = link.weight;
   });
+  const plastic: number[] = [];
+  const plasticRates: number[] = [];
+  enabled.forEach((link, k) => {
+    if ((link.plasticity ?? 0) > 0) {
+      plastic.push(k);
+      plasticRates.push(link.plasticity!);
+    }
+  });
   const nodes = FIXED_NODES + hiddenIds.length;
+  // Inputs and outputs answer at once; only hidden neurons can be slow.
+  const rate = new Float32Array(nodes).fill(1);
+  hiddenTau.forEach((tau, k) => {
+    rate[FIXED_NODES + k] = 1 / tau;
+  });
   return {
     links,
     hiddenIds,
+    hiddenTau,
     linkFrom,
     linkTo,
     linkWeight,
     activation: new Float32Array(nodes),
     sum: new Float32Array(nodes),
+    plasticLinks: Uint16Array.from(plastic),
+    plasticRate: Float32Array.from(plasticRates),
+    rate,
   };
 }
 
@@ -282,7 +317,7 @@ export function founderBrain(rng: Rng, innovations: Innovations, config: SimConf
   for (let k = 0; k < config.founderLinks; k++) {
     addLink(links, rng.int(0, INPUT_COUNT), INPUT_COUNT + rng.int(0, OUTPUT_COUNT), rng, innovations);
   }
-  return compile(links, []);
+  return compile(links, [], []);
 }
 
 /** Add a link, or re-enable it if the brain already has one between these neurons. */
@@ -298,6 +333,7 @@ function addLink(links: LinkGene[], from: number, to: number, rng: Rng, innovati
     to,
     weight: randomWeight(rng),
     enabled: true,
+    plasticity: 0,
   });
 }
 
@@ -315,6 +351,7 @@ export function mutateBrain(
 ): Brain {
   const links = parent.links.map((link) => ({ ...link }));
   const hiddenIds = parent.hiddenIds.slice();
+  const hiddenTau = parent.hiddenTau.slice();
 
   for (const link of links) {
     if (rng.chance(config.weightResetChance)) link.weight = randomWeight(rng);
@@ -348,32 +385,92 @@ export function mutateBrain(
       if (!hiddenIds.includes(node)) {
         // The new neuron sits in the middle of the old link, which is switched off.
         split.enabled = false;
-        hiddenIds.push(node);
-        hiddenIds.sort((a, b) => a - b);
+        // Ids stay ascending, with each neuron's time constant beside it. A new neuron answers at once.
+        let at = hiddenIds.findIndex((id) => id > node);
+        if (at < 0) at = hiddenIds.length;
+        hiddenIds.splice(at, 0, node);
+        hiddenTau.splice(at, 0, 1);
         links.push(
-          { innovation: innovations.linkId(split.from, node), from: split.from, to: node, weight: 1, enabled: true },
-          { innovation: innovations.linkId(node, split.to), from: node, to: split.to, weight: split.weight, enabled: true },
+          { innovation: innovations.linkId(split.from, node), from: split.from, to: node, weight: 1, enabled: true, plasticity: 0 },
+          { innovation: innovations.linkId(node, split.to), from: node, to: split.to, weight: split.weight, enabled: true, plasticity: split.plasticity ?? 0 },
         );
       }
     }
   }
 
-  return compile(links, hiddenIds);
+  for (const link of links) {
+    if (rng.chance(config.plasticityChangeChance)) {
+      const shifted = (link.plasticity ?? 0) + rng.gaussian() * config.plasticityChangeScale;
+      link.plasticity = Math.fround(Math.min(config.maxPlasticity, Math.max(0, shifted)));
+    }
+  }
+
+  for (let k = 0; k < hiddenTau.length; k++) {
+    if (rng.chance(config.tauChangeChance)) {
+      const tau = hiddenTau[k]! * Math.exp(rng.gaussian() * config.tauChangeScale);
+      hiddenTau[k] = Math.fround(Math.min(config.maxNeuronTau, Math.max(1, tau)));
+    }
+  }
+
+  return compile(links, hiddenIds, hiddenTau);
 }
 
 /**
  * Run the brain for one tick. The caller writes the inputs into
  * `activation[0..INPUT_COUNT)` first and reads the outputs from
  * `activation[INPUT_COUNT..)` after. Every neuron reads the values from the
- * previous tick, so a signal crosses one link per tick.
+ * previous tick, so a signal crosses one link per tick. A hidden neuron with
+ * a time constant above 1 moves only part of the way to its new value each
+ * tick, so it changes slowly and keeps a memory of what came before.
  */
 export function think(brain: Brain): void {
-  const { activation, sum, linkFrom, linkTo, linkWeight } = brain;
+  const { activation, sum, linkFrom, linkTo, linkWeight, rate } = brain;
   for (let n = INPUT_COUNT; n < sum.length; n++) sum[n] = 0;
   for (let k = 0; k < linkWeight.length; k++) {
     sum[linkTo[k]!]! += activation[linkFrom[k]!]! * linkWeight[k]!;
   }
-  for (let n = INPUT_COUNT; n < sum.length; n++) activation[n] = Math.tanh(sum[n]!);
+  for (let n = INPUT_COUNT; n < sum.length; n++) {
+    const target = Math.tanh(sum[n]!);
+    const r = rate[n]!;
+    activation[n] = r >= 1 ? target : activation[n]! + (target - activation[n]!) * r;
+  }
+  // Learning: a link whose two ends are active together strengthens (or, if one
+  // end is negative, weakens). The live weight never grows past the limit, but
+  // a weight already beyond it is left alone. Children start from the genes.
+  const { plasticLinks, plasticRate } = brain;
+  for (let p = 0; p < plasticLinks.length; p++) {
+    const k = plasticLinks[p]!;
+    const old = linkWeight[k]!;
+    const next = old + plasticRate[p]! * activation[linkFrom[k]!]! * activation[linkTo[k]!]!;
+    linkWeight[k] = Math.abs(next) > MAX_LIVE_WEIGHT && Math.abs(next) > Math.abs(old) ? old : next;
+  }
+}
+
+/**
+ * Whether the enabled links contain a loop (including a neuron feeding
+ * itself). Only a brain with a loop can carry anything over from one tick
+ * to the next beyond a slow neuron's own lag.
+ */
+export function hasLoop(brain: Brain): boolean {
+  const nodes = brain.activation.length;
+  const outgoing: number[][] = Array.from({ length: nodes }, () => []);
+  for (let k = 0; k < brain.linkFrom.length; k++) {
+    // Inputs are set from outside, so a link into one cannot exist; start from links between other neurons.
+    if (brain.linkFrom[k]! >= INPUT_COUNT) outgoing[brain.linkFrom[k]!]!.push(brain.linkTo[k]!);
+  }
+  // Depth-first search: 0 unvisited, 1 on the current path, 2 finished.
+  const state = new Uint8Array(nodes);
+  const visit = (n: number): boolean => {
+    state[n] = 1;
+    for (const next of outgoing[n]!) {
+      if (state[next] === 1) return true;
+      if (state[next] === 0 && visit(next)) return true;
+    }
+    state[n] = 2;
+    return false;
+  };
+  for (let n = INPUT_COUNT; n < nodes; n++) if (state[n] === 0 && visit(n)) return true;
+  return false;
 }
 
 /** Number of links that are switched on. */

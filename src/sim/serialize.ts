@@ -1,5 +1,5 @@
 import { compileBrain, Innovations, type InnovationsData, type LinkGene } from './brain';
-import type { SimConfig } from './config';
+import { defaultConfig, type SimConfig } from './config';
 import { createCreatures, type Creatures } from './creatures';
 import type { ActiveEvent, LogEntry } from './environment';
 import type { EnergyLedger } from './ledger';
@@ -19,8 +19,14 @@ import type { World } from './world';
  * exactly as the saved one would have: same state, same random numbers.
  */
 
-/** Bumped whenever the saved layout changes; older files are refused. */
-export const SAVE_VERSION = 14;
+/** Bumped whenever the saved layout changes. */
+export const SAVE_VERSION = 15;
+/**
+ * Oldest save this version still opens. Saves from 14 on load with the newer
+ * fields at their neutral values (settings added since take their defaults,
+ * neurons answer at once, links do not learn), so they play as they did before.
+ */
+export const OLDEST_LOADABLE_VERSION = 14;
 
 /** Per-creature number arrays, saved up to the live count. */
 const CREATURE_FIELDS = [
@@ -59,6 +65,10 @@ const FIELD_ARRAYS = ['fertility', 'capacity', 'energy', 'meat', 'scent', 'walls
 interface SavedBrain {
   links: LinkGene[];
   hiddenIds: number[];
+  /** Absent in saves made before neurons had time constants: all 1. */
+  hiddenTau?: number[];
+  /** What the links have learned so far; only saved for a brain that can learn. */
+  liveWeights?: number[];
   activation: number[];
 }
 
@@ -74,6 +84,16 @@ export interface SavedWorld {
     number[]
   >;
   innovations: InnovationsData;
+  /** The neutral shadow of the brains' links; absent in saves from before it existed. See wiring.ts. */
+  shadow?: {
+    creatures: number[][];
+    rng: RngState;
+    real: [number, number][];
+    shadow: [number, number][];
+    realFirst: [number, number][];
+    shadowFirst: [number, number][];
+    samples: number;
+  };
   ledger: EnergyLedger;
   history: { interval: number; count: number } & Record<(typeof HISTORY_SERIES)[number], number[]>;
   births: number;
@@ -113,6 +133,8 @@ export function saveWorld(world: World): SavedWorld {
   creatures.brains = c.brain.slice(0, c.count).map((brain) => ({
     links: brain.links.map((link) => ({ ...link })),
     hiddenIds: brain.hiddenIds.slice(),
+    hiddenTau: brain.hiddenTau.slice(),
+    ...(brain.plasticLinks.length > 0 ? { liveWeights: Array.from(brain.linkWeight) } : {}),
     activation: Array.from(brain.activation),
   }));
 
@@ -128,6 +150,15 @@ export function saveWorld(world: World): SavedWorld {
     plantCapacityTotal: world.plantCapacityTotal,
     creatures,
     innovations: world.innovations.save(),
+    shadow: {
+      creatures: world.creatures.shadow.slice(0, world.creatures.count).map((ids) => ids.slice()),
+      rng: world.shadowRng.getState(),
+      real: [...world.wiring.real],
+      shadow: [...world.wiring.shadow],
+      realFirst: [...world.wiring.realFirst],
+      shadowFirst: [...world.wiring.shadowFirst],
+      samples: world.wiring.samples,
+    },
     ledger: { ...world.ledger },
     history: savedHistory,
     births: world.births,
@@ -162,12 +193,13 @@ export function saveWorld(world: World): SavedWorld {
 
 /** Rebuild a world from saved data. Throws if the data is not a save this version can read. */
 export function loadWorld(saved: SavedWorld): World {
-  if (!saved || typeof saved !== 'object' || saved.version !== SAVE_VERSION) {
+  if (!saved || typeof saved !== 'object' || !(saved.version >= OLDEST_LOADABLE_VERSION && saved.version <= SAVE_VERSION)) {
     throw new Error(
       `This file is not a saved world this version can read (expected save version ${SAVE_VERSION}).`,
     );
   }
-  const config = { ...saved.config };
+  // Settings added since the save was made take their defaults.
+  const config = { ...defaultConfig, ...saved.config };
   const cells = saved.field.energy.length;
   const cols = Math.max(1, Math.round(config.worldWidth / config.plantCellSize));
   const rows = Math.max(1, Math.round(config.worldHeight / config.plantCellSize));
@@ -215,10 +247,17 @@ export function loadWorld(saved: SavedWorld): World {
     const brain = compileBrain(
       savedBrain.links.map((link) => ({ ...link })),
       savedBrain.hiddenIds.slice(),
+      savedBrain.hiddenTau?.slice(),
     );
     brain.activation.set(savedBrain.activation);
+    if (savedBrain.liveWeights) brain.linkWeight.set(savedBrain.liveWeights);
     return brain;
   });
+
+  // A save from before the shadow existed starts one now, as if it began with these creatures.
+  creatures.shadow = saved.shadow
+    ? saved.shadow.creatures.map((ids) => ids.slice())
+    : creatures.brain.map((brain) => brain.links.map((link) => link.innovation));
 
   const history = createHistory(saved.history.interval, config.statsCapacity);
   history.count = saved.history.count;
@@ -229,6 +268,8 @@ export function loadWorld(saved: SavedWorld): World {
 
   const rng = new Rng(config.seed);
   rng.setState(saved.rng);
+  const shadowRng = new Rng(`${config.seed}:shadow`);
+  if (saved.shadow) shadowRng.setState(saved.shadow.rng);
   const hash = new SpatialHash(config.worldWidth, config.worldHeight, config.senseRange);
   const sound = createSoundField(config);
 
@@ -240,6 +281,14 @@ export function loadWorld(saved: SavedWorld): World {
     plantCapacityTotal: saved.plantCapacityTotal,
     creatures,
     innovations: Innovations.load(saved.innovations),
+    shadowRng,
+    wiring: {
+      real: new Map(saved.shadow?.real),
+      shadow: new Map(saved.shadow?.shadow),
+      realFirst: new Map(saved.shadow?.realFirst),
+      shadowFirst: new Map(saved.shadow?.shadowFirst),
+      samples: saved.shadow?.samples ?? 0,
+    },
     hash,
     // What is heard is rebuilt each tick from who called, so only the flags are saved.
     sound,

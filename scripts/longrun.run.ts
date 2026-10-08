@@ -10,6 +10,10 @@
  *   TUNE   JSON of config overrides     (default: {})
  *   TRACE  ticks between progress lines (default: 0, off)
  *   FROM   measure only after this tick (default: 0)
+ *   REPEAT runs per seed, each with its own sub-seed (seed#1, seed#2, ...); with more
+ *          than one, a mean and spread per seed is printed after the runs (default: 1)
+ *   NO_RESEED  1 to stop adding parentless creatures when the population falls below
+ *          the minimum, so a collapsed world stays collapsed (default: 0)
  *
  * To test whether an evolved population relies on something, change a
  * setting partway through and compare with an unchanged run:
@@ -19,6 +23,7 @@
 import { it } from 'vitest';
 import { BIOME_COUNT, BIOME_LABELS } from '../src/sim/biomes';
 import { defaultConfig, type SimConfig } from '../src/sim/config';
+import { brainProfile } from '../src/sim/profile';
 import { Held } from '../src/sim/creatures';
 import { daylightAt } from '../src/sim/environment';
 import { maxEnergyFor } from '../src/sim/genome';
@@ -27,7 +32,11 @@ import { createWorld, step } from '../src/sim/world';
 
 const seeds = (process.env.SEEDS ?? 'genesis,second,third').split(',');
 const ticks = Number(process.env.TICKS ?? 200000);
-const overrides = JSON.parse(process.env.TUNE ?? '{}') as Partial<SimConfig>;
+const overrides = {
+  ...(process.env.NO_RESEED === '1' ? { minPopulation: 0 } : {}),
+  ...(JSON.parse(process.env.TUNE ?? '{}') as Partial<SimConfig>),
+};
+const repeat = Math.max(1, Number(process.env.REPEAT ?? 1));
 const trace = Number(process.env.TRACE ?? 0);
 const from = Number(process.env.FROM ?? 0);
 const changeAt = Number(process.env.CHANGE_AT ?? 0);
@@ -83,6 +92,17 @@ interface Summary {
   holdingStone: number;
   holdingBranch: number;
   holdingFood: number;
+  /** Brain features, averaged over the samples: mean learning rate over all links, the share of links that can learn, mean time constant, and the share of slow neurons. */
+  meanPlasticity: number;
+  /** Mean links in use, in the shadow, mean link activity real and shadow, and the share of new links still carried, real and shadow (real above shadow is a sign of selection). */
+  wiring: { live: number; shadowLive: number; activity: number; shadowActivity: number; survival: number; shadowSurvival: number };
+  plasticLinkShare: number;
+  meanTau: number;
+  slowNeuronShare: number;
+  /** Share of creatures with a loop in their brain. */
+  recurrentShare: number;
+  /** At the end: for the largest species, members, mean learning rate over their links, and the share of their links that can learn. */
+  speciesLearning: { id: number; members: number; meanPlasticity: number; plasticShare: number; hidden: number; links: number; looped: number }[];
   haulDistance: number;
   /**
    * Breeding: births per creature per 1,000 ticks, the mean age at death,
@@ -308,6 +328,20 @@ function run(seed: string): Summary {
     holdingStone: heldSum[Held.Stone]! / samples,
     holdingBranch: heldSum[Held.Branch]! / samples,
     holdingFood: (heldSum[Held.Plants]! + heldSum[Held.Meat]!) / samples,
+    wiring: {
+      live: mean(world.history.wiringLive, world.history.tick, world.history.count, from),
+      shadowLive: mean(world.history.wiringShadowLive, world.history.tick, world.history.count, from),
+      activity: mean(world.history.wiringActivity, world.history.tick, world.history.count, from),
+      shadowActivity: mean(world.history.wiringShadowActivity, world.history.tick, world.history.count, from),
+      survival: mean(world.history.wiringSurvival, world.history.tick, world.history.count, from),
+      shadowSurvival: mean(world.history.wiringShadowSurvival, world.history.tick, world.history.count, from),
+    },
+    meanPlasticity: mean(world.history.meanPlasticity, world.history.tick, world.history.count, from),
+    plasticLinkShare: mean(world.history.plasticLinkShare, world.history.tick, world.history.count, from),
+    meanTau: mean(world.history.meanTau, world.history.tick, world.history.count, from),
+    slowNeuronShare: mean(world.history.slowNeuronShare, world.history.tick, world.history.count, from),
+    recurrentShare: mean(world.history.recurrentShare, world.history.tick, world.history.count, from),
+    speciesLearning: speciesLearning(world),
     haulDistance:
       (world.carry.haul - carryBefore.haul) /
       Math.max(
@@ -339,12 +373,46 @@ function mean(series: Float32Array, ticks: Float64Array, count: number, from: nu
   return used > 0 ? total / used : 0;
 }
 
+/** For the five largest species alive now: how much of their wiring can learn. */
+function speciesLearning(world: ReturnType<typeof createWorld>): Summary['speciesLearning'] {
+  const tally = new Map<number, { members: number; links: number; plastic: number; rate: number; indices: number[] }>();
+  const { creatures } = world;
+  for (let i = 0; i < creatures.count; i++) {
+    const t = tally.get(creatures.species[i]!) ?? { members: 0, links: 0, plastic: 0, rate: 0, indices: [] };
+    t.indices.push(i);
+    const brain = creatures.brain[i]!;
+    t.members++;
+    t.links += brain.linkWeight.length;
+    t.plastic += brain.plasticLinks.length;
+    for (const r of brain.plasticRate) t.rate += r;
+    tally.set(creatures.species[i]!, t);
+  }
+  return [...tally.entries()]
+    .sort((a, b) => b[1].members - a[1].members)
+    .slice(0, 5)
+    .map(([id, t]) => {
+      const profile = brainProfile(creatures, t.indices);
+      return {
+        id,
+        members: t.members,
+        meanPlasticity: t.links > 0 ? t.rate / t.links : 0,
+        plasticShare: t.links > 0 ? t.plastic / t.links : 0,
+        hidden: profile.meanHidden,
+        links: profile.meanLinks,
+        looped: profile.recurrentShare,
+      };
+    });
+}
+
 const percent = (share: number) => `${Math.round(share * 100)}%`;
 
 it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
   console.log(`overrides: ${JSON.stringify(overrides)} from: ${from} change at ${changeAt}: ${JSON.stringify(change)}`);
-  for (const seed of seeds) {
+  const runs = new Map<string, Summary[]>();
+  for (const seed of seeds.flatMap((base) => (repeat > 1 ? Array.from({ length: repeat }, (_, k) => `${base}#${k + 1}`) : [base]))) {
     const s = run(seed);
+    const base = seed.split('#')[0]!;
+    runs.set(base, [...(runs.get(base) ?? []), s]);
     console.log(
       [
         `seed=${s.seed}`,
@@ -378,10 +446,46 @@ it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
     console.log(
       `    blocks: pushes=${s.blockPushes.toFixed(2)}/creature/kt setDowns=${s.blockSetDowns.toFixed(3)}/creature/kt holding=${(s.holdingBlock * 100).toFixed(2)}% shelteredCreatures=${percent(s.shelteredCreatures)} shelteredLand=${percent(s.shelteredLand)} longestLine=${s.longestLine} builtShare=${percent(s.builtShare)}`,
     );
+    console.log(
+      `    brains: learningRate=${s.meanPlasticity.toFixed(4)} linksThatLearn=${percent(s.plasticLinkShare)} meanTau=${s.meanTau.toFixed(2)} slowNeurons=${percent(s.slowNeuronShare)} brainsWithLoop=${percent(s.recurrentShare)}`,
+    );
+    console.log(
+      `    wiring: links=${s.wiring.live.toFixed(0)} shadow=${s.wiring.shadowLive.toFixed(0)} activity real/shadow=${s.wiring.activity.toFixed(1)}/${s.wiring.shadowActivity.toFixed(1)} newLinksKept real/shadow=${percent(s.wiring.survival)}/${percent(s.wiring.shadowSurvival)}`,
+    );
+    for (const sp of s.speciesLearning) {
+      console.log(
+        `      species ${sp.id}: members=${sp.members} hidden=${sp.hidden.toFixed(1)} links=${sp.links.toFixed(1)} loop=${percent(sp.looped)} learningRate=${sp.meanPlasticity.toFixed(4)} linksThatLearn=${percent(sp.plasticShare)}`,
+      );
+    }
     for (const [k, b] of s.biomes.entries()) {
       console.log(
         `    ${BIOME_LABELS[k]!.padEnd(10)} land=${percent(b.land)} creatures=${percent(b.share)} occupied=${percent(b.occupied)} fur=${b.fur.toFixed(2)} size=${b.size.toFixed(2)} speed=${b.speed.toFixed(2)} diet=${b.diet.toFixed(2)}`,
       );
+    }
+  }
+  if (repeat > 1) {
+    const measures: [string, (s: Summary) => number, (x: number) => string][] = [
+      ['population', (s) => s.population.mean, (x) => x.toFixed(0)],
+      ['reseeded', (s) => s.reseeded, (x) => x.toFixed(1)],
+      ['hunters', (s) => s.hunters, (x) => x.toFixed(1)],
+      ['killShare', (s) => s.killShare, percent],
+      ['species', (s) => s.species.mean, (x) => x.toFixed(1)],
+      ['lifespan', (s) => s.lifespan, (x) => x.toFixed(0)],
+      ['learningRate', (s) => s.meanPlasticity, (x) => x.toFixed(4)],
+      ['linksThatLearn', (s) => s.plasticLinkShare, percent],
+      ['slowNeurons', (s) => s.slowNeuronShare, percent],
+      ['brainsWithLoop', (s) => s.recurrentShare, percent],
+      ['newLinksKept real', (s) => s.wiring.survival, percent],
+      ['newLinksKept shadow', (s) => s.wiring.shadowSurvival, percent],
+    ];
+    for (const [base, list] of runs) {
+      console.log(`${base}: mean (spread = standard deviation) over ${list.length} runs`);
+      for (const [name, pick, show] of measures) {
+        const values = list.map(pick);
+        const mean = values.reduce((a, b) => a + b, 0) / values.length;
+        const spread = Math.sqrt(values.reduce((a, b) => a + (b - mean) ** 2, 0) / values.length);
+        console.log(`    ${name.padEnd(22)} ${show(mean)} (spread ${show(spread)})`);
+      }
     }
   }
 });

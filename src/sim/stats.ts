@@ -83,6 +83,27 @@ export interface History {
   shelteredShare: Float32Array;
   blockHolders: Float32Array;
 
+  /**
+   * Brain features: mean learning rate over all enabled links, the share of
+   * enabled links that can learn at all, mean time constant over hidden
+   * neurons, and the share of hidden neurons that are slow (above 1).
+   */
+  meanPlasticity: Float32Array;
+  plasticLinkShare: Float32Array;
+  meanTau: Float32Array;
+  slowNeuronShare: Float32Array;
+
+  /** Evolutionary activity of brain links, real and neutral shadow; see wiring.ts. */
+  wiringLive: Float32Array;
+  wiringShadowLive: Float32Array;
+  wiringActivity: Float32Array;
+  wiringShadowActivity: Float32Array;
+  wiringSurvival: Float32Array;
+  wiringShadowSurvival: Float32Array;
+
+  /** Share of creatures whose brain contains a loop, so it can keep a state from one tick to the next. */
+  recurrentShare: Float32Array;
+
   /** Blocks moved per 1,000 ticks by each species, by species id. Not saved, like `species`. */
   blockMoves: Map<number, Float32Array>;
 
@@ -93,6 +114,46 @@ export interface History {
   species: Map<number, Float32Array>;
   /** Where creatures have been; see DensityHistory. Not saved either. */
   density: DensityHistory;
+  /** Which species fills each diet and speed combination; see BehaviourHistory. Not saved either. */
+  behaviour: BehaviourHistory;
+}
+
+/** Cells along each axis of the behaviour map: diet from plants to meat, and speed from slow to fast. */
+export const BEHAVIOUR_DIET_BINS = 10;
+export const BEHAVIOUR_SPEED_BINS = 10;
+
+/**
+ * A map of body type against species, in the manner of the quality-diversity
+ * "map of elites": for each combination of diet and speed, how many
+ * creature-samples each species has contributed over the whole run. It is a
+ * way of looking at the population, not something that selects it: filled
+ * cells in many colours mean many kinds of creature, in many species.
+ */
+export interface BehaviourHistory {
+  /** Species counts per cell, cell = speedBin * BEHAVIOUR_DIET_BINS + dietBin. */
+  cells: Map<number, number>[];
+}
+
+export function createBehaviourHistory(): BehaviourHistory {
+  return { cells: Array.from({ length: BEHAVIOUR_DIET_BINS * BEHAVIOUR_SPEED_BINS }, () => new Map()) };
+}
+
+/** Count every creature into its cell of the behaviour map. Speed is binned on a log scale between the limits. */
+export function recordBehaviour(
+  behaviour: BehaviourHistory,
+  creatures: Creatures,
+  minSpeed: number,
+  maxSpeed: number,
+): void {
+  const span = Math.log(maxSpeed / minSpeed);
+  for (let i = 0; i < creatures.count; i++) {
+    const d = Math.min(BEHAVIOUR_DIET_BINS - 1, Math.floor(creatures.diet[i]! * BEHAVIOUR_DIET_BINS));
+    const along = span > 0 ? Math.log(creatures.speed[i]! / minSpeed) / span : 0;
+    const v = Math.min(BEHAVIOUR_SPEED_BINS - 1, Math.max(0, Math.floor(along * BEHAVIOUR_SPEED_BINS)));
+    const cell = behaviour.cells[v * BEHAVIOUR_DIET_BINS + d]!;
+    const species = creatures.species[i]!;
+    cell.set(species, (cell.get(species) ?? 0) + 1);
+  }
 }
 
 /** Side of the grid that density is counted on, in cells. */
@@ -214,6 +275,17 @@ export const HISTORY_SERIES = [
   'builtBlocks',
   'shelteredShare',
   'blockHolders',
+  'meanPlasticity',
+  'plasticLinkShare',
+  'meanTau',
+  'slowNeuronShare',
+  'wiringLive',
+  'wiringShadowLive',
+  'wiringActivity',
+  'wiringShadowActivity',
+  'wiringSurvival',
+  'wiringShadowSurvival',
+  'recurrentShare',
 ] as const;
 
 export interface Sample {
@@ -266,6 +338,17 @@ export interface Sample {
   builtBlocks: number;
   shelteredShare: number;
   blockHolders: number;
+  meanPlasticity: number;
+  plasticLinkShare: number;
+  meanTau: number;
+  slowNeuronShare: number;
+  wiringLive: number;
+  wiringShadowLive: number;
+  wiringActivity: number;
+  wiringShadowActivity: number;
+  wiringSurvival: number;
+  wiringShadowSurvival: number;
+  recurrentShare: number;
 }
 
 export function createHistory(interval: number, capacity: number): History {
@@ -322,9 +405,21 @@ export function createHistory(interval: number, capacity: number): History {
     builtBlocks: new Float32Array(capacity),
     shelteredShare: new Float32Array(capacity),
     blockHolders: new Float32Array(capacity),
+    meanPlasticity: new Float32Array(capacity),
+    plasticLinkShare: new Float32Array(capacity),
+    meanTau: new Float32Array(capacity),
+    slowNeuronShare: new Float32Array(capacity),
+    wiringLive: new Float32Array(capacity),
+    wiringShadowLive: new Float32Array(capacity),
+    wiringActivity: new Float32Array(capacity),
+    wiringShadowActivity: new Float32Array(capacity),
+    wiringSurvival: new Float32Array(capacity),
+    wiringShadowSurvival: new Float32Array(capacity),
+    recurrentShare: new Float32Array(capacity),
     blockMoves: new Map(),
     species: new Map(),
     density: createDensityHistory(),
+    behaviour: createBehaviourHistory(),
   };
 }
 

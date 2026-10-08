@@ -52,6 +52,17 @@ function sample(tick: number): Sample {
     builtBlocks: 0,
     shelteredShare: 0,
     blockHolders: 0,
+    meanPlasticity: 0,
+    plasticLinkShare: 0,
+    meanTau: 1,
+    slowNeuronShare: 0,
+    wiringLive: 0,
+    wiringShadowLive: 0,
+    wiringActivity: 0,
+    wiringShadowActivity: 0,
+    wiringSurvival: 0,
+    wiringShadowSurvival: 0,
+    recurrentShare: 0,
   };
 }
 

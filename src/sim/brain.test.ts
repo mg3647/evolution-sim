@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   brainCost,
+  compileBrain,
   enabledLinks,
   founderBrain,
+  hasLoop,
   Innovations,
   INPUT_COUNT,
   INPUT_LABELS,
@@ -29,6 +31,8 @@ function only(overrides: Partial<SimConfig>): SimConfig {
     addLinkChance: 0,
     addNeuronChance: 0,
     toggleLinkChance: 0,
+    tauChangeChance: 0,
+    plasticityChangeChance: 0,
     ...overrides,
   };
 }
@@ -230,5 +234,147 @@ describe('brainCost', () => {
     expect(brainCost(parent, config)).toBeCloseTo(config.brainLinkCost, 12);
     const child = mutateBrain(parent, 0.1, rng, innovations, only({ addNeuronChance: 1 }));
     expect(brainCost(child, config)).toBeCloseTo(config.brainNeuronCost + 2 * config.brainLinkCost, 12);
+  });
+});
+
+describe('slow neurons', () => {
+  /** A one-input brain: input 0 feeds hidden neuron `FIXED` with weight 1, with the given time constant. */
+  function relay(tau: number): Brain {
+    const links = [{ innovation: 0, from: 0, to: FIXED, weight: 1, enabled: true }];
+    return compileBrain(links, [FIXED], [tau]);
+  }
+
+  it('follows its input at once with a time constant of 1', () => {
+    const brain = relay(1);
+    brain.activation[0] = 0.5;
+    think(brain);
+    expect(brain.activation[FIXED]).toBe(Math.fround(Math.tanh(0.5)));
+  });
+
+  it('moves only part of the way each tick with a larger time constant, and keeps a memory', () => {
+    const brain = relay(4);
+    brain.activation[0] = 1;
+    think(brain);
+    const target = Math.tanh(1);
+    expect(brain.activation[FIXED]).toBeCloseTo(target / 4, 6);
+    for (let i = 0; i < 40; i++) think(brain);
+    expect(brain.activation[FIXED]).toBeCloseTo(target, 3);
+    // With the input gone it fades slowly instead of dropping to zero.
+    brain.activation[0] = 0;
+    think(brain);
+    expect(brain.activation[FIXED]!).toBeGreaterThan(0.5);
+  });
+
+  it('starts every new neuron at 1 and keeps time constants beside their neurons', () => {
+    const innovations = new Innovations();
+    const rng = new Rng('tau');
+    const cfg = only({ addNeuronChance: 1, maxHiddenNeurons: 5 });
+    let brain = founderBrain(rng, innovations, cfg);
+    for (let i = 0; i < 40; i++) brain = mutateBrain(brain, 0.1, rng, innovations, cfg);
+    expect(brain.hiddenTau).toHaveLength(brain.hiddenIds.length);
+    expect(brain.hiddenTau.every((tau) => tau === 1)).toBe(true);
+  });
+
+  it('mutates time constants within 1 and the maximum, and passes them on', () => {
+    const innovations = new Innovations();
+    const rng = new Rng('tau2');
+    const parent = relay(5);
+    const cfg = only({ tauChangeChance: 1, tauChangeScale: 2, maxNeuronTau: 8 });
+    let brain = parent;
+    const seen = new Set<number>();
+    for (let i = 0; i < 200; i++) {
+      brain = mutateBrain(brain, 0.1, rng, innovations, cfg);
+      seen.add(brain.hiddenTau[0]!);
+      expect(brain.hiddenTau[0]!).toBeGreaterThanOrEqual(1);
+      expect(brain.hiddenTau[0]!).toBeLessThanOrEqual(8);
+    }
+    expect(seen.size).toBeGreaterThan(5);
+    expect(parent.hiddenTau).toEqual([5]);
+  });
+});
+
+describe('learning', () => {
+  /** Input 0 feeds output 0 with weight 0.5; the link learns at the given rate. */
+  function learner(plasticity: number, weight = 0.5): Brain {
+    const links = [{ innovation: 0, from: 0, to: INPUT_COUNT, weight, enabled: true, plasticity }];
+    return compileBrain(links, []);
+  }
+
+  it('keeps a fixed weight when the learning rate is 0', () => {
+    const brain = learner(0);
+    brain.activation[0] = 1;
+    for (let i = 0; i < 50; i++) think(brain);
+    expect(brain.linkWeight[0]).toBe(0.5);
+    expect(brain.plasticLinks).toHaveLength(0);
+  });
+
+  it('strengthens a link whose ends are active together, and weakens it when they disagree', () => {
+    const together = learner(0.02);
+    together.activation[0] = 1;
+    for (let i = 0; i < 20; i++) think(together);
+    expect(together.linkWeight[0]!).toBeGreaterThan(0.5);
+
+    const apart = learner(0.02, -0.5);
+    apart.activation[0] = 1;
+    for (let i = 0; i < 20; i++) think(apart);
+    // Input +1 and output negative: the weight moves further negative, as Hebb's rule says.
+    expect(apart.linkWeight[0]!).toBeLessThan(-0.5);
+  });
+
+  it('never learns a weight past the limit, and leaves the inherited weight alone', () => {
+    const brain = learner(0.05, 3.9);
+    brain.activation[0] = 1;
+    for (let i = 0; i < 500; i++) think(brain);
+    expect(brain.linkWeight[0]!).toBeLessThanOrEqual(4);
+    expect(brain.links[0]!.weight).toBe(3.9);
+  });
+
+  it('does not pass what was learned to the young, but does pass the learning rate', () => {
+    const innovations = new Innovations();
+    const rng = new Rng('baldwin');
+    const parent = learner(0.03);
+    parent.activation[0] = 1;
+    for (let i = 0; i < 100; i++) think(parent);
+    expect(parent.linkWeight[0]!).toBeGreaterThan(0.6);
+    const child = mutateBrain(parent, 0.1, rng, innovations, only({}));
+    expect(child.linkWeight[0]).toBe(0.5);
+    expect(child.links[0]!.plasticity).toBeCloseTo(0.03, 6);
+    expect(child.plasticLinks).toHaveLength(1);
+  });
+
+  it('mutates learning rates within 0 and the maximum', () => {
+    const innovations = new Innovations();
+    const rng = new Rng('plast');
+    const cfg = only({ plasticityChangeChance: 1, plasticityChangeScale: 0.05, maxPlasticity: 0.04 });
+    let brain = learner(0.02);
+    const seen = new Set<number>();
+    for (let i = 0; i < 200; i++) {
+      brain = mutateBrain(brain, 0.1, rng, innovations, cfg);
+      const rate = brain.links[0]!.plasticity!;
+      seen.add(rate);
+      expect(rate).toBeGreaterThanOrEqual(0);
+      expect(rate).toBeLessThanOrEqual(Math.fround(0.04));
+    }
+    expect(seen.size).toBeGreaterThan(5);
+  });
+});
+
+describe('hasLoop', () => {
+  const link = (from: number, to: number, enabled = true) => ({ innovation: from * 1000 + to, from, to, weight: 1, enabled });
+  const H1 = FIXED;
+  const H2 = FIXED + 1;
+
+  it('is false for a brain with no loop, however deep', () => {
+    expect(hasLoop(compileBrain([link(0, INPUT_COUNT)], []))).toBe(false);
+    expect(hasLoop(compileBrain([link(0, H1), link(H1, H2), link(H2, INPUT_COUNT)], [H1, H2]))).toBe(false);
+  });
+
+  it('finds a neuron feeding itself, and a longer loop', () => {
+    expect(hasLoop(compileBrain([link(0, H1), link(H1, H1)], [H1]))).toBe(true);
+    expect(hasLoop(compileBrain([link(0, H1), link(H1, H2), link(H2, H1)], [H1, H2]))).toBe(true);
+  });
+
+  it('ignores a loop whose link is switched off', () => {
+    expect(hasLoop(compileBrain([link(0, H1), link(H1, H1, false)], [H1]))).toBe(false);
   });
 });
