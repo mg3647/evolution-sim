@@ -162,9 +162,9 @@ describe('pushing', () => {
     }
   });
 
-  it('happens when a creature walks into a block, and stops it when the block cannot move', () => {
+  it('happens when a creature grabs as it walks into a block, and stops it when the block cannot move', () => {
     const { world, add } = setup();
-    const i = add({ Thrust: 5 });
+    const i = add({ Thrust: 5, Hold: 5 });
     addBlock(world.plants, at(11, 10));
     for (let k = 0; k < 40; k++) step(world);
     expect(world.blockTally.pushed).toBeGreaterThan(0);
@@ -172,12 +172,62 @@ describe('pushing', () => {
     expect(world.creatures.x[i]).toBeGreaterThan(225);
 
     const stuck = setup();
-    const j = stuck.add({ Thrust: 5 });
+    const j = stuck.add({ Thrust: 5, Hold: 5 });
     addBlock(stuck.world.plants, at(11, 10));
     stuck.world.plants.walls[at(12, 10)] = 1;
     for (let k = 0; k < 40; k++) step(stuck.world);
     expect(stuck.world.blockTally.pushed).toBe(0);
     expect(stuck.world.creatures.x[j]).toBeLessThan(220);
+  });
+});
+
+describe('blocks that are not grabbed', () => {
+  it('stop a creature that merely walks into them', () => {
+    const { world, add } = setup();
+    const i = add({ Thrust: 5 });
+    addBlock(world.plants, at(11, 10));
+    for (let k = 0; k < 40; k++) step(world);
+    expect(world.blockTally.pushed).toBe(0);
+    expect(world.plants.blocks[at(11, 10)]).toBe(1);
+    expect(world.creatures.x[i]).toBeLessThan(220);
+  });
+});
+
+describe('heavy blocks', () => {
+  it('stay put for one pusher, even one that keeps pushing, and move for two different ones', () => {
+    const f = field();
+    addBlock(f, at(6, 5), 0, false, true);
+    for (let tick = 0; tick < 10; tick++) expect(pushBlock(f, at(5, 5), at(6, 5), 9, { tick, creature: 1 })).toBe(false);
+    expect(pushBlock(f, at(5, 5), at(6, 5), 9)).toBe(false);
+    expect(pushBlock(f, at(5, 5), at(6, 5), 9, { tick: 10, creature: 2 })).toBe(true);
+    expect(f.blocks[at(7, 5)]).toBe(1);
+    expect(f.blockHeavy[at(7, 5)]).toBe(1);
+    expect(f.blockHeavy[at(6, 5)]).toBe(0);
+  });
+
+  it('do not move when the second creature pushes long after the first', () => {
+    const f = field();
+    addBlock(f, at(6, 5), 0, false, true);
+    expect(pushBlock(f, at(5, 5), at(6, 5), 9, { tick: 0, creature: 1 })).toBe(false);
+    expect(pushBlock(f, at(5, 5), at(6, 5), 9, { tick: 5, creature: 2 })).toBe(false);
+  });
+
+  it('are shoved along by two creatures in the world, and not picked up by one', () => {
+    const one = setup();
+    one.add({ Thrust: 5, Hold: 5 });
+    addBlock(one.world.plants, at(11, 10), 0, false, true);
+    for (let k = 0; k < 40; k++) step(one.world);
+    expect(one.world.plants.blocks[at(11, 10)]).toBe(1);
+    expect(one.world.creatures.held[0]).toBe(Held.Nothing);
+
+    const two = setup();
+    const a = two.add({ Thrust: 5, Hold: 5 });
+    const b = two.add({ Thrust: 5, Hold: 5 }, 210, 214);
+    addBlock(two.world.plants, at(11, 10), 0, false, true);
+    for (let k = 0; k < 40; k++) step(two.world);
+    expect(two.world.blockTally.pushed).toBeGreaterThan(0);
+    expect(two.world.plants.blocks[at(11, 10)]).toBe(0);
+    expect(Math.max(two.world.creatures.x[a]!, two.world.creatures.x[b]!)).toBeGreaterThan(225);
   });
 });
 

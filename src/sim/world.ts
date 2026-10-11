@@ -288,6 +288,9 @@ function spawnFounder(world: World, age: number): number {
   return energy + bodyEnergyFor(genes.size, config);
 }
 
+/** Thrust below which a creature grabbing a block lifts it; at or above this it pushes. */
+const LIFT_EFFORT = 0.25;
+
 export function createWorld(config: SimConfig): World {
   config = { ...config };
   const rng = new Rng(config.seed);
@@ -476,11 +479,17 @@ export function step(world: World): void {
     // there is room beyond. A creature that is stopped slides along the
     // obstacle instead of stopping dead.
     const fromCell = cellIndexAt(plants, fromX, fromY);
+    let pushedBlock = false;
     const toCell = cellIndexAt(plants, toX, toY);
     if (!isSolid(plants, toCell) || isSolid(plants, fromCell)) {
       creatures.x[i] = toX;
       creatures.y[i] = toY;
-    } else if (pushBlock(plants, fromCell, toCell, creatures.species[i]!)) {
+    } else if (
+      // Blocks give way only to a creature that is grabbing as it walks into them.
+      holding &&
+      pushBlock(plants, fromCell, toCell, creatures.species[i]!, { tick: world.tick, creature: creatures.id[i]! })
+    ) {
+      pushedBlock = true;
       creatures.x[i] = toX;
       creatures.y[i] = toY;
       world.blockTally.pushed++;
@@ -530,7 +539,8 @@ export function step(world: World): void {
       const load = biteFor(size, config) * config.carryMouthfuls;
       const least = biteFor(size, config);
       const front = cellInFront(world, i);
-      if (front !== cell && removeBlock(plants, front)) {
+      // Only a light block can be lifted, and only by a creature that is holding still: grabbing while moving pushes instead.
+      if (front !== cell && !pushedBlock && effort < LIFT_EFFORT && plants.blockHeavy[front] === 0 && removeBlock(plants, front)) {
         creatures.held[i] = Held.Block;
       } else if (plants.stones[cell]! > 0) {
         plants.stones[cell]!--;

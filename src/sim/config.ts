@@ -376,6 +376,8 @@ export interface SimConfig {
 
   /** Share of land cells that start with a block on them. Desert and tundra get more, other land less. */
   blockDensity: number;
+  /** Share of the blocks placed at the start that are heavy: they move only while two creatures push at once. */
+  heavyBlockShare: number;
   /** Share of its stride a creature loses while it carries a block. */
   blockWeight: number;
   /**
@@ -396,7 +398,7 @@ export const defaultConfig: SimConfig = {
   plantCapacity: 24,
   plantGrowthRate: 0.006,
   plantBareGrowth: 0.1,
-  fertilityFloor: 0.3,
+  fertilityFloor: 0.26,
 
   waterShare: 0.17,
   riverWidth: 2,
@@ -572,6 +574,7 @@ export const defaultConfig: SimConfig = {
   birthWaterShare: 0,
 
   blockDensity: 0.01,
+  heavyBlockShare: 0.25,
   blockWeight: 0.4,
   shelter: 0.5,
 };
