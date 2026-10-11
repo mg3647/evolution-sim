@@ -123,6 +123,30 @@ export function blockBetween(field: PlantField, x: number, y: number, dx: number
   return false;
 }
 
+/** What stands in the way between two points: nothing, a block, or a wall, which hides more. */
+export const Obstacle = { None: 0, Block: 1, Wall: 2 } as const;
+
+/**
+ * The thickest obstacle between two points, which are `dx` and `dy` apart
+ * the short way round the wrapped world: a wall if there is one, else a
+ * block if there is one. The cells the points are in do not count.
+ */
+export function obstacleBetween(field: PlantField, x: number, y: number, dx: number, dy: number, worldWidth: number, worldHeight: number): number {
+  const steps = Math.ceil(Math.hypot(dx, dy) / Math.min(field.cellWidth, field.cellHeight));
+  let found: number = Obstacle.None;
+  for (let s = 1; s < steps; s++) {
+    const t = s / steps;
+    let px = x + dx * t;
+    let py = y + dy * t;
+    px -= Math.floor(px / worldWidth) * worldWidth;
+    py -= Math.floor(py / worldHeight) * worldHeight;
+    const cell = cellIndexAt(field, px, py);
+    if (field.walls[cell] === 1) return Obstacle.Wall;
+    if (field.blocks[cell] === 1) found = Obstacle.Block;
+  }
+  return found;
+}
+
 /** The cell one step on from `to`, in the direction a creature moved to get from `from` to `to`; -1 if it did not change cell. */
 export function cellBeyond(field: PlantField, from: number, to: number): number {
   const { cols, rows } = field;

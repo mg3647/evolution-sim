@@ -161,12 +161,25 @@ describe('the new senses', () => {
     expect(sense(i)[Input.WarmerAhead]).toBe(1);
   });
 
+  it('feel whether it is warmer to the right or the left', () => {
+    const { cfg, plants, add, sense } = setup();
+    plants.temperature.fill(-0.5);
+    const i = add(210, 210, 0.5);
+    expect(sense(i)[Input.WarmerSide]).toBe(0);
+    // Make it hot where the right ray ends: heading 0 plus one spread.
+    const angle = cfg.raySpread;
+    const at = (x: number, y: number) => Math.floor(y / plants.cellHeight) * plants.cols + Math.floor(x / plants.cellWidth);
+    plants.temperature[at(210 + Math.cos(angle) * cfg.senseRange, 210 + Math.sin(angle) * cfg.senseRange)] = 0.5;
+    expect(sense(i)[Input.WarmerSide]).toBe(1);
+  });
+
   it('read zero when temperature is switched off', () => {
     const { plants, add, sense } = setup({ temperatureStrength: 0 });
     plants.temperature.fill(0.8);
     const inputs = sense(add(210, 210, 0.5));
     expect(inputs[Input.Temperature]).toBe(0);
     expect(inputs[Input.WarmerAhead]).toBe(0);
+    expect(inputs[Input.WarmerSide]).toBe(0);
   });
 
   it('see the actual colour of the creature ahead', () => {

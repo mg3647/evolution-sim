@@ -5,6 +5,7 @@ import {
   enabledLinks,
   founderBrain,
   hasLoop,
+  idleOutputs,
   Innovations,
   INPUT_COUNT,
   INPUT_LABELS,
@@ -429,5 +430,23 @@ describe('hasLoop', () => {
 
   it('ignores a loop whose link is switched off', () => {
     expect(hasLoop(compileBrain([link(0, H1), link(H1, H1, false)], [H1]))).toBe(false);
+  });
+});
+
+describe('idle actions', () => {
+  const learner = { plasticLinks: new Uint16Array([0]) };
+  const fixed = { plasticLinks: new Uint16Array(0) };
+
+  it('mark Mate idle when creatures breed alone, and Reproduce when they only breed with a mate', () => {
+    expect(idleOutputs({ ...defaultConfig, reproductionMode: 0 }, learner)[Output.Mate]).not.toBeNull();
+    expect(idleOutputs({ ...defaultConfig, reproductionMode: 0 }, learner)[Output.Reproduce]).toBeNull();
+    expect(idleOutputs({ ...defaultConfig, reproductionMode: 1 }, learner).every((why) => why === null)).toBe(true);
+    expect(idleOutputs({ ...defaultConfig, reproductionMode: 2 }, learner)[Output.Reproduce]).not.toBeNull();
+    expect(idleOutputs({ ...defaultConfig, reproductionMode: 2 }, learner)[Output.Mate]).toBeNull();
+  });
+
+  it('mark Learn idle for a brain with no learning links, and Call when hearing is off', () => {
+    expect(idleOutputs({ ...defaultConfig, reproductionMode: 1 }, fixed)[Output.Learn]).not.toBeNull();
+    expect(idleOutputs({ ...defaultConfig, reproductionMode: 1, hearing: false }, learner)[Output.Call]).not.toBeNull();
   });
 });

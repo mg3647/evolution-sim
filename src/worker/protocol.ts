@@ -81,6 +81,8 @@ export interface Inspection {
   /** Brain inputs and outputs this tick, in the order of INPUT_LABELS and OUTPUT_LABELS. */
   inputs: number[];
   outputs: number[];
+  /** Per action, why it does nothing for this creature here, or null if it does something. */
+  idleOutputs: (string | null)[];
   species: number;
   brain: BrainView;
   /** Its strongest sense-action habits, strongest first. */

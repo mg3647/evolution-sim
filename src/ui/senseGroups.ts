@@ -8,7 +8,7 @@ export const SENSE_GROUP_HINTS: Record<SenseGroup, string> = {
   Vision: 'The ground along its three rays and underfoot, and how near the creature on each ray is',
   Social: 'What it can tell about other creatures: kin, size, diet, colour, displays, scent and calls',
   Body: 'Its own state: energy and whether it is rising, health, thirst, age, pain and sickness',
-  Climate: 'Season, daylight, temperature, water and fire',
+  Climate: 'Season, daylight, temperature and where it is warmer, shelter, water and fire',
   Items: 'Stones, branches, blocks and stored food, on the ground and in its grip',
 };
 
@@ -27,6 +27,8 @@ const RAY_GROUPS: Record<number, SenseGroup> = {
   [Ray.ColourWarm]: 'Social',
   [Ray.ColourGreen]: 'Social',
   [Ray.Display]: 'Social',
+  [Ray.Sick]: 'Social',
+  [Ray.Store]: 'Items',
   [Ray.Fire]: 'Climate',
   [Ray.Items]: 'Items',
   [Ray.Block]: 'Items',
@@ -59,6 +61,11 @@ const OTHER_GROUPS: Record<number, SenseGroup> = {
   [Input.HoldingFood]: 'Items',
   [Input.HoldingBlock]: 'Items',
   [Input.EnergyTrend]: 'Body',
+  [Input.BehindSide]: 'Social',
+  [Input.BehindMeatEater]: 'Social',
+  [Input.WarmerSide]: 'Climate',
+  [Input.Facing]: 'Items',
+  [Input.Sheltered]: 'Climate',
   [Input.Bias]: 'Body',
 };
 

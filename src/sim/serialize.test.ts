@@ -27,8 +27,19 @@ function roundTrip(world: World): World {
   return loadWorld(JSON.parse(JSON.stringify(saveWorld(world))) as SavedWorld);
 }
 
-/** Where a neuron of the current layout sat before save version 16, or null if it did not exist then. */
-function oldNeuron(n: number): number | null {
+/** Where a neuron of the current layout sat in save version 16, or null if it did not exist then. */
+function v16Neuron(n: number): number | null {
+  if (n < 54) return n % 18 >= 16 ? null : Math.floor(n / 18) * 16 + (n % 18);
+  if (n < 86) {
+    const a = n - 54;
+    return a < 26 ? 48 + a : a === 31 ? 74 : null;
+  }
+  if (n < 98) return 75 + (n - 86);
+  return n - 98 + 87;
+}
+
+/** Where a neuron of the version 16 layout sat before save version 16, or null if it did not exist then. */
+function v15Neuron(n: number): number | null {
   if (n < 48) return n % 16 === 15 ? null : Math.floor(n / 16) * 15 + (n % 16);
   if (n < 75) {
     const a = n - 48;
@@ -38,9 +49,19 @@ function oldNeuron(n: number): number | null {
   return n - 87 + 79;
 }
 
-/** Turn a current save into what version 15 wrote: old numbering, and no link to a sense or action that did not exist. */
-function toOldLayout(saved: SavedWorld): SavedWorld {
-  saved.version = 15;
+/** Where a neuron of the current layout sat in an older save version, or null if it did not exist then. */
+function oldNeuronIn(version: number): (n: number) => number | null {
+  if (version === 16) return v16Neuron;
+  return (n) => {
+    const at16 = v16Neuron(n);
+    return at16 === null ? null : v15Neuron(at16);
+  };
+}
+
+/** Turn a current save into what an older version wrote: old numbering, and no link to a sense or action that did not exist. */
+function toOldLayout(saved: SavedWorld, version: number): SavedWorld {
+  const oldNeuron = oldNeuronIn(version);
+  saved.version = version;
   const kept = (link: { from: number; to: number }) => oldNeuron(link.from) !== null && oldNeuron(link.to) !== null;
   for (const brain of saved.creatures.brains) {
     brain.links = brain.links.filter(kept).map((link) => ({ ...link, from: oldNeuron(link.from)!, to: oldNeuron(link.to)! }));
@@ -125,7 +146,7 @@ describe('save and load', () => {
   });
 
   it('opens a save from before time constants, with every neuron answering at once', () => {
-    const saved = toOldLayout(JSON.parse(JSON.stringify(saveWorld(run(createWorld(smallConfig), 100)))) as SavedWorld);
+    const saved = toOldLayout(JSON.parse(JSON.stringify(saveWorld(run(createWorld(smallConfig), 100)))) as SavedWorld, OLDEST_LOADABLE_VERSION);
     saved.version = OLDEST_LOADABLE_VERSION;
     for (const brain of saved.creatures.brains) {
       delete brain.hiddenTau;
@@ -142,12 +163,13 @@ describe('save and load', () => {
     run(copy, 50);
   });
 
-  it('opens a save from before the new senses and actions, with every link still joining the same neurons', () => {
+  it.each([15, 16])('opens a version %i save, from before the new senses and actions, with every link still joining the same neurons', (version) => {
+    const oldNeuron = oldNeuronIn(version);
     const world = run(createWorld(smallConfig), 300);
     const original = world.creatures.brain.slice(0, world.creatures.count).map((brain) =>
       brain.links.filter((link) => oldNeuron(link.from) !== null && oldNeuron(link.to) !== null).map((link) => `${link.from}>${link.to}`),
     );
-    const old = toOldLayout(JSON.parse(JSON.stringify(saveWorld(world))) as SavedWorld);
+    const old = toOldLayout(JSON.parse(JSON.stringify(saveWorld(world))) as SavedWorld, version);
     const copy = loadWorld(old);
     expect(copy.creatures.count).toBe(world.creatures.count);
     copy.creatures.brain.slice(0, copy.creatures.count).forEach((brain, i) => {
