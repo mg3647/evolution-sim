@@ -11,7 +11,7 @@ const MIN_ZOOM = 0.05;
 const MAX_ZOOM = 20;
 const ZOOM_PER_WHEEL_PIXEL = 0.0015;
 /** Fraction of the view the world fills when fitted. */
-const FIT_MARGIN = 0.9;
+const FIT_MARGIN = 0.96;
 
 /** Ground colour with no plants and with a full cell, as [r, g, b]. */
 const SOIL_COLOR = [28, 24, 20] as const;

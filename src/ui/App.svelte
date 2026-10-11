@@ -17,6 +17,8 @@
   import SettingsPanel from './SettingsPanel.svelte';
   import SpeciesList from './SpeciesList.svelte';
   import { streamSeries } from './speciesColors';
+  import Sparkline from './Sparkline.svelte';
+  import Timeline from './Timeline.svelte';
   import TraitCards from './TraitCards.svelte';
 
 
@@ -137,13 +139,58 @@
   /** Panel width in pixels for U1 (resizable panel) */
   let panelWidth = $state<number>(380);
   let isResizing = $state(false);
-  /** Track which sections are expanded in the foldable panel (U2) */
-  let expandedSections = $state<Record<string, boolean>>({
-    world: true,
-    creature: true,
-    evolution: true,
-    charts: true,
-  });
+  type Tab = 'world' | 'creature' | 'evolution' | 'charts';
+  const TABS: { id: Tab; label: string }[] = [
+    { id: 'world', label: 'World' },
+    { id: 'creature', label: 'Creature' },
+    { id: 'evolution', label: 'Evolution' },
+    { id: 'charts', label: 'Charts' },
+  ];
+  /** The panel shows one tab at a time. */
+  let activeTab = $state<Tab>('world');
+
+  /** The welcome note over the map, until it has been dismissed once. */
+  const HINT_STORE = 'evolution-sim.welcomeSeen';
+  let welcomeSeen = $state(false);
+  try {
+    welcomeSeen = localStorage.getItem(HINT_STORE) === '1';
+  } catch {
+    // Browser will not say: the note shows once per visit.
+  }
+  function dismissWelcome() {
+    welcomeSeen = true;
+    try {
+      localStorage.setItem(HINT_STORE, '1');
+    } catch {
+      // Not remembered.
+    }
+  }
+
+  /** How a headline number has moved over about the last stretch of the run. */
+  function trend(values: ArrayLike<number> | undefined): { arrow: string; tone: string } {
+    const n = values?.length ?? 0;
+    if (!values || n < 8) return { arrow: '', tone: '' };
+    const now = values[n - 1]!;
+    const before = values[Math.max(0, n - 21)]!;
+    const change = before === 0 ? (now === 0 ? 0 : 1) : (now - before) / Math.abs(before);
+    if (Math.abs(change) < 0.03) return { arrow: '→', tone: 'flat' };
+    return change > 0 ? { arrow: '▲', tone: 'up' } : { arrow: '▼', tone: 'down' };
+  }
+  const meatShare = $derived(
+    history ? Float32Array.from(history.population, (p, k) => (p > 0 ? (history!.meatEaters[k]! / p) * 100 : 0)) : undefined,
+  );
+
+  const DEATH_CAUSES = [
+    { key: 'starved', label: 'Starved', color: '#e8c468' },
+    { key: 'killed', label: 'Killed', color: '#e0566a' },
+    { key: 'temperature', label: 'Heat or cold', color: '#6cb6ff' },
+    { key: 'thirst', label: 'Thirst', color: '#7fd6c2' },
+    { key: 'disaster', label: 'Disasters', color: '#b08cff' },
+    { key: 'oldAge', label: 'Old age', color: '#8a9aa9' },
+  ] as const;
+  const deathTotal = $derived(
+    snapshot ? DEATH_CAUSES.reduce((sum, c) => sum + (snapshot!.deaths[c.key] ?? 0), 0) : 0,
+  );
   /** U5: Settings drawer state */
   let showSettingsDrawer = $state(false);
 
@@ -223,7 +270,8 @@
           }
           r.update(s);
           const picked = s.selected?.id ?? 0;
-          if (picked !== 0 && picked !== shownCreature) expandedSections.creature = true;
+          if (picked !== 0 && picked !== shownCreature) activeTab = 'creature';
+          if (s.tick > 0 && !welcomeSeen) dismissWelcome();
           shownCreature = picked;
         },
         onHistory: (h) => (history = h),
@@ -261,6 +309,9 @@
 
   function restart(event: SubmitEvent) {
     event.preventDefault();
+    if ((snapshot?.tick ?? 0) > 3000 && !confirm(`Restart? This world is ${count(snapshot?.tick)} ticks old and the run so far will be lost. Use Save first to keep it.`)) {
+      return;
+    }
     client?.init({ ...settings, seed });
   }
 
@@ -355,10 +406,6 @@
     panelWidth = Math.max(300, Math.min(900, newWidth));
   }
 
-  function toggleSection(section: string) {
-    expandedSections[section] = !expandedSections[section];
-  }
-
   onMount(() => {
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', stopResizing);
@@ -430,61 +477,40 @@
   </header>
 
   <div class="events">
-    <details class="menu" open title="Pick a tool, then click or drag on the world. Press Esc to put it down.">
-      <summary class="label">Tools</summary>
-      <div class="group" role="group" aria-label="Tools" style="padding: 6px 0;">
-        <button
-          class:active={tool === null}
-          title="Drag to move the view, click a creature to inspect it"
-          onclick={() => pickTool(null)}
-        >
-          Select
+    <div class="group" role="group" aria-label="Climate">
+      <span class="label">Climate</span>
+      {#each CLIMATE_EVENTS as kind (kind)}
+        <button title={EVENT_HINTS[kind]} onclick={() => client?.triggerEvent(kind)} disabled={!snapshot}>
+          {EVENT_LABELS[kind]}
         </button>
-        {#each TOOLS as t (t.id)}
-          <button class:active={tool === t.id} title={t.hint} onclick={() => pickTool(t.id)} disabled={!snapshot}>
-            {t.label}
-          </button>
-        {/each}
-        <button title="Remove every wall" onclick={() => client?.clearWalls()} disabled={!snapshot}>
-          Clear walls
+      {/each}
+    </div>
+
+    <div class="group wildfire" role="group" aria-label="Wildfire">
+      <span class="label" title="How often lightning starts fires and how readily they spread">Wildfire</span>
+      {#each WILDFIRE_LEVELS as level (level.id)}
+        <button class:active={wildfireLevel(settings) === level.id} title={level.hint} onclick={() => setWildfire(level)}>
+          {level.label}
         </button>
-      </div>
-    </details>
+      {/each}
+      {#if wildfireLevel(settings) === null}
+        <span class="custom" title="The Lightning and Fire spread sliders in Settings are set to something else">Custom</span>
+      {/if}
+    </div>
 
-    <details class="menu" open>
-      <summary class="label">Climate</summary>
-      <div class="group" style="padding: 6px 0;">
-        {#each CLIMATE_EVENTS as kind (kind)}
-          <button title={EVENT_HINTS[kind]} onclick={() => client?.triggerEvent(kind)} disabled={!snapshot}>
-            {EVENT_LABELS[kind]}
-          </button>
-        {/each}
-      </div>
-      <div class="group wildfire" role="group" aria-label="Wildfire">
-        <span class="label" title="How often lightning starts fires and how readily they spread">Wildfire</span>
-        {#each WILDFIRE_LEVELS as level (level.id)}
-          <button class:active={wildfireLevel(settings) === level.id} title={level.hint} onclick={() => setWildfire(level)}>
-            {level.label}
-          </button>
-        {/each}
-        {#if wildfireLevel(settings) === null}
-          <span class="custom" title="The Lightning and Fire spread sliders in Settings are set to something else">Custom</span>
-        {/if}
-      </div>
-      <label title="Let events strike on their own, about once every 15,000 ticks">
-        <input
-          type="checkbox"
-          checked={snapshot?.environment.randomEvents ?? false}
-          onchange={(event) => client?.setRandomEvents(event.currentTarget.checked)}
-          disabled={!snapshot}
-        />
-        Random events
-      </label>
-    </details>
+    <label title="Let events strike on their own, about once every 15,000 ticks">
+      <input
+        type="checkbox"
+        checked={snapshot?.environment.randomEvents ?? false}
+        onchange={(event) => client?.setRandomEvents(event.currentTarget.checked)}
+        disabled={!snapshot}
+      />
+      Random events
+    </label>
 
-    <details class="menu" open>
-      <summary class="label">View</summary>
-      <div style="padding: 6px 0;">
+    <details class="menu view">
+      <summary class="label">View ▾</summary>
+      <div class="popover">
         <label title="Tint the ground purple where creatures have left scent">
           <input type="checkbox" bind:checked={showScent} onchange={applyViewOptions} />
           Show scent
@@ -508,7 +534,7 @@
       </div>
     </details>
 
-    <button onclick={() => (showSettingsDrawer = true)} title="Open settings drawer">⚙️ Settings</button>
+    <button class="settings" onclick={() => (showSettingsDrawer = true)} title="Open settings drawer">⚙️ Settings</button>
   </div>
 
   {#if errorMessage}
@@ -552,12 +578,30 @@
   {/if}
 
   <div class="main">
+    <nav class="rail" aria-label="Tools" title="Pick a tool, then click or drag on the world. Press Esc to put it down.">
+      <span class="label">Tools</span>
+      <button
+        class:active={tool === null}
+        title="Drag to move the view, click a creature to inspect it"
+        onclick={() => pickTool(null)}
+      >
+        Select
+      </button>
+      {#each TOOLS as t (t.id)}
+        <button class:active={tool === t.id} title={t.hint} onclick={() => pickTool(t.id)} disabled={!snapshot}>
+          {t.label}
+        </button>
+      {/each}
+      <button title="Remove every wall" onclick={() => client?.clearWalls()} disabled={!snapshot}>Clear walls</button>
+    </nav>
+
+    <div class="center">
     <div class="world" class:paused-drawing={!drawWorld} class:tool={tool !== null} bind:this={host}>
       {#if !drawWorld}
         <div class="notice">Drawing is off. The world is still running; tick "Draw world" to see it.</div>
       {/if}
       <!-- U4: Floating creature card -->
-      {#if snapshot?.selected}
+      {#if snapshot?.selected && activeTab !== 'creature'}
         <div class="floating-card">
           <div class="creature-info">
             <div class="creature-name">Creature #{snapshot.selected.id}</div>
@@ -571,9 +615,17 @@
         </div>
       {/if}
 
+      {#if !welcomeSeen && snapshot && snapshot.tick === 0}
+        <div class="welcome">
+          <b>Welcome.</b> Press <b>Play</b> to start the world. Click any creature to look inside its brain. Pick a
+          tool on the left to change the world by hand.
+          <button onclick={dismissWelcome}>Got it</button>
+        </div>
+      {/if}
+
       <!-- U6: Map legend -->
-      <details class="map-legend" open title="Click to toggle the map legend">
-        <summary>Map Key</summary>
+      <details class="map-legend" title="Click to open the map key">
+        <summary>Map key</summary>
         <div class="legend-items">
           {#if showResources}
             <div class="legend-heading">Resources (cells holding each)</div>
@@ -727,14 +779,91 @@
       </div>
     </div>
 
+    <Timeline
+      history={history}
+      events={chartEvents}
+      tick={snapshot?.tick ?? 0}
+      onOpenLab={() => (showLab = true)}
+    />
+    </div>
+
     <button class="resize-handle" onmousedown={startResizing} type="button" title="Drag to resize the panel" aria-label="Resize panel"></button>
     <aside style={`width: ${panelWidth}px`}>
-      <!-- World Stats Section -->
-      <div class="section">
-        <button class="section-header" onclick={() => toggleSection('world')} type="button">
-          <span class="toggle">{expandedSections.world ? '▼' : '▶'}</span> World
-        </button>
-        {#if expandedSections.world !== undefined ? expandedSections.world : true}
+      <div class="tabs" role="tablist">
+        {#each TABS as t (t.id)}
+          <button
+            role="tab"
+            aria-selected={activeTab === t.id}
+            class:on={activeTab === t.id}
+            onclick={() => (activeTab = t.id)}
+          >
+            {t.label}{#if t.id === 'creature' && snapshot?.selected}<i class="pip"></i>{/if}
+          </button>
+        {/each}
+      </div>
+
+      <div class="body">
+        {#if activeTab === 'world'}
+          <div class="headline">
+            <div class="stat" title="">
+              <span class="k">Creatures</span>
+              <span class="v">{count(snapshot?.population)}<em class={trend(history?.population).tone}>{trend(history?.population).arrow}</em></span>
+              {#if history?.population}<div class="spark"><Sparkline values={history?.population} color="#e8c468" width={120} height={22} /></div>{/if}
+            </div>
+            <div class="stat" title="How full of plants the world is">
+              <span class="k">Plants</span>
+              <span class="v">{(snapshot ? Math.round(snapshot.plantFill * 100) : '-') + '%'}<em class={trend(history?.plantPercent).tone}>{trend(history?.plantPercent).arrow}</em></span>
+              {#if history?.plantPercent}<div class="spark"><Sparkline values={history?.plantPercent} color="#4caf50" width={120} height={22} /></div>{/if}
+            </div>
+            <div class="stat" title="Creatures whose diet gene is above 0.5; drawn as pointed shapes">
+              <span class="k">Meat-eaters</span>
+              <span class="v">{count(snapshot?.meatEaters)}<em class={trend(meatShare).tone}>{trend(meatShare).arrow}</em></span>
+              {#if meatShare}<div class="spark"><Sparkline values={meatShare} color="#e0566a" width={120} height={22} /></div>{/if}
+            </div>
+            <div class="stat" title="">
+              <span class="k">Species</span>
+              <span class="v">{count(history?.speciesCount.at(-1))}<em class={trend(history?.speciesCount).tone}>{trend(history?.speciesCount).arrow}</em></span>
+              {#if history?.speciesCount}<div class="spark"><Sparkline values={history?.speciesCount} color="#6cb6ff" width={120} height={22} /></div>{/if}
+            </div>
+            <div class="stat" title="Average rules connecting a sense to an action">
+              <span class="k">Brain links</span>
+              <span class="v">{history ? history.meanLinks.at(-1)?.toFixed(1) : '-'}<em class={trend(history?.meanLinks).tone}>{trend(history?.meanLinks).arrow}</em></span>
+              {#if history?.meanLinks}<div class="spark"><Sparkline values={history?.meanLinks} color="#b08cff" width={120} height={22} /></div>{/if}
+            </div>
+            <div class="stat" title="The longest line of descent so far">
+              <span class="k">Generation</span>
+              <span class="v">{count(snapshot?.maxGeneration)}</span>
+              
+            </div>
+          </div>
+
+          {#if deathTotal > 0}
+            <div class="deaths" title="Everything that has died since the world began, by cause">
+              <span class="k">Deaths so far · {count(deathTotal)}</span>
+              <div class="bar">
+                {#each DEATH_CAUSES as c (c.key)}
+                  {#if (snapshot?.deaths[c.key] ?? 0) > 0}
+                    <span
+                      style="flex: {snapshot?.deaths[c.key]}; background: {c.color}"
+                      title="{c.label}: {count(snapshot?.deaths[c.key])} ({Math.round(((snapshot?.deaths[c.key] ?? 0) / deathTotal) * 100)}%)"
+                    ></span>
+                  {/if}
+                {/each}
+              </div>
+              <div class="key">
+                {#each DEATH_CAUSES as c (c.key)}
+                  {#if (snapshot?.deaths[c.key] ?? 0) > 0}
+                    <span><i style="background: {c.color}"></i>{c.label} {Math.round(((snapshot?.deaths[c.key] ?? 0) / deathTotal) * 100)}%</span>
+                  {/if}
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          <div class="env"><EnvironmentPanel environment={snapshot?.environment ?? null} yearLength={snapshot?.config.seasonLength ?? 0} /></div>
+
+          <details class="more">
+            <summary>More numbers</summary>
         <dl>
           <div><dt>Creatures</dt><dd>{count(snapshot?.population)}</dd></div>
           <div><dt>Plants</dt><dd>{snapshot ? Math.round(snapshot.plantFill * 100) : '-'}%</dd></div>
@@ -814,31 +943,14 @@
             </dd>
           </div>
         </dl>
-
-          <EnvironmentPanel environment={snapshot?.environment ?? null} yearLength={snapshot?.config.seasonLength ?? 0} />
-        {/if}
-      </div>
-
-      <!-- Creature Inspector Section -->
-      <div class="section">
-        <button class="section-header" onclick={() => toggleSection('creature')} type="button">
-          <span class="toggle">{expandedSections.creature ? '▼' : '▶'}</span> Creature
-        </button>
-        {#if expandedSections.creature}
+          </details>
+        {:else if activeTab === 'creature'}
           <label class="follow" title="Keep the selected creature in the middle of the view">
             <input type="checkbox" bind:checked={follow} onchange={applyViewOptions} />
             Follow the selected creature
           </label>
           <Inspector creature={snapshot?.selected ?? null} />
-        {/if}
-      </div>
-
-      <!-- Evolution Stats Section -->
-      <div class="section">
-        <button class="section-header" onclick={() => toggleSection('evolution')} type="button">
-          <span class="toggle">{expandedSections.evolution ? '▼' : '▶'}</span> Evolution
-        </button>
-        {#if expandedSections.evolution}
+        {:else if activeTab === 'evolution'}
           <TraitCards
             {history}
             onOpen={(selection) => {
@@ -868,17 +980,10 @@
             }}
           />
           <p class="lab-hint">Brain comparisons and more are in the <button class="link" onclick={() => (showLab = true)}>Lab</button>.</p>
-        {/if}
-      </div>
-
-      <!-- Charts Section -->
-      <div class="section">
-        <button class="section-header" onclick={() => toggleSection('charts')} type="button">
-          <span class="toggle">{expandedSections.charts ? '▼' : '▶'}</span> Charts
-        </button>
-        {#if expandedSections.charts}
-          <Chart events={chartEvents} title="Population" series={POPULATION_SERIES} data={populationData} />
+        {:else}
+          <Chart syncKey="panel" events={chartEvents} title="Population" series={POPULATION_SERIES} data={populationData} />
           <Chart
+            syncKey="panel"
             events={chartEvents}
             stacked
             title="Diet"
@@ -889,6 +994,7 @@
           {#if streamData}
             {#key streamKey}
               <Chart
+            syncKey="panel"
                 events={chartEvents}
                 stacked
                 title="Species"
@@ -899,12 +1005,14 @@
             {/key}
           {/if}
           <Chart
+            syncKey="panel"
             events={chartEvents}
             title="Brains"
             note="Average brain wiring. Links are rules connecting a sense to an action; hidden neurons combine senses. Both cost energy, so brains grow only when the extra wiring pays for itself."
             series={BRAIN_SERIES}
             data={brainData}
           />
+
         {/if}
       </div>
     </aside>
@@ -1001,6 +1109,228 @@
     flex: 1;
     min-height: 0;
     display: flex;
+  }
+
+  .center {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .rail {
+    flex-shrink: 0;
+    width: 104px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 10px 8px;
+    overflow-y: auto;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+  }
+
+  .rail .label {
+    margin-bottom: 2px;
+  }
+
+  .rail button {
+    text-align: left;
+  }
+
+  .events .settings {
+    margin-left: auto;
+  }
+
+  .menu.view {
+    position: relative;
+  }
+
+  .menu.view summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: #1b2530;
+  }
+
+  .menu.view summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .popover {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    white-space: nowrap;
+  }
+
+  .welcome {
+    position: absolute;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    max-width: 640px;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.85);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+  }
+
+  .tabs {
+    display: flex;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+
+  .tabs button {
+    flex: 1;
+    padding: 10px 4px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  .tabs button.on {
+    color: var(--text);
+    border-bottom-color: var(--accent);
+  }
+
+  .pip {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-left: 5px;
+    border-radius: 50%;
+    background: var(--accent);
+    vertical-align: middle;
+  }
+
+  .body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 14px;
+    box-sizing: border-box;
+  }
+
+  .headline {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .stat {
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    min-width: 0;
+  }
+
+  .stat .k,
+  .deaths .k {
+    display: block;
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .stat .v {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    font-size: 20px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stat em {
+    font-size: 11px;
+    font-style: normal;
+  }
+
+  .stat em.up {
+    color: #6fcf7a;
+  }
+
+  .stat em.down {
+    color: #ff8f6b;
+  }
+
+  .stat em.flat {
+    color: var(--muted);
+  }
+
+  .stat .spark {
+    height: 22px;
+    margin-top: 2px;
+  }
+
+  .deaths {
+    margin-top: 12px;
+  }
+
+  .deaths .bar {
+    display: flex;
+    height: 10px;
+    margin: 4px 0;
+    overflow: hidden;
+    border-radius: 5px;
+  }
+
+  .deaths .bar span {
+    min-width: 2px;
+  }
+
+  .deaths .key {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 12px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .deaths .key i {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 4px;
+    border-radius: 2px;
+  }
+
+  .env {
+    margin-top: 16px;
+  }
+
+  .more {
+    margin-top: 12px;
+  }
+
+  .more summary {
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 12px;
   }
 
   .world {
@@ -1254,11 +1584,6 @@
     color: var(--text);
   }
 
-  .menu summary {
-    cursor: pointer;
-    padding: 6px 0;
-    font-size: 12px;
-  }
 
   .resize-handle {
     width: 8px;
@@ -1293,58 +1618,13 @@
     max-width: 1200px;
   }
 
-  .section {
-    border-bottom: 1px solid var(--border);
-  }
 
-  .section-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 0;
-    padding: 12px;
-    width: 100%;
-    cursor: pointer;
-    background: var(--panel);
-    border: none;
-    border-bottom: 1px solid var(--border);
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    user-select: none;
-    transition: background 0.2s;
-    text-align: left;
-  }
 
-  .section-header:hover {
-    background: rgba(255, 255, 255, 0.05);
-  }
 
-  .section-header:focus {
-    outline: 2px solid var(--border);
-    outline-offset: -1px;
-  }
 
-  .toggle {
-    display: inline-block;
-    width: 16px;
-    text-align: center;
-    font-size: 11px;
-  }
 
-  .section > :not(.section-header) {
-    padding: 0 12px;
-  }
 
-  .section > :first-of-type:not(.section-header) {
-    padding-top: 12px;
-  }
 
-  .section > :last-child:not(.section-header) {
-    padding-bottom: 12px;
-  }
 
   .wildfire {
     padding: 0 0 6px;
@@ -1377,9 +1657,9 @@
 
   dl {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 4px 16px;
-    margin: 0;
+    margin: 8px 0 0;
   }
 
   dl div {
@@ -1394,26 +1674,13 @@
 
   dd {
     margin: 0;
+    text-align: right;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
 
-  .menu {
-    padding: 6px 0;
-    border: none;
-  }
 
-  .menu summary {
-    display: list-item;
-    cursor: pointer;
-    padding: 6px 0;
-    color: var(--muted);
-    font-size: 12px;
-  }
 
-  .menu[open] summary {
-    margin-bottom: 6px;
-  }
 
   @media (max-width: 800px) {
     .main {
@@ -1424,8 +1691,12 @@
       display: none;
     }
 
+    .rail {
+      display: none;
+    }
+
     aside {
-      width: auto;
+      width: auto !important;
       max-height: 45%;
       border-left: none;
       border-top: 1px solid var(--border);
