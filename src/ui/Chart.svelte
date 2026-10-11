@@ -18,7 +18,7 @@
   import uPlot from 'uplot';
   import 'uplot/dist/uPlot.min.css';
 
-  const HEIGHT = 170;
+  const DEFAULT_HEIGHT = 170;
   const AXIS_COLOR = '#8a9aa9';
   const GRID_COLOR = 'rgba(138, 154, 169, 0.14)';
   const EVENT_COLOR = 'rgba(255, 196, 112, 0.75)';
@@ -32,6 +32,8 @@
     data,
     events = [],
     stacked = false,
+    height = DEFAULT_HEIGHT,
+    syncKey,
   }: {
     title: string;
     /** Optional line under the title explaining what the chart shows. */
@@ -42,7 +44,15 @@
     events?: ChartEvent[];
     /** Draw the series as bands piled on top of one another, so the top edge is their total. */
     stacked?: boolean;
+    /** Height in pixels when not enlarged. */
+    height?: number;
+    /** Charts sharing a key share their pointer and their zoom. */
+    syncKey?: string;
   } = $props();
+
+  /** Whether the chart is enlarged to fill most of the screen. */
+  let expanded = $state(false);
+  const currentHeight = () => (expanded ? Math.round(window.innerHeight * 0.62) : height);
 
   let host: HTMLDivElement;
   let plot: uPlot | undefined;
@@ -65,9 +75,21 @@
     return out as uPlot.AlignedData;
   }
 
+  /** Show the readout for the latest point, so the legend is never blank while the pointer is away. */
+  function latestReadout(): void {
+    const n = plot?.data[0]?.length ?? 0;
+    if (plot && n > 0 && plot.cursor.idx == null) plot.setLegend({ idx: n - 1 }, false);
+  }
+
   function show(input: uPlot.AlignedData): void {
     given = input;
-    plot?.setData(stacked ? pile(input) : input);
+    if (!plot) return;
+    // Keep a zoomed view where it is; a chart showing everything keeps showing everything as it grows.
+    const xs = plot.data[0];
+    const x = plot.scales.x!;
+    const showingAll = xs.length === 0 || x.min == null || x.max == null || (x.min <= xs[0]! && x.max >= xs[xs.length - 1]!);
+    plot.setData(stacked ? pile(input) : input, showingAll);
+    latestReadout();
   }
 
   onMount(() => {
@@ -84,10 +106,13 @@
     plot = new uPlot(
       {
         width: host.clientWidth,
-        height: HEIGHT,
+        height: currentHeight(),
         scales: { x: { time: false } },
         legend: { live: true },
-        cursor: { drag: { x: false, y: false } },
+        cursor: {
+          drag: { x: true, y: false },
+          sync: syncKey ? { key: syncKey, scales: ['x', null] } : undefined,
+        },
         series: [
           { label: 'Tick' },
           ...series.map((s, k) => ({
@@ -115,6 +140,11 @@
           ...(hasRight ? [axis({ scale: 'right', side: 1, grid: { show: false } })] : []),
         ],
         hooks: {
+          setCursor: [
+            (u) => {
+              if (u.cursor.idx == null) queueMicrotask(latestReadout);
+            },
+          ],
           draw: [
             (u) => {
               const xs = u.data[0];
@@ -157,7 +187,7 @@
     if (data) show(data);
 
     const observer = new ResizeObserver(() => {
-      plot?.setSize({ width: host.clientWidth, height: HEIGHT });
+      plot?.setSize({ width: host.clientWidth, height: currentHeight() });
     });
     observer.observe(host);
     return () => {
@@ -172,21 +202,107 @@
   });
 
   $effect(() => {
+    // Resize when enlarged or put back.
+    void expanded;
+    if (!plot) return;
+    queueMicrotask(() => plot?.setSize({ width: host.clientWidth, height: currentHeight() }));
+  });
+
+  $effect(() => {
+    if (!expanded) return;
+    // Escape puts the chart back before anything else hears it.
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.stopImmediatePropagation();
+      expanded = false;
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  });
+
+  $effect(() => {
     // Redraw when the list of events changes.
     void events.length;
     if (given && given[0].length > 1) plot?.redraw(false);
   });
 </script>
 
-<section>
-  <h2>{title}</h2>
-  {#if note}<p>{note}</p>{/if}
+{#if expanded}
+  <button class="backdrop" type="button" aria-label="Close enlarged chart" onclick={() => (expanded = false)}></button>
+{/if}
+<section class:expanded>
+  <div class="head">
+    <h2>{title}</h2>
+    {#if note}
+      <span class="info" title={note} aria-label={note} role="note">i</span>
+    {/if}
+    <button class="grow" type="button" title={expanded ? 'Shrink (Esc)' : 'Enlarge this chart'} onclick={() => (expanded = !expanded)}>
+      {expanded ? '✕' : '⤢'}
+    </button>
+  </div>
+  {#if expanded && note}<p>{note}</p>{/if}
   <div bind:this={host}></div>
 </section>
 
 <style>
-  h2 {
+  .head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     margin: 0 0 4px;
+  }
+
+  .info {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border: 1px solid var(--muted);
+    border-radius: 50%;
+    color: var(--muted);
+    font-size: 10px;
+    font-style: italic;
+    cursor: help;
+  }
+
+  .grow {
+    margin-left: auto;
+    padding: 0 6px;
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  section:hover .grow,
+  section.expanded .grow,
+  .grow:focus-visible {
+    opacity: 1;
+  }
+
+  .backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    border: none;
+    border-radius: 0;
+    background: rgba(0, 0, 0, 0.65);
+  }
+
+  section.expanded {
+    position: fixed;
+    z-index: 41;
+    inset: 8vh 6vw auto 6vw;
+    padding: 16px 20px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  h2 {
+    margin: 0;
     font-size: 12px;
     font-weight: 600;
     color: var(--muted);

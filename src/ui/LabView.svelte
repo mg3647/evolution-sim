@@ -38,6 +38,22 @@
     onClose: () => void;
   } = $props();
 
+  /** Whether the explanations under each heading are open. Remembered between visits. */
+  const EXPLAIN_STORE = 'evolution-sim.labExplain';
+  let explain = $state(false);
+  try {
+    explain = localStorage.getItem(EXPLAIN_STORE) === '1';
+  } catch {
+    // No stored choice: explanations start closed.
+  }
+  $effect(() => {
+    try {
+      localStorage.setItem(EXPLAIN_STORE, explain ? '1' : '0');
+    } catch {
+      // Not remembered.
+    }
+  });
+
   let selectionCard = $state<HTMLElement>();
   $effect(() => {
     if (focus && selectionCard) selectionCard.scrollIntoView({ block: 'start' });
@@ -291,17 +307,21 @@
     <span class="where">
       Tick <b>{lab ? lab.tick.toLocaleString() : '-'}</b> · <b>{lab ? lab.population.toLocaleString() : '-'}</b> creatures
     </span>
+    <label class="explain" title="Open or close the plain-English explanation under every heading">
+      <input type="checkbox" bind:checked={explain} /> Show explanations
+    </label>
+    <span class="tip">Drag across any chart to zoom them all · double-click to reset</span>
     <button onclick={onClose}>Back to the world</button>
   </header>
 
   <div class="grid">
     <section class="card">
       <h1>Deaths by cause</h1>
-      <p class="teaches">
+      <details class="about" open={explain}><summary>What this shows</summary><p class="teaches">
         What is killing creatures, and so what evolution is being pushed to solve. A band that widens after an
         event shows what that event did.
-      </p>
-      <Chart
+      </p></details>
+      <Chart syncKey="lab" height={190}
         {events}
         stacked
         title="Deaths per 1,000 ticks"
@@ -313,13 +333,13 @@
 
     <section class="card">
       <h1>Species stream</h1>
-      <p class="teaches">
+      <details class="about" open={explain}><summary>What this shows</summary><p class="teaches">
         How many creatures each species has, piled up, so the whole is the population. A new band splitting off
         a shrinking one is a species dividing; a band pinching out is an extinction.
-      </p>
+      </p></details>
       {#if streamData}
         {#key streamKey}
-          <Chart {events} stacked title="Members of each species" series={streamSeries} data={streamData} />
+          <Chart syncKey="lab" height={190} {events} stacked title="Members of each species" series={streamSeries} data={streamData} />
         {/key}
       {:else}
         <p class="empty">No species yet.</p>
@@ -328,10 +348,10 @@
 
     <section class="card">
       <h1>Diet gene distribution</h1>
-      <p class="teaches">
+      <details class="about" open={explain}><summary>What this shows</summary><p class="teaches">
         How the population is spread between eating plants and eating meat right now. Two separate humps mean
         specialists; one hump in the middle means generalists.
-      </p>
+      </p></details>
       {#if lab}
         <DietHistogram bins={lab.dietBins} />
       {:else}
@@ -341,10 +361,10 @@
 
     <section class="card">
       <h1>Density map</h1>
-      <p class="teaches">
+      <details class="about" open={explain}><summary>What this shows</summary><p class="teaches">
         Where creatures spend their time. Compare it with the biomes on the map to see which land is used, and
         drag back in time to watch populations move.
-      </p>
+      </p></details>
       {#if lab}
         <DensityMap grid={lab.density.grid} frames={lab.density.frames} ticks={lab.density.ticks} />
       {/if}
@@ -352,11 +372,11 @@
 
     <section class="card">
       <h1>Kinds of creature</h1>
-      <p class="teaches">
+      <details class="about" open={explain}><summary>What this shows</summary><p class="teaches">
         Every combination of diet and speed that has existed, coloured by the species that filled it most. Many
         coloured cells spread across the grid mean the world holds many kinds of creature; one blob means one
         way of living. This only describes the population, it does not select for variety.
-      </p>
+      </p></details>
       {#if lab}
         <BehaviourMap dietBins={lab.behaviour.dietBins} speedBins={lab.behaviour.speedBins} cells={lab.behaviour.cells} />
       {/if}
@@ -364,37 +384,37 @@
 
     <section class="card">
       <h1>Behaviour</h1>
-      <p class="teaches">
+      <details class="about" open={explain}><summary>What this shows</summary><p class="teaches">
         What creatures are doing, and how that shifts as generations pass. Each creature counts once. Chasing is
         biting, or trying to, while moving with another creature in view. Fleeing is moving hard, without biting,
         just after being bitten or with a creature close behind. Foraging is getting at least a quarter of a full
         mouthful. Resting is staying nearly still without feeding. The rest are wandering.
-      </p>
-      <Chart {events} title="Share of creatures" note="Running averages." series={BEHAVIOUR_SERIES} data={behaviourData} />
+      </p></details>
+      <Chart syncKey="lab" height={190} {events} title="Share of creatures" note="Running averages." series={BEHAVIOUR_SERIES} data={behaviourData} />
     </section>
 
     <section class="card">
       <h1>Life histories</h1>
-      <p class="teaches">
+      <details class="about" open={explain}><summary>What this shows</summary><p class="teaches">
         How lives are lived: how long, how soon the first child comes, and how many children in all. Short lives
         with early, many births and long lives with few are different answers to the same world.
-      </p>
-      <Chart
+      </p></details>
+      <Chart syncKey="lab" height={190}
         {events}
         title="Ages, in ticks"
         note="Generation length is the average age of a parent at a birth. Running averages."
         series={LIFE_AGE_SERIES}
         data={lifeAgeData}
       />
-      <Chart {events} title="Children" note="Average children had by the creatures that died." series={OFFSPRING_SERIES} data={offspringData} />
+      <Chart syncKey="lab" height={190} {events} title="Children" note="Average children had by the creatures that died." series={OFFSPRING_SERIES} data={offspringData} />
     </section>
 
     <section class="card wide">
       <h1>Food flow</h1>
-      <p class="teaches">
+      <details class="about" open={explain}><summary>What this shows</summary><p class="teaches">
         Where energy goes: from plants into plant-eaters, and from bodies into whatever eats meat. Only a small
         part of what plant-eaters take in ever reaches a meat-eater, which is why hunters are always few.
-      </p>
+      </p></details>
       {#if flowNow}
         {@const [plantHerb, plantCarn, meatHerb, meatCarn] = flowNow.parts as [number, number, number, number]}
         <div class="flow">
@@ -422,19 +442,19 @@
           diet gene is above one half.
         </p>
       {/if}
-      <Chart {events} stacked title="Energy eaten per tick" note="Running averages." series={FLOW_SERIES} data={flowData} />
+      <Chart syncKey="lab" height={190} {events} stacked title="Energy eaten per tick" note="Running averages." series={FLOW_SERIES} data={flowData} />
     </section>
 
     <section class="card wide" bind:this={selectionCard}>
       <h1>Selection at work</h1>
-      <p class="teaches">
+      <details class="about" open={explain}><summary>What this shows</summary><p class="teaches">
         Natural selection, measured. The yellow line is the average gene of the creatures that had young; the grey
         line is everyone alive. Where yellow sits above grey, that trait is being pushed up, and the gap is how hard. The yellow line is a running average, because only a few creatures breed at any moment.
-      </p>
+      </p></details>
       <div class="charts">
         {#each SELECTION as trait, k (trait.title)}
           <div class:focused={focus === trait.title}>
-          <Chart {events} title={trait.title} series={SELECTION_SERIES} data={selectionData[k] ?? null} />
+          <Chart syncKey="lab" height={190} {events} title={trait.title} series={SELECTION_SERIES} data={selectionData[k] ?? null} />
           </div>
         {/each}
       </div>
@@ -442,83 +462,83 @@
 
     <section class="card">
       <h1>Diversity over time</h1>
-      <p class="teaches">
+      <details class="about" open={explain}><summary>What this shows</summary><p class="teaches">
         How varied the population's body genes are. It drops when a disaster leaves few survivors or one family
         takes over, and climbs back as mutations build up again.
-      </p>
-      <Chart {events} title="Gene spread" note="The average spread (standard deviation) of size, speed, sensor range and diet." series={DIVERSITY_SERIES} data={diversityData} />
+      </p></details>
+      <Chart syncKey="lab" height={190} {events} title="Gene spread" note="The average spread (standard deviation) of size, speed, sensor range and diet." series={DIVERSITY_SERIES} data={diversityData} />
     </section>
 
     <section class="card wide">
       <h1>Building</h1>
-      <p class="teaches">
+      <details class="about" open={explain}><summary>What this shows</summary><p class="teaches">
         Whether creatures are doing anything with blocks. A creature moves a block by walking into it or by picking
         it up and setting it down. Moving blocks by accident scatters them; moving them on purpose would show as
         more creatures staying beside blocks, and as blocks ending up in lines.
-      </p>
+      </p></details>
       <div class="charts three">
         {#if blockData}
           {#key blockKey}
-            <Chart {events} stacked title="Blocks moved per 1,000 ticks" note="By the species that moved them. Running averages." series={blockSeries} data={blockData} />
+            <Chart syncKey="lab" height={190} {events} stacked title="Blocks moved per 1,000 ticks" note="By the species that moved them. Running averages." series={blockSeries} data={blockData} />
           {/key}
         {:else}
           <p class="empty">No creature has moved a block yet.</p>
         {/if}
-        <Chart
+        <Chart syncKey="lab" height={190}
           {events}
           title="What they have built"
           note="The longest straight run of touching blocks that creatures moved, and how many blocks have been moved at all."
           series={LINE_SERIES}
           data={lineData}
         />
-        <Chart {events} title="Creatures and blocks" note="The share of creatures in or beside a block's cell, where there is shelter, and the share carrying one." series={SHELTER_SERIES} data={shelterData} />
+        <Chart syncKey="lab" height={190} {events} title="Creatures and blocks" note="The share of creatures in or beside a block's cell, where there is shelter, and the share carrying one." series={SHELTER_SERIES} data={shelterData} />
       </div>
     </section>
 
     <section class="card wide">
       <h1>Learning and slow neurons</h1>
-      <p class="teaches">
+      <details class="about" open={explain}><summary>What this shows</summary><p class="teaches">
         Whether evolution has used two brain features that start switched off. A link that can learn strengthens
         when the neurons at both ends are active together; a slow neuron changes gradually and so holds a state.
         If the lines stay at zero, nothing was gained by them in this world.
-      </p>
+      </p></details>
       <div class="charts">
-        <Chart title="How much of the brain uses them" series={BRAIN_SERIES} data={brainFeatureData} />
-        <Chart title="How strongly" series={RATE_SERIES} data={rateData} />
+        <Chart syncKey="lab" height={190} title="How much of the brain uses them" series={BRAIN_SERIES} data={brainFeatureData} />
+        <Chart syncKey="lab" height={190} title="How strongly" series={RATE_SERIES} data={rateData} />
       </div>
     </section>
 
     <section class="card wide">
       <h1>Is the wiring selected, or just drifting?</h1>
-      <p class="teaches">
+      <details class="about" open={explain}><summary>What this shows</summary><p class="teaches">
         Every brain link keeps a running count of how many samples it has been in the population. A link can last
         a long time by chance alone, so a neutral shadow runs alongside: a copy of the population with the same
         births and deaths, but where nothing is favoured. The survival chart takes every link that first appeared
         at least 20 samples ago and shows how many are still carried. Above the shadow, selection is keeping new
         wiring that chance would lose; below it, selection is purging new wiring.
-      </p>
+      </p></details>
       <div class="charts">
-        <Chart title="How long the average link has lasted (samples)" series={ACTIVITY_SERIES} data={activityData} />
-        <Chart title="New links still carried" series={SURVIVAL_SERIES} data={survivalData} />
-        <Chart title="How many different links" series={WIRING_SERIES} data={wiringData} />
+        <Chart syncKey="lab" height={190} title="How long the average link has lasted (samples)" series={ACTIVITY_SERIES} data={activityData} />
+        <Chart syncKey="lab" height={190} title="New links still carried" series={SURVIVAL_SERIES} data={survivalData} />
+        <Chart syncKey="lab" height={190} title="How many different links" series={WIRING_SERIES} data={wiringData} />
       </div>
     </section>
 
     <section class="card">
       <h1>Carrying</h1>
-      <p class="teaches">
+      <details class="about" open={explain}><summary>What this shows</summary><p class="teaches">
         Whether holding things has become a habit. The first creatures hold at random; if the lines climb or
         fall away from where they start, selection is acting on carrying.
-      </p>
-      <Chart title="Share of creatures holding something" series={CARRY_SERIES} data={carryData} />
+      </p></details>
+      <Chart syncKey="lab" height={190} title="Share of creatures holding something" series={CARRY_SERIES} data={carryData} />
     </section>
 
     <section class="card">
       <h1>Most successful founders</h1>
-      <p class="teaches">
+      <details class="about" open={explain}><summary>What this shows</summary><p class="teaches">
         How a few lineages come to dominate. Each row is one of the world's parentless starting creatures and how
         many of today's creatures descend from it.
-      </p>
+      </p></details>
       {#if lab && lab.founders.length > 0}
         <p class="summary">
           {lab.foundersLiving.toLocaleString()} of {lab.foundersEver.toLocaleString()} founders still have living descendants.
@@ -550,10 +570,10 @@
 
     <section class="card wide">
       <h1>Traits by biome</h1>
-      <p class="teaches">
+      <details class="about" open={explain}><summary>What this shows</summary><p class="teaches">
         Adaptation, directly. Each row is the creatures standing in one biome right now. If evolution is fitting
         bodies to places, tundra dwellers should be bigger and furrier than desert dwellers.
-      </p>
+      </p></details>
       {#if lab && lab.population > 0}
         <table class="biomes">
           <thead>
@@ -594,10 +614,10 @@
 
     <section class="card wide">
       <h1>Senses in use</h1>
-      <p class="teaches">
+      <details class="about" open={explain}><summary>What this shows</summary><p class="teaches">
         Which senses each group's brains are actually wired to. A sense no link leads out of is ignored, however
         useful it looks. Compare the meat-eaters' column with the plant-eaters' to see what hunting needs.
-      </p>
+      </p></details>
       {#if senseGroups.length > 0}
         <div class="scroll">
           <table class="senses">
@@ -643,10 +663,10 @@
 
     <section class="card">
       <h1>Most common links</h1>
-      <p class="teaches">
+      <details class="about" open={explain}><summary>What this shows</summary><p class="teaches">
         The wiring a group has settled on. A link most members share is one evolution has kept; rare links are
         recent experiments.
-      </p>
+      </p></details>
       <select bind:value={rankedId} aria-label="Group">
         {#each profiles as group (group.id)}
           <option value={group.id}>{groupName(group)} ({group.profile.count.toLocaleString()})</option>
@@ -711,7 +731,49 @@
   }
 
   header button {
+    margin-left: 0;
+  }
+
+  .explain {
     margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+  }
+
+  .explain input {
+    width: auto;
+    padding: 0;
+  }
+
+  .tip {
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .about {
+    margin: 0 0 8px;
+  }
+
+  .about summary {
+    cursor: pointer;
+    width: max-content;
+    color: var(--muted);
+    font-size: 12px;
+    list-style: none;
+  }
+
+  .about summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .about summary::before {
+    content: 'ⓘ ';
+  }
+
+  .about[open] summary {
+    margin-bottom: 4px;
   }
 
   .grid {
@@ -719,7 +781,7 @@
     min-height: 0;
     overflow-y: auto;
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 560px), 1fr));
     align-content: start;
     gap: 14px;
     padding: 14px;
