@@ -38,7 +38,7 @@ export const Ray = {
   Fire: 12,
   /** A branch or stone lying along the ray, stronger when nearer. */
   Items: 13,
-  /** A block along the ray, stronger when nearer. Walls read on their own input. */
+  /** A block along the ray, stronger when nearer; below zero for a heavy block. Walls read on their own input. */
   Block: 14,
   /** How brightly it is displaying (see the Display output); 0 if it is not, or if nobody is there. */
   Display: 15,

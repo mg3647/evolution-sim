@@ -57,6 +57,8 @@ export interface PlantField {
   heavyGripTick: Int32Array;
   /** For each heavy block, the id of the creature that last pushed on it; not saved. */
   heavyGripper: Int32Array;
+  /** How many blocks stand on the map; lets sight checks skip the work when there are none. */
+  blockCount: number;
   /** How many blocks stand in each cell and the eight around it. Follows from `blocks`. */
   nearBlocks: Uint8Array;
   /** Plant food dropped in each cell by creatures: a store that slowly spoils. Eaten like plants. */
@@ -206,6 +208,7 @@ export function createPlantField(config: SimConfig, rng: Rng): PlantField {
     blockHeavy: new Uint8Array(cols * rows),
     heavyGripTick: new Int32Array(cols * rows),
     heavyGripper: new Int32Array(cols * rows),
+    blockCount: 0,
     nearBlocks: new Uint8Array(cols * rows),
     store: new Float64Array(cols * rows),
     branches: new Uint8Array(cols * rows),

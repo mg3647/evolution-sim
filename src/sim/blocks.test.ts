@@ -3,6 +3,7 @@ import { Biome } from './biomes';
 import {
   addBlock,
   canHoldBlock,
+  blockBetween,
   cellBeyond,
   freeCellNear,
   isSolid,
@@ -190,6 +191,17 @@ describe('blocks that are not grabbed', () => {
     expect(world.blockTally.pushed).toBe(0);
     expect(world.plants.blocks[at(11, 10)]).toBe(1);
     expect(world.creatures.x[i]).toBeLessThan(220);
+  });
+});
+
+describe('seeing past a block', () => {
+  it('finds a block between two points but not at either end', () => {
+    const f = field();
+    const cw = f.cellWidth;
+    expect(blockBetween(f, 5.5 * cw, 5.5 * cw, 4 * cw, 0, 400, 400)).toBe(false);
+    addBlock(f, at(7, 5));
+    expect(blockBetween(f, 5.5 * cw, 5.5 * cw, 4 * cw, 0, 400, 400)).toBe(true);
+    expect(blockBetween(f, 7.5 * cw, 5.5 * cw, 4 * cw, 0, 400, 400)).toBe(false);
   });
 });
 

@@ -386,6 +386,10 @@ export interface SimConfig {
    * food spoils. 0 makes blocks give no shelter.
    */
   shelter: number;
+  /** Share of the distance a creature can see that is lost looking past a block: 1 hides what is behind one, so a ring of blocks is a pen. */
+  blockCover: number;
+  /** Share by which a block, beside a store of dropped food, slows its spoiling. */
+  storeShelter: number;
 }
 
 export const defaultConfig: SimConfig = {
@@ -577,4 +581,6 @@ export const defaultConfig: SimConfig = {
   heavyBlockShare: 0.25,
   blockWeight: 0.4,
   shelter: 0.5,
+  blockCover: 1,
+  storeShelter: 0.8,
 };
