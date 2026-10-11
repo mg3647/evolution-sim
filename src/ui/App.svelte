@@ -15,6 +15,7 @@
   import LabView from './LabView.svelte';
   import ReportDialog from './ReportDialog.svelte';
   import LineageTree from './LineageTree.svelte';
+  import HabitTrends from './HabitTrends.svelte';
   import SettingsPanel from './SettingsPanel.svelte';
   import SpeciesList from './SpeciesList.svelte';
   import { streamSeries } from './speciesColors';
@@ -223,6 +224,8 @@
   let pickedBranch = $state.raw<Set<number> | null>(null);
   /** The selection chart the Lab should open at, set by clicking a trait card. */
   let labFocus = $state<string | null>(null);
+  /** A habit to show on the Lab's sense-action map when it opens. */
+  let labHabit = $state<number | null>(null);
 
   $effect(() => {
     // Read first, so the effect runs again when any of them changes.
@@ -597,9 +600,11 @@
       {lab}
       events={chartEvents}
       focus={labFocus}
+      focusHabit={labHabit}
       onClose={() => {
         showLab = false;
         labFocus = null;
+        labHabit = null;
       }}
     />
   {/if}
@@ -976,7 +981,7 @@
             <input type="checkbox" bind:checked={follow} onchange={applyViewOptions} />
             Follow the selected creature
           </label>
-          <Inspector creature={snapshot?.selected ?? null} />
+          <Inspector creature={snapshot?.selected ?? null} {profiles} />
         {:else if activeTab === 'evolution'}
           <TraitCards
             {history}
@@ -985,6 +990,18 @@
               showLab = true;
             }}
           />
+          <section class="habits-spreading">
+            <h2>Habits spreading lately</h2>
+            <HabitTrends
+              adoption={lab?.adoption ?? null}
+              shown={4}
+              compact
+              onPick={(pathway) => {
+                labHabit = pathway;
+                showLab = true;
+              }}
+            />
+          </section>
           <LineageTree
             {tree}
             bySpecies={colorBySpecies}
@@ -1006,7 +1023,7 @@
               if (pinnedSpecies !== null) pickedBranch = null;
             }}
           />
-          <p class="lab-hint">Brain comparisons and more are in the <button class="link" onclick={() => (showLab = true)}>Lab</button>.</p>
+          <p class="lab-hint">Every habit, what goes with having young, brain comparisons and more are in the <button class="link" onclick={() => (showLab = true)}>Lab</button>.</p>
         {:else}
           <Chart syncKey="panel" events={chartEvents} title="Population" series={POPULATION_SERIES} data={populationData} />
           <Chart
@@ -1664,6 +1681,19 @@
   .custom {
     color: var(--muted);
     font-size: 12px;
+  }
+
+  .habits-spreading {
+    margin-top: 12px;
+  }
+
+  .habits-spreading h2 {
+    margin: 0 0 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
 
   .lab-hint {

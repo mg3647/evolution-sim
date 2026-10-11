@@ -1,5 +1,6 @@
 import type { SimConfig } from '../sim/config';
 import type { EventKind, LogEntry, TimedEventKind } from '../sim/environment';
+import type { BreedingLinks, PathwayStats } from '../sim/associations';
 import type { BrainProfile } from '../sim/profile';
 import type { ToolKind } from '../sim/world';
 
@@ -84,6 +85,18 @@ export interface Inspection {
   idleOutputs: (string | null)[];
   species: number;
   brain: BrainView;
+  /** Its strongest sense-action habits, strongest first. */
+  habits: HabitView[];
+}
+
+/** One sense-action habit of one creature; see associations.ts. */
+export interface HabitView {
+  pathway: number;
+  /** Effect with its live weights, and with the weights it was born with. */
+  effect: number;
+  inborn: number;
+  direct: boolean;
+  learns: boolean;
 }
 
 /**
@@ -301,11 +314,13 @@ export interface TreeData {
 
 /** How the brains of one group of creatures are wired, for comparing groups. */
 export interface ProfileGroup {
-  /** Stable key: 'plants', 'meat', or 'species-<id>'. */
+  /** Stable key: 'all', 'plants', 'meat', or 'species-<id>'. */
   id: string;
   /** Species id, or 0 for the two diet groups. */
   speciesId: number;
   profile: BrainProfile;
+  /** Which senses lead to which actions in this group; see associations.ts. */
+  pathways: PathwayStats;
 }
 
 /** One starting creature and the living creatures descended from it. */
@@ -353,6 +368,10 @@ export interface LabData {
   foundersLiving: number;
   /** Founders with the most living descendants, most first. */
   founders: FounderView[];
+  /** The share of everyone with each sense-action habit, sampled over the run. */
+  adoption: { ticks: number[]; shares: Float32Array[] };
+  /** Which habits and traits go with having young. */
+  breeding: BreedingLinks;
 }
 
 export type FromWorker =

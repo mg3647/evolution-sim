@@ -1,20 +1,18 @@
 <script lang="ts">
   import type uPlot from 'uplot';
-  import { speciesHue } from '../render/renderer';
   import { speciesColor, streamSeries as seriesOfStream } from './speciesColors';
   import { BIOME_GROUND } from '../render/renderer';
   import { BIOME_LABELS } from '../sim/biomes';
-  import { INPUT_COUNT, INPUT_LABELS, OUTPUT_LABELS } from '../sim/brain';
-  import { HIDDEN_NODE } from '../sim/profile';
   import type { HistoryData, LabData, ProfileGroup } from '../worker/protocol';
   import BrainCompare from './BrainCompare.svelte';
+  import BreedingView from './BreedingView.svelte';
+  import HabitMap from './HabitMap.svelte';
+  import HabitTrends from './HabitTrends.svelte';
   import Chart, { type ChartEvent, type ChartSeries } from './Chart.svelte';
   import BehaviourMap from './BehaviourMap.svelte';
   import DensityMap from './DensityMap.svelte';
   import DietHistogram from './DietHistogram.svelte';
 
-  /** Rows in the ranked list of a group's most common links. */
-  const LINKS_SHOWN = 15;
   /** Samples averaged for the parents' line in the selection charts. */
   const SMOOTH_SAMPLES = 20;
   const EVERYONE = '#dfe6ec';
@@ -26,6 +24,7 @@
     lab,
     events,
     focus = null,
+    focusHabit = null,
     onClose,
   }: {
     history: HistoryData | null;
@@ -35,6 +34,8 @@
     events: ChartEvent[];
     /** The title of a selection chart to bring into view when the Lab opens, if any. */
     focus?: string | null;
+    /** A sense-action habit to show on the map when the Lab opens, as a pathway index. */
+    focusHabit?: number | null;
     onClose: () => void;
   } = $props();
 
@@ -153,28 +154,21 @@
     return total > 0 ? { parts, total } : null;
   });
 
-  let rankedId = $state('plants');
-  const ranked = $derived(profiles.find((g) => g.id === rankedId) ?? profiles[0]);
-
-  function groupName(group: ProfileGroup): string {
-    return group.id === 'plants' ? 'Plant-eaters' : group.id === 'meat' ? 'Meat-eaters' : `Species ${group.speciesId}`;
-  }
-
-  function nodeLabel(node: number): string {
-    if (node >= HIDDEN_NODE) return 'Hidden';
-    return node < INPUT_COUNT ? INPUT_LABELS[node]! : OUTPUT_LABELS[node - INPUT_COUNT]!;
-  }
-
   const percent = (share: number) => `${Math.round(share * 100)}%`;
 
-  /** Groups with members, for the senses table. */
-  const senseGroups = $derived(profiles.filter((g) => g.profile.count > 0));
-  /** Senses at least one group uses, so the table skips rows that are blank everywhere. */
-  const senseRows = $derived(
-    INPUT_LABELS.map((label, input) => ({ label, input })).filter(({ input }) =>
-      senseGroups.some((g) => (g.profile.inputUse[input] ?? 0) >= 0.05),
-    ),
-  );
+  /** The sense-action habit picked on the map, as a pathway index. */
+  let habit = $state<number | null>(null);
+  let habitCard = $state<HTMLElement>();
+  $effect(() => {
+    if (focusHabit !== null && habitCard) {
+      habit = focusHabit;
+      habitCard.scrollIntoView({ block: 'start' });
+    }
+  });
+  function pickHabit(pathway: number): void {
+    habit = pathway;
+    habitCard?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 
   type Trait = 'Size' | 'Speed' | 'SensorRange' | 'Diet';
   const SELECTION: { title: string; all: `mean${Trait}`; parents: `parent${Trait}` }[] = [
@@ -460,6 +454,37 @@
       </div>
     </section>
 
+    <section class="card wide" bind:this={habitCard}>
+      <h1>Senses to actions</h1>
+      <details class="about" open={explain}><summary>What this shows</summary><p class="teaches">
+        The habits evolution has wired into brains: which senses lead to which actions. A square is filled when a
+        chain of links runs from the sense to the action, directly or through hidden neurons; the more of the
+        group has it, the stronger the colour. Pick a group, or compare two, and click a square for who has the
+        habit, how it is wired, whether it learns during life, how it has spread, and whether it goes with having
+        young.
+      </p></details>
+      <HabitMap groups={profiles} {lab} bind:selected={habit} />
+    </section>
+
+    <section class="card">
+      <h1>Habits spreading and fading</h1>
+      <details class="about" open={explain}><summary>What this shows</summary><p class="teaches">
+        The habits whose share of the whole population has changed most. A habit spreading fast is one selection
+        is favouring, or one riding along with a successful family. Click one to see it on the map.
+      </p></details>
+      <HabitTrends adoption={lab?.adoption ?? null} onPick={pickHabit} />
+    </section>
+
+    <section class="card">
+      <h1>What goes with having young</h1>
+      <details class="about" open={explain}><summary>What this shows</summary><p class="teaches">
+        Selection, read from the living: the adults that have more young per tick of life, and what they have in
+        common. Traits compare the upper half with the lower half; habits compare those wired that way with
+        those not.
+      </p></details>
+      <BreedingView breeding={lab?.breeding ?? null} onPick={pickHabit} />
+    </section>
+
     <section class="card">
       <h1>Diversity over time</h1>
       <details class="about" open={explain}><summary>What this shows</summary><p class="teaches">
@@ -612,92 +637,10 @@
       {/if}
     </section>
 
-    <section class="card wide">
-      <h1>Senses in use</h1>
-      <details class="about" open={explain}><summary>What this shows</summary><p class="teaches">
-        Which senses each group's brains are actually wired to. A sense no link leads out of is ignored, however
-        useful it looks. Compare the meat-eaters' column with the plant-eaters' to see what hunting needs.
-      </p></details>
-      {#if senseGroups.length > 0}
-        <div class="scroll">
-          <table class="senses">
-            <thead>
-              <tr>
-                <th>Sense</th>
-                {#each senseGroups as group (group.id)}
-                  <th>
-                    {#if group.speciesId > 0}
-                      <span class="swatch" style="background: hsl({speciesHue(group.speciesId) * 360}, 70%, 60%)"></span>
-                    {/if}
-                    {groupName(group)}
-                    <small>{group.profile.count.toLocaleString()}</small>
-                  </th>
-                {/each}
-              </tr>
-            </thead>
-            <tbody>
-              {#each senseRows as row (row.input)}
-                <tr>
-                  <td>{row.label}</td>
-                  {#each senseGroups as group (group.id)}
-                    {@const use = group.profile.inputUse[row.input] ?? 0}
-                    <td style="background: rgba(108, 182, 255, {use * 0.75})">{use >= 0.005 ? percent(use) : ''}</td>
-                  {/each}
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-        <p class="caption">
-          Share of each group's members with at least one link leading out of the sense. Senses under 5% in every
-          group are left out.
-        </p>
-      {:else}
-        <p class="empty">No creatures yet.</p>
-      {/if}
-    </section>
-
     <section class="card">
       <BrainCompare groups={profiles} />
     </section>
 
-    <section class="card">
-      <h1>Most common links</h1>
-      <details class="about" open={explain}><summary>What this shows</summary><p class="teaches">
-        The wiring a group has settled on. A link most members share is one evolution has kept; rare links are
-        recent experiments.
-      </p></details>
-      <select bind:value={rankedId} aria-label="Group">
-        {#each profiles as group (group.id)}
-          <option value={group.id}>{groupName(group)} ({group.profile.count.toLocaleString()})</option>
-        {/each}
-      </select>
-      {#if ranked && ranked.profile.count > 0 && ranked.profile.links.length > 0}
-        <table class="links">
-          <thead>
-            <tr><th>#</th><th>Link</th><th>Members</th><th>Effect</th></tr>
-          </thead>
-          <tbody>
-            {#each ranked.profile.links.slice(0, LINKS_SHOWN) as link, k (`${link.from}>${link.to}`)}
-              <tr>
-                <td>{k + 1}</td>
-                <td>{nodeLabel(link.from)} → {nodeLabel(link.to)}</td>
-                <td>{percent(link.share)}</td>
-                <td class:excites={link.weight > 0} class:damps={link.weight < 0}>
-                  {link.weight > 0 ? 'Drives' : 'Holds back'} ({link.weight.toFixed(1)})
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-        <p class="caption">
-          "Drives" means more of the sense gives more of the action; "holds back" means less. The number is the
-          link's average strength.
-        </p>
-      {:else}
-        <p class="empty">No creatures in this group right now.</p>
-      {/if}
-    </section>
   </div>
 </div>
 
@@ -837,13 +780,6 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .scroll {
-    max-height: 420px;
-    overflow: auto;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-  }
-
   table {
     width: 100%;
     border-collapse: collapse;
@@ -859,17 +795,6 @@
     white-space: nowrap;
   }
 
-  .senses th {
-    position: sticky;
-    top: 0;
-    background: var(--panel);
-  }
-
-  th small {
-    display: block;
-    font-weight: 400;
-  }
-
   td {
     text-align: right;
     padding: 3px 8px;
@@ -879,23 +804,6 @@
   th:first-child,
   td:first-child {
     text-align: left;
-  }
-
-  .links th:nth-child(2),
-  .links td:nth-child(2) {
-    text-align: left;
-  }
-
-  .links td:first-child {
-    color: var(--muted);
-  }
-
-  .excites {
-    color: #6cb6ff;
-  }
-
-  .damps {
-    color: #ff8f6b;
   }
 
   .swatch {
@@ -928,17 +836,6 @@
     min-width: 1px;
     background: #e8c468;
     border-radius: 2px;
-  }
-
-  select {
-    width: 100%;
-    margin-bottom: 8px;
-    font: inherit;
-    color: var(--text);
-    background: #1b2530;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 4px 6px;
   }
 
   .flow {
