@@ -3,12 +3,63 @@
   import { HELD_LABELS } from '../sim/creatures';
   import { INPUT_LABELS, OUTPUT_LABELS } from '../sim/brain';
   import { speciesHue } from '../render/renderer';
-  import type { Inspection } from '../worker/protocol';
+  import { pathwayInput, pathwayOutput } from '../sim/associations';
+  import type { Inspection, ProfileGroup } from '../worker/protocol';
+  import { actionWord, DRIVES, habitLabel, HOLDS_BACK, percent } from './habits';
   import BrainGraph from './BrainGraph.svelte';
   import { INPUT_GROUPS, SENSE_GROUP_HINTS, SENSE_GROUPS } from './senseGroups';
   import { Input } from '../sim/brain';
 
-  let { creature }: { creature: Inspection | null } = $props();
+  let { creature, profiles = [] }: { creature: Inspection | null; profiles?: ProfileGroup[] } = $props();
+
+  /** Habits listed, strongest first. */
+  const HABITS_SHOWN = 8;
+  /** A habit this share of its species has is "shared"; below the lower one, "unusual". */
+  const SHARED = 0.5;
+  const UNUSUAL = 0.1;
+
+  /** Its species' wiring, or everyone's if the species is too small to be profiled. */
+  const kin = $derived.by(() => {
+    if (!creature) return null;
+    const species = profiles.find((g) => g.id === `species-${creature.species}`);
+    if (species && species.profile.count > 1) return { group: species, name: 'its species' };
+    const all = profiles.find((g) => g.id === 'all');
+    return all ? { group: all, name: 'everyone' } : null;
+  });
+
+  const habits = $derived(
+    (creature?.habits ?? []).slice(0, HABITS_SHOWN).map((h) => ({
+      ...h,
+      label: habitLabel(h.pathway, h.effect),
+      kinShare: kin ? kin.group.pathways.share[h.pathway]! : null,
+      learned: h.learns ? h.effect - h.inborn : 0,
+    })),
+  );
+  /** The largest effect among the habits shown, for scaling their bars. */
+  const strongest = $derived(Math.max(1, ...habits.map((h) => Math.abs(h.effect))));
+
+  /**
+   * Why it is doing what it does now: for its two strongest actions, the senses
+   * pushing them hardest at this moment (what it senses times the habit's effect).
+   */
+  const why = $derived.by(() => {
+    if (!creature) return [];
+    const strongestOutputs = creature.outputs
+      .map((value, output) => ({ value, output }))
+      .filter((o) => Math.abs(o.value) >= 0.2)
+      .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
+      .slice(0, 2);
+    return strongestOutputs.map(({ value, output }) => ({
+      output,
+      value,
+      pushes: creature.habits
+        .filter((h) => pathwayOutput(h.pathway) === output)
+        .map((h) => ({ input: pathwayInput(h.pathway), push: creature.inputs[pathwayInput(h.pathway)]! * h.effect }))
+        .filter((p) => Math.abs(p.push) >= 0.05)
+        .sort((a, b) => Math.abs(b.push) - Math.abs(a.push))
+        .slice(0, 3),
+    }));
+  });
 
   /** A reading weaker than this is left out of the bars. */
   const SHOWN = 0.005;
@@ -115,6 +166,60 @@
       before acting. Children inherit the wiring with small random changes.
     </p>
     <BrainGraph brain={creature.brain} live />
+
+    <h3>Its habits</h3>
+    <p class="note">
+      The senses its brain links to actions, strongest first{kin ? `, and how many of ${kin.name} share each` : ''}.
+    </p>
+    {#if habits.length === 0}
+      <p class="note">No sense is linked to an action: it acts on its leanings alone.</p>
+    {:else}
+      <ul class="habits">
+        {#each habits as h (h.pathway)}
+          <li>
+            <span class="habit" title={habitLabel(h.pathway)}>{h.label}</span>
+            <span class="strength"
+              ><span style="width: {(Math.abs(h.effect) / strongest) * 100}%; background: {h.effect >= 0 ? DRIVES : HOLDS_BACK}"></span
+            ></span>
+            <span class="tags">
+              {#if h.kinShare !== null}
+                {#if h.kinShare >= SHARED}
+                  <span class="tag shared" title="{percent(h.kinShare)} of {kin?.name} have it">shared {percent(h.kinShare)}</span>
+                {:else if h.kinShare < UNUSUAL}
+                  <span class="tag unusual" title="Only {percent(h.kinShare)} of {kin?.name} have it">unusual</span>
+                {:else}
+                  <span class="tag" title="{percent(h.kinShare)} of {kin?.name} have it">{percent(h.kinShare)}</span>
+                {/if}
+              {/if}
+              {#if h.learns}
+                <span
+                  class="tag learns"
+                  title="Runs through a link that learns during life; it has moved {h.learned >= 0 ? '+' : ''}{h.learned.toFixed(2)} since birth"
+                  >learns{Math.abs(h.learned) >= 0.05 ? ` ${h.learned > 0 ? '+' : ''}${h.learned.toFixed(1)}` : ''}</span
+                >
+              {/if}
+            </span>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+
+    {#if why.length > 0}
+      <h3>Why it is doing this now</h3>
+      {#each why as w (w.output)}
+        <p class="note why">
+          <b>{OUTPUT_LABELS[w.output]} {w.value.toFixed(2)}</b>:
+          {#if w.pushes.length === 0}
+            its leaning, not what it senses.
+          {:else}
+            {#each w.pushes as p, k (p.input)}
+              {k > 0 ? ', ' : ''}<span style="color: {p.push >= 0 ? DRIVES : HOLDS_BACK}">{INPUT_LABELS[p.input]}</span>
+              <span class="muted">({actionWord(w.output, p.push)})</span>
+            {/each}.
+          {/if}
+        </p>
+      {/each}
+    {/if}
 
     <h3>What it is doing now</h3>
     <ul>
@@ -322,6 +427,66 @@
   .value {
     text-align: right;
     font-variant-numeric: tabular-nums;
+    color: var(--muted);
+  }
+
+  .habits li {
+    grid-template-columns: minmax(0, 1fr) 40px auto;
+    margin-bottom: 2px;
+  }
+
+  .habit {
+    line-height: 1.3;
+  }
+
+  .strength {
+    height: 6px;
+    background: #1b2530;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .strength span {
+    display: block;
+    height: 100%;
+    border-radius: 3px;
+  }
+
+  .tags {
+    display: flex;
+    gap: 3px;
+    justify-content: flex-end;
+  }
+
+  .tag {
+    padding: 0 5px;
+    font-size: 10px;
+    border-radius: 8px;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  .tag.shared {
+    color: #7fd6c2;
+    border-color: color-mix(in srgb, #7fd6c2 50%, transparent);
+  }
+
+  .tag.unusual {
+    color: #e8c468;
+    border-color: color-mix(in srgb, #e8c468 50%, transparent);
+  }
+
+  .tag.learns {
+    color: #c478ff;
+    border-color: color-mix(in srgb, #c478ff 50%, transparent);
+  }
+
+  .why {
+    margin-bottom: 2px;
+  }
+
+  .muted {
     color: var(--muted);
   }
 </style>

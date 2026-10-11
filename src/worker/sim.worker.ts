@@ -1,11 +1,19 @@
 import { BIOME_COUNT } from '../sim/biomes';
-import { enabledLinks, INPUT_COUNT, OUTPUT_COUNT } from '../sim/brain';
+import { enabledLinks, INPUT_COUNT, OUTPUT_COUNT, type Brain } from '../sim/brain';
 import type { SimConfig } from '../sim/config';
 import { Held } from '../sim/creatures';
 import { daylightAt } from '../sim/environment';
 import { maxEnergyFor, temperatureStress } from '../sim/genome';
 import { cellIndexAt, temperatureAt } from '../sim/plants';
 import { RESTART_KEYS } from '../sim/presets';
+import {
+  breedingLinks,
+  createAdoptionHistory,
+  pathwayStats,
+  recordAdoption,
+  traceHabits,
+  type BreedingLinks,
+} from '../sim/associations';
 import { brainProfile } from '../sim/profile';
 import { BEHAVIOUR_DIET_BINS, BEHAVIOUR_SPEED_BINS, DENSITY_GRID } from '../sim/stats';
 import { wrappedDelta } from '../sim/geometry';
@@ -18,6 +26,7 @@ import {
   type FromWorker,
   type HistoryData,
   type LabData,
+  type HabitView,
   type Inspection,
   type ProfileGroup,
   type Snapshot,
@@ -40,6 +49,8 @@ const TPS_WINDOW_MS = 500;
 const SPECIES_SHOWN = 8;
 /** Founders listed in the Lab view. */
 const FOUNDERS_SHOWN = 12;
+/** Habits listed for the selected creature. */
+const HABITS_SHOWN = 40;
 /** Species drawn separately in the stream chart; smaller ones are summed. */
 const STREAM_SPECIES = 12;
 /** Species drawn separately in the chart of blocks moved. */
@@ -63,6 +74,9 @@ let windowTicks = 0;
 let measuredTps = 0;
 /** Things done to the running world by hand, for the run report. */
 let interventions: Intervention[] = [];
+/** How the population's habits have changed over the run, and which go with having young; see associations.ts. */
+let adoption = createAdoptionHistory();
+let breeding: BreedingLinks | null = null;
 /** Repeats of one intervention within this many ticks are counted as one entry. */
 const COALESCE_TICKS = 60;
 
@@ -138,7 +152,23 @@ function inspect(world: World, i: number): Inspection {
       linkTo: Array.from(brain.linkTo),
       linkWeight: Array.from(brain.linkWeight),
     },
+    habits: strongestHabits(brain),
   };
+}
+
+/** A brain's sense-action habits, strongest first. */
+function strongestHabits(brain: Brain): HabitView[] {
+  const habits = traceHabits(brain);
+  return habits.pathway
+    .map((pathway, k) => ({
+      pathway,
+      effect: habits.effect[k]!,
+      inborn: habits.inborn[k]!,
+      direct: habits.direct[k]!,
+      learns: habits.learns[k]!,
+    }))
+    .sort((a, b) => Math.abs(b.effect) - Math.abs(a.effect) || a.pathway - b.pathway)
+    .slice(0, HABITS_SHOWN);
 }
 
 /** Tally the living members of each species, largest first. */
@@ -489,17 +519,35 @@ function sendProfiles(): void {
     else bySpecies.set(c.species[i]!, [i]);
   }
   const largest = [...bySpecies].sort((a, b) => b[1].length - a[1].length || a[0] - b[0]).slice(0, SPECIES_SHOWN);
+  const habits = Array.from({ length: c.count }, (_, i) => traceHabits(c.brain[i]!));
+  const everyone = Array.from({ length: c.count }, (_, i) => i);
+  const group = (id: string, speciesId: number, members: number[]): ProfileGroup => ({
+    id,
+    speciesId,
+    profile: brainProfile(c, members),
+    pathways: pathwayStats(habits, members),
+  });
   const groups: ProfileGroup[] = [
-    { id: 'plants', speciesId: 0, profile: brainProfile(c, plants) },
-    { id: 'meat', speciesId: 0, profile: brainProfile(c, meat) },
-    ...largest.map(([speciesId, members]) => ({
-      id: `species-${speciesId}`,
-      speciesId,
-      profile: brainProfile(c, members),
-    })),
+    group('all', 0, everyone),
+    group('plants', 0, plants),
+    group('meat', 0, meat),
+    ...largest.map(([speciesId, members]) => group(`species-${speciesId}`, speciesId, members)),
   ];
+  recordAdoption(adoption, runner.world.tick, groups[0]!.pathways.share);
+  breeding = breedingLinks(c, habits, adultAge(runner.world));
   post({ type: 'profiles', groups });
   sendLab();
+}
+
+/**
+ * The age a creature must reach to count in the breeding comparison: the
+ * recent average age at a first birth, so creatures too young to have bred
+ * yet are not counted as failures.
+ */
+function adultAge(world: World): number {
+  const h = world.history;
+  const recent = h.count > 0 ? h.firstBirthAge[h.count - 1]! : 0;
+  return Math.max(world.config.minReproduceAge, Math.round(recent));
 }
 
 /** Send the numbers only the Lab view shows: which founders' descendants are alive. */
@@ -587,6 +635,8 @@ function sendLab(): void {
         hue: (Math.atan2(tally.hueY, tally.hueX) / (Math.PI * 2) + 1) % 1,
         meanDiet: tally.diet / tally.count,
       })),
+    adoption: { ticks: adoption.ticks.slice(), shares: adoption.shares.map((share) => share.slice()) },
+    breeding: breeding ?? { adults: 0, minAge: adultAge(world), meanRate: 0, habits: [], traits: [] },
   };
   post({ type: 'lab', lab });
 }
@@ -624,6 +674,8 @@ function worldReplaced(): void {
   sentHistoryVersion = -1;
   sentTreeTick = -1;
   selectedId = 0;
+  adoption = createAdoptionHistory();
+  breeding = null;
 }
 
 self.onmessage = (event: MessageEvent<ToWorker>) => {
@@ -685,12 +737,17 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
     post({ type: 'saved', json: JSON.stringify(saveWorld(world)), tick: world.tick, seed: world.config.seed });
     return;
   } else if (message.type === 'report') {
-    const report = buildReport(runner.world, interventions, {
-      question: message.question,
-      notes: message.notes,
-      appVersion: message.appVersion,
-      createdAt: new Date().toISOString(),
-    });
+    const report = buildReport(
+      runner.world,
+      interventions,
+      {
+        question: message.question,
+        notes: message.notes,
+        appVersion: message.appVersion,
+        createdAt: new Date().toISOString(),
+      },
+      adoption,
+    );
     const json = JSON.stringify(report);
     post({
       type: 'report',

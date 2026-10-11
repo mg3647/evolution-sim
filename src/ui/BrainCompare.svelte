@@ -4,6 +4,7 @@
   import { HIDDEN_NODE, type BrainProfile } from '../sim/profile';
   import type { BrainView, ProfileGroup } from '../worker/protocol';
   import BrainGraph from './BrainGraph.svelte';
+  import { groupName } from './habits';
 
   /** A link is part of a group's typical brain if at least this share of members have it. */
   const TYPICAL_SHARE = 0.5;
@@ -19,8 +20,7 @@
   const second = $derived(groups.find((g) => g.id === secondId) ?? groups[1] ?? groups[0]);
 
   function groupLabel(group: ProfileGroup): string {
-    const name = group.id === 'plants' ? 'Plant-eaters' : group.id === 'meat' ? 'Meat-eaters' : `Species ${group.speciesId}`;
-    return `${name} (${group.profile.count.toLocaleString()})`;
+    return `${groupName(group)} (${group.profile.count.toLocaleString()})`;
   }
 
   function nodeLabel(node: number): string {

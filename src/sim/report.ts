@@ -1,3 +1,13 @@
+import {
+  breedingLinks,
+  pathwayInput,
+  pathwayOutput,
+  pathwayStats,
+  traceHabits,
+  type AdoptionHistory,
+  type BreedingSplit,
+} from './associations';
+import { INPUT_LABELS, OUTPUT_LABELS } from './brain';
 import { defaultConfig, type SimConfig } from './config';
 import { cellIndexAt } from './plants';
 import { SAVE_VERSION } from './serialize';
@@ -11,7 +21,7 @@ import type { World } from './world';
  * alone (interventions, reseeding), the whole time series, how species came
  * and went, and where the population ended up.
  */
-export const REPORT_VERSION = 1;
+export const REPORT_VERSION = 2;
 
 /** Most points kept per series; longer histories are thinned evenly. */
 const MAX_POINTS = 200;
@@ -19,6 +29,8 @@ const MAX_POINTS = 200;
 const MAX_SPECIES = 40;
 /** Most interventions listed; the totals by kind are always complete. */
 const MAX_INTERVENTIONS = 300;
+/** Habits listed in each of the wiring lists. */
+const MAX_HABITS = 20;
 
 /** Something done to a running world by hand, which makes the run less of a clean experiment. */
 export interface Intervention {
@@ -49,6 +61,29 @@ export interface Spread {
   p10: number;
   p50: number;
   p90: number;
+}
+
+/** One sense-action habit in a report; see associations.ts. */
+export interface ReportHabit {
+  /** "Plants ahead → Thrust". */
+  habit: string;
+  input: string;
+  output: string;
+  /** Share of the population with it now. */
+  share: number;
+  /** Mean effect among those with it: above 0 the sense drives the action up. */
+  effect?: number;
+  /** Share of the population with it at the first adoption sample. */
+  startShare?: number;
+}
+
+/** Young per 1,000 ticks lived, with and without a habit or trait; z beyond 2 either way is a clear difference. */
+export interface ReportBreeding {
+  withRate: number;
+  withoutRate: number;
+  withCount: number;
+  withoutCount: number;
+  z: number;
 }
 
 export interface RunReport {
@@ -90,6 +125,26 @@ export interface RunReport {
     biomes: { biome: number; land: number; count: number }[];
     dietBins: number[];
     totals: Record<string, number>;
+  };
+  /**
+   * Which senses the population's brains link to which actions, how that
+   * changed over the run, and which habits and traits go with having young.
+   */
+  wiring: {
+    /** The most common habits now. */
+    common: ReportHabit[];
+    /** Habits whose share grew or shrank most since the first adoption sample (none without an adoption history). */
+    spread: ReportHabit[];
+    faded: ReportHabit[];
+    breeding: {
+      adults: number;
+      minAge: number;
+      meanRate: number;
+      /** Traits: the upper half of adults against the lower half. */
+      traits: (ReportBreeding & { trait: string; median: number })[];
+      /** Habits with a clear difference (|z| at least 2), strongest first. */
+      habits: (ReportBreeding & { habit: string })[];
+    };
   };
 }
 
@@ -149,7 +204,85 @@ function trendPer10k(ticks: ArrayLike<number>, values: ArrayLike<number>, from: 
   return den > 0 ? round((num / den) * 10000) : null;
 }
 
-export function buildReport(world: World, interventions: Intervention[], meta: ReportMeta): RunReport {
+function habitName(pathway: number): string {
+  return `${INPUT_LABELS[pathwayInput(pathway)]} → ${OUTPUT_LABELS[pathwayOutput(pathway)]}`;
+}
+
+function rounded(split: BreedingSplit): ReportBreeding {
+  return {
+    withRate: round(split.withRate),
+    withoutRate: round(split.withoutRate),
+    withCount: split.withCount,
+    withoutCount: split.withoutCount,
+    z: round(split.z),
+  };
+}
+
+/** The wiring part of a report. */
+function wiringReport(world: World, adoption: AdoptionHistory | undefined): RunReport['wiring'] {
+  const { creatures: c, history: h } = world;
+  const habits = Array.from({ length: c.count }, (_, i) => traceHabits(c.brain[i]!));
+  const stats = pathwayStats(habits, Array.from({ length: c.count }, (_, i) => i));
+  const habit = (pathway: number): ReportHabit => ({
+    habit: habitName(pathway),
+    input: INPUT_LABELS[pathwayInput(pathway)]!,
+    output: OUTPUT_LABELS[pathwayOutput(pathway)]!,
+    share: round(stats.share[pathway]!),
+  });
+  const all = Array.from(stats.share.keys());
+  const common = all
+    .filter((p) => stats.share[p]! > 0)
+    .sort((a, b) => stats.share[b]! - stats.share[a]! || a - b)
+    .slice(0, MAX_HABITS)
+    .map((p) => ({ ...habit(p), effect: round(stats.effect[p]!) }));
+  const start = adoption?.shares[0];
+  const moved = start
+    ? all
+        .map((p) => ({ p, change: stats.share[p]! - start[p]! }))
+        .filter((m) => Math.abs(m.change) >= 0.02)
+    : [];
+  const withStart = (p: number) => ({ ...habit(p), startShare: round(start![p]!) });
+  const spread = moved
+    .filter((m) => m.change > 0)
+    .sort((a, b) => b.change - a.change)
+    .slice(0, MAX_HABITS)
+    .map((m) => withStart(m.p));
+  const faded = moved
+    .filter((m) => m.change < 0)
+    .sort((a, b) => a.change - b.change)
+    .slice(0, MAX_HABITS)
+    .map((m) => withStart(m.p));
+
+  const firstBirth = h.count > 0 ? h.firstBirthAge[h.count - 1]! : 0;
+  const breeding = breedingLinks(c, habits, Math.max(world.config.minReproduceAge, Math.round(firstBirth)));
+  return {
+    common,
+    spread,
+    faded,
+    breeding: {
+      adults: breeding.adults,
+      minAge: breeding.minAge,
+      meanRate: round(breeding.meanRate),
+      traits: breeding.traits.map((t) => ({ trait: t.trait, median: round(t.median), ...rounded(t) })),
+      habits: breeding.habits
+        .filter((b) => Math.abs(b.z) >= 2)
+        .sort((a, b) => Math.abs(b.z) - Math.abs(a.z))
+        .slice(0, MAX_HABITS)
+        .map((b) => ({ habit: habitName(b.pathway), ...rounded(b) })),
+    },
+  };
+}
+
+/**
+ * Build a report of a world. `adoption`, if given, is how the population's
+ * habits changed over the run, for the wiring part.
+ */
+export function buildReport(
+  world: World,
+  interventions: Intervention[],
+  meta: ReportMeta,
+  adoption?: AdoptionHistory,
+): RunReport {
   const { config, creatures: c, history: h } = world;
   const n = h.count;
 
@@ -314,6 +447,7 @@ export function buildReport(world: World, interventions: Intervention[], meta: R
         cellsBurned: world.fires.cellsBurned,
       },
     },
+    wiring: wiringReport(world, adoption),
   };
 }
 

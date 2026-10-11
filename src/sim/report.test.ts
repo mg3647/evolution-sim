@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defaultConfig, type SimConfig } from './config';
+import { createAdoptionHistory, pathwayStats, recordAdoption, traceHabits } from './associations';
 import { buildReport, configKey, reportFileName } from './report';
 import { createWorld, step } from './world';
 
@@ -32,6 +33,27 @@ describe('run report', () => {
     expect(copy.series.points).toBeGreaterThan(10);
     expect(copy.final.traits.size!.p50).toBeGreaterThan(0);
     expect(copy.headline.ticks).toBe(1500);
+  });
+
+  it('lists the common habits, how they spread, and what goes with having young', () => {
+    const world = createWorld(smallConfig);
+    const adoption = createAdoptionHistory(100);
+    const share = () => {
+      const c = world.creatures;
+      const habits = Array.from({ length: c.count }, (_, i) => traceHabits(c.brain[i]!));
+      return pathwayStats(habits, Array.from({ length: c.count }, (_, i) => i)).share;
+    };
+    recordAdoption(adoption, world.tick, share());
+    for (let i = 0; i < 1500; i++) step(world);
+    const { wiring } = buildReport(world, [], meta, adoption);
+    expect(wiring.common.length).toBeGreaterThan(0);
+    expect(wiring.common[0]!.habit).toContain('→');
+    for (let k = 1; k < wiring.common.length; k++) expect(wiring.common[k]!.share).toBeLessThanOrEqual(wiring.common[k - 1]!.share);
+    for (const habit of wiring.spread) expect(habit.share).toBeGreaterThan(habit.startShare!);
+    for (const habit of wiring.faded) expect(habit.share).toBeLessThan(habit.startShare!);
+    expect(wiring.breeding.minAge).toBeGreaterThanOrEqual(smallConfig.minReproduceAge);
+    // Without an adoption history there is nothing to compare with.
+    expect(buildReport(world, [], meta).wiring.spread).toEqual([]);
   });
 
   it('thins long histories but keeps the last sample', () => {
