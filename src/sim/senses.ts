@@ -1,4 +1,5 @@
 import { BIOME_TRAITS } from './biomes';
+import { blockBetween } from './blocks';
 import { Input, INPUTS_PER_RAY, RAY_COUNT, Ray } from './brain';
 import type { SimConfig } from './config';
 import { Held, type Creatures } from './creatures';
@@ -120,6 +121,7 @@ export class Senses {
       let fire = 0;
       let items = 0;
       let block = 0;
+      let heavyBlock = false;
       for (const t of GROUND_SAMPLES) {
         let px = turn === 0 ? x + cosHeading * range * t : x + dx * t;
         let py = turn === 0 ? y + sinHeading * range * t : y + dy * t;
@@ -130,7 +132,10 @@ export class Senses {
         meat += field.meat[cell]!;
         // A nearer wall or shore reads stronger.
         if (field.walls[cell]) wall = Math.max(wall, 1.5 - t);
-        if (field.blocks[cell]) block = Math.max(block, 1.5 - t);
+        if (field.blocks[cell] && 1.5 - t > block) {
+          block = 1.5 - t;
+          heavyBlock = field.blockHeavy[cell] === 1;
+        }
         if (field.water[cell]) water = Math.max(water, 1.5 - t);
         if (field.fire[cell]) fire = Math.max(fire, 1.5 - t);
         if (field.stones[cell] || field.branches[cell]) items = Math.max(items, 1.5 - t);
@@ -146,7 +151,8 @@ export class Senses {
       inputs[o + Ray.Wall] = Math.min(1, wall);
       inputs[o + Ray.Fire] = Math.min(1, fire);
       inputs[o + Ray.Items] = Math.min(1, items);
-      inputs[o + Ray.Block] = Math.min(1, block);
+      // Heavy blocks read below zero, light ones above, so a creature can tell which it faces.
+      inputs[o + Ray.Block] = Math.min(1, block) * (heavyBlock ? -1 : 1);
       inputs[o + Ray.Near] = 0;
       inputs[o + Ray.Kin] = 0;
       inputs[o + Ray.Bigger] = 0;
@@ -281,6 +287,10 @@ export class Senses {
     let seen = BIOME_TRAITS[this.field.biome[theirCell]!]!.cover;
     if (config.camouflage > 0) {
       seen *= visibility(creatures.hue[j]!, groundHue(this.field, theirCell, config), config.camouflage);
+    }
+    // A block in the way hides a creature, wholly or in part: a ring of them is a pen.
+    if (config.blockCover > 0 && blockBetween(this.field, this.x, this.y, dx, dy, config.worldWidth, config.worldHeight)) {
+      seen *= 1 - config.blockCover;
     }
     if (distance > this.range * seen) return;
 

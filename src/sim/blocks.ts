@@ -1,6 +1,6 @@
 import { Biome } from './biomes';
 import type { SimConfig } from './config';
-import type { PlantField } from './plants';
+import { cellIndexAt, type PlantField } from './plants';
 import type { Rng } from './rng';
 
 /**
@@ -52,6 +52,7 @@ function countNear(field: PlantField, cell: number, by: number): void {
 export function addBlock(field: PlantField, cell: number, species = 0, built = false, heavy = false): void {
   if (field.blocks[cell] === 1) return;
   field.blocks[cell] = 1;
+  field.blockCount++;
   field.blockHeavy[cell] = heavy ? 1 : 0;
   field.heavyGripTick[cell] = 0;
   field.blockSpecies[cell] = species;
@@ -63,6 +64,7 @@ export function addBlock(field: PlantField, cell: number, species = 0, built = f
 export function removeBlock(field: PlantField, cell: number): boolean {
   if (field.blocks[cell] === 0) return false;
   field.blocks[cell] = 0;
+  field.blockCount--;
   field.blockSpecies[cell] = 0;
   field.blockBuilt[cell] = 0;
   field.blockHeavy[cell] = 0;
@@ -74,7 +76,12 @@ export function removeBlock(field: PlantField, cell: number): boolean {
 /** Work out again, from where the blocks are, how many lie in or beside each cell. */
 export function rebuildNearBlocks(field: PlantField): void {
   field.nearBlocks.fill(0);
-  for (let cell = 0; cell < field.blocks.length; cell++) if (field.blocks[cell] === 1) countNear(field, cell, 1);
+  field.blockCount = 0;
+  for (let cell = 0; cell < field.blocks.length; cell++) {
+    if (field.blocks[cell] !== 1) continue;
+    field.blockCount++;
+    countNear(field, cell, 1);
+  }
 }
 
 /** Scatter the first blocks over the land, more thickly in desert and tundra. */
@@ -96,6 +103,24 @@ export function scatterBlocks(field: PlantField, config: SimConfig, rng: Rng): v
     const chance = biome === Biome.Desert || biome === Biome.Tundra ? elsewhere * OPEN_LAND_BLOCKS : elsewhere;
     if (rng.chance(Math.min(1, chance))) addBlock(field, cell, 0, false, rng.chance(config.heavyBlockShare));
   }
+}
+
+/**
+ * Whether a block stands between two points, which are `dx` and `dy` apart
+ * the short way round the wrapped world. The cells the points are in do not count.
+ */
+export function blockBetween(field: PlantField, x: number, y: number, dx: number, dy: number, worldWidth: number, worldHeight: number): boolean {
+  if (field.blockCount === 0) return false;
+  const steps = Math.ceil(Math.hypot(dx, dy) / Math.min(field.cellWidth, field.cellHeight));
+  for (let s = 1; s < steps; s++) {
+    const t = s / steps;
+    let px = x + dx * t;
+    let py = y + dy * t;
+    px -= Math.floor(px / worldWidth) * worldWidth;
+    py -= Math.floor(py / worldHeight) * worldHeight;
+    if (field.blocks[cellIndexAt(field, px, py)] === 1) return true;
+  }
+  return false;
 }
 
 /** The cell one step on from `to`, in the direction a creature moved to get from `from` to `to`; -1 if it did not change cell. */

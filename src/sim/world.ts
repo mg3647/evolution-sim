@@ -377,7 +377,7 @@ export function step(world: World): void {
   );
   burn(plants, config, world.rng, ledger, world.fires);
   decayMeat(plants, config.meatDecayRate, ledger);
-  spoilStores(plants, config.storeDecay, ledger, config.shelter);
+  spoilStores(plants, config.storeDecay, ledger, config.storeShelter);
   spreadScent(env, plants, config);
   world.hash.build(creatures.x, creatures.y, creatures.count);
   world.social.calling = buildSound(world.sound, creatures);

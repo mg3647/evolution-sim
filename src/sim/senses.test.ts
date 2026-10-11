@@ -4,6 +4,7 @@ import { defaultConfig, type SimConfig } from './config';
 import { createCreatures, spawnCreature, type Creatures } from './creatures';
 import { cellIndexAt, createPlantField, groundHue, visibility } from './plants';
 import { Rng } from './rng';
+import { addBlock } from './blocks';
 import { Senses } from './senses';
 import { buildSound, createSoundField } from './sound';
 import { SpatialHash } from './spatialHash';
@@ -423,5 +424,30 @@ describe('camouflage', () => {
     const i = add(200, 200, 0);
     add(200 + far, 200, 0, groundHue(plants, 0, config));
     expect(sense(creatures, i)[ray(AHEAD) + Ray.Near]).toBeGreaterThan(0);
+  });
+});
+
+describe('blocks and sight', () => {
+  it('hide a creature behind them, in part or wholly, and let it be seen once they are gone', () => {
+    const run = (overrides: Partial<SimConfig>, block: boolean) => {
+      const { plants, creatures, add, sense } = setup(overrides);
+      const watcher = add(100, 100, 0);
+      add(145, 100, 0);
+      if (block) addBlock(plants, cellIndexAt(plants, 125, 100));
+      return sense(creatures, watcher)[ray(AHEAD) + Ray.Near]!;
+    };
+    expect(run({ blockCover: 1 }, false)).toBeGreaterThan(0);
+    expect(run({ blockCover: 1 }, true)).toBe(0);
+    expect(run({ blockCover: 0 }, true)).toBeGreaterThan(0);
+  });
+
+  it('read below zero ahead when heavy, above when light', () => {
+    for (const heavy of [false, true]) {
+      const { plants, creatures, add, sense } = setup();
+      const watcher = add(100, 100, 0);
+      addBlock(plants, cellIndexAt(plants, 125, 100), 0, false, heavy);
+      const value = sense(creatures, watcher)[ray(AHEAD) + Ray.Block]!;
+      expect(heavy ? value < 0 : value > 0).toBe(true);
+    }
   });
 });

@@ -284,6 +284,7 @@ export function loadWorld(savedWorld: SavedWorld): World {
     blockHeavy: new Uint8Array(saved.field.blockHeavy ?? new Array<number>(cells).fill(0)),
     heavyGripTick: new Int32Array(cells),
     heavyGripper: new Int32Array(cells),
+    blockCount: 0,
     nearBlocks: new Uint8Array(cells),
     store: new Float64Array(saved.field.store),
     branches: new Uint8Array(saved.field.branches),
