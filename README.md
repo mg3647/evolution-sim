@@ -3,9 +3,9 @@
 A 2D world of creatures whose bodies and brains evolve under natural selection
 alone: no fitness score, just a closed energy economy. Runs in the browser.
 
-Status: v3. Creatures have 75 senses and 12 actions: besides what is below,
-they see what others eat, whether they are approaching or hurt, feel what is
-behind them, crowding and pain, hear and make calls, give energy to one
+Status: v3. Creatures have 86 senses and 12 actions: besides what is below,
+they see what others eat, whether they are approaching, wounded or sick, feel
+what is behind them and on which side, crowding and pain, hear and make calls, give energy to one
 another, and see less far at night. Plants regrow on a fertility map. Creatures see with
 three vision rays, decide with a small neural net whose wiring is inherited
 and mutated, eat, pay energy costs, reproduce and die. Bodies and brains
@@ -25,7 +25,9 @@ leave ash where plants regrow faster. Creatures can pick up and hold one thing:
 a stone makes a bite stronger, a branch takes part of a bite, and a load of
 food can be set down elsewhere as a store that slowly spoils. Blocks are solid
 like walls but can be pushed, carried and set down, and give shelter from heat
-and cold to whatever is beside them, so a species could build. The world has lakes and a river: land beside water is
+and cold to whatever is beside them, so a species could build. Creatures see
+blocks (heavy ones read differently from light ones), feel the block they face
+and the shelter they stand in, and cannot see past a block or wall. The world has lakes and a river: land beside water is
 richer, and creatures must drink and can swim. It has seasons and slowly
 drifting fertility. You
 can trigger droughts, ice ages and food booms, and use hand tools to place

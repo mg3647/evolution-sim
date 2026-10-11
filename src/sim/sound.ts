@@ -77,3 +77,17 @@ export function buildSound(field: SoundField, c: Creatures): number {
   }
   return calling;
 }
+
+/** How loud one caller in sound cell `from` is in cell `to`: as loud as in its own cell, half beside it, a quarter diagonally. */
+export function callShare(field: SoundField, from: number, to: number): number {
+  const { cols, rows } = field;
+  const fx = from % cols;
+  const tx = to % cols;
+  let dx = Math.abs(tx - fx);
+  let dy = Math.abs((to - tx) / cols - (from - fx) / cols);
+  // The grid wraps, so the far column or row is also next door.
+  dx = Math.min(dx, cols - dx);
+  dy = Math.min(dy, rows - dy);
+  if (dx > 1 || dy > 1) return 0;
+  return dx + dy === 0 ? 1 : dx + dy === 1 ? BESIDE : DIAGONAL;
+}

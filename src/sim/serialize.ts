@@ -1,4 +1,4 @@
-import { compileBrain, INPUT_COUNT, Innovations, type InnovationsData, type LinkGene, OUTPUT_COUNT } from './brain';
+import { compileBrain, INPUT_COUNT, INPUTS_PER_RAY, Innovations, RAY_COUNT, type InnovationsData, type LinkGene, OUTPUT_COUNT } from './brain';
 import { defaultConfig, type SimConfig } from './config';
 import { createCreatures, type Creatures } from './creatures';
 import type { ActiveEvent, LogEntry } from './environment';
@@ -20,12 +20,12 @@ import type { World } from './world';
  */
 
 /** Bumped whenever the saved layout changes. */
-export const SAVE_VERSION = 16;
+export const SAVE_VERSION = 17;
 /**
  * Oldest save this version still opens. Saves from 14 on load with the newer
  * fields at their neutral values (settings added since take their defaults,
  * neurons answer at once, links do not learn, nothing is displayed, eating is
- * on, mating is off), so they play as they did before. Brains from before 16
+ * on, mating is off), so they play as they did before. Brains from before 17
  * are renumbered to make room for the new senses and actions.
  */
 export const OLDEST_LOADABLE_VERSION = 14;
@@ -66,27 +66,42 @@ const CREATURE_FIELDS = [
   'mutationRate',
 ] as const;
 
-/** The brain layout before save version 16: ray size, and counts of inputs, outputs and the neurons before the hidden ones. */
-const OLD_RAY_INPUTS = 15;
-const OLD_AFTER_RAYS = 3 * OLD_RAY_INPUTS;
-const OLD_INPUTS = OLD_AFTER_RAYS + 26;
-const OLD_FIXED = OLD_INPUTS + 8;
-/** Inputs after the rays that were already there: all but Bias, which moved to make room for the energy trend. */
-const OLD_BIAS = OLD_AFTER_RAYS + 25;
-const NEW_RAY_INPUTS = 16;
-const NEW_AFTER_RAYS = 3 * NEW_RAY_INPUTS;
+/** The brain layout of save versions 14 and 15: ray size, and counts of inputs, outputs and the neurons before the hidden ones. */
+const V15_RAY_INPUTS = 15;
+const V15_AFTER_RAYS = 3 * V15_RAY_INPUTS;
+const V15_INPUTS = V15_AFTER_RAYS + 26;
+const V15_FIXED = V15_INPUTS + 8;
+/** Bias, which moved in version 16 to make room for the energy trend. */
+const V15_BIAS = V15_AFTER_RAYS + 25;
+/** The brain layout of save version 16. */
+const V16_RAY_INPUTS = 16;
+const V16_AFTER_RAYS = 3 * V16_RAY_INPUTS;
+const V16_INPUTS = V16_AFTER_RAYS + 27;
+const V16_OUTPUTS = 12;
+const V16_FIXED = V16_INPUTS + V16_OUTPUTS;
+const V16_BIAS = V16_INPUTS - 1;
 
-/** Where a neuron of a save from before version 16 sits in the current layout. */
-function moveNeuron(n: number): number {
-  if (n < OLD_AFTER_RAYS) return Math.floor(n / OLD_RAY_INPUTS) * NEW_RAY_INPUTS + (n % OLD_RAY_INPUTS);
-  if (n < OLD_BIAS) return NEW_AFTER_RAYS + (n - OLD_AFTER_RAYS);
-  if (n === OLD_BIAS) return INPUT_COUNT - 1;
-  if (n < OLD_FIXED) return INPUT_COUNT + (n - OLD_INPUTS);
-  return INPUT_COUNT + OUTPUT_COUNT + (n - OLD_FIXED);
+/** Where a neuron of a version 14 or 15 save sits in the version 16 layout. */
+function from15(n: number): number {
+  if (n < V15_AFTER_RAYS) return Math.floor(n / V15_RAY_INPUTS) * V16_RAY_INPUTS + (n % V15_RAY_INPUTS);
+  if (n < V15_BIAS) return V16_AFTER_RAYS + (n - V15_AFTER_RAYS);
+  if (n === V15_BIAS) return V16_BIAS;
+  if (n < V15_FIXED) return V16_INPUTS + (n - V15_INPUTS);
+  return V16_FIXED + (n - V15_FIXED);
 }
 
-/** A save from before version 16 with every brain renumbered to the current inputs and outputs. */
+/** Where a neuron of a version 16 save sits in the current layout: rays grew, and Bias stays last. */
+function from16(n: number): number {
+  if (n < V16_AFTER_RAYS) return Math.floor(n / V16_RAY_INPUTS) * INPUTS_PER_RAY + (n % V16_RAY_INPUTS);
+  if (n < V16_BIAS) return RAY_COUNT * INPUTS_PER_RAY + (n - V16_AFTER_RAYS);
+  if (n === V16_BIAS) return INPUT_COUNT - 1;
+  if (n < V16_FIXED) return INPUT_COUNT + (n - V16_INPUTS);
+  return INPUT_COUNT + OUTPUT_COUNT + (n - V16_FIXED);
+}
+
+/** A save from before version 17 with every brain renumbered to the current inputs and outputs. */
 function renumberBrains(saved: SavedWorld): SavedWorld {
+  const moveNeuron = saved.version < 16 ? (n: number) => from16(from15(n)) : from16;
   return {
     ...saved,
     innovations: {
@@ -251,7 +266,7 @@ export function saveWorld(world: World): SavedWorld {
 
 /** Rebuild a world from saved data. Throws if the data is not a save this version can read. */
 export function loadWorld(savedWorld: SavedWorld): World {
-  const saved = savedWorld && savedWorld.version >= OLDEST_LOADABLE_VERSION && savedWorld.version < 16 ? renumberBrains(savedWorld) : savedWorld;
+  const saved = savedWorld && savedWorld.version >= OLDEST_LOADABLE_VERSION && savedWorld.version < SAVE_VERSION ? renumberBrains(savedWorld) : savedWorld;
   if (!saved || typeof saved !== 'object' || !(saved.version >= OLDEST_LOADABLE_VERSION && saved.version <= SAVE_VERSION)) {
     throw new Error(
       `This file is not a saved world this version can read (expected save version ${SAVE_VERSION}).`,

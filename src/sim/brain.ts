@@ -26,7 +26,7 @@ export const Ray = {
   MeatEater: 7,
   /** 1 facing straight this way, -1 facing directly away. */
   Approaching: 8,
-  /** 0 healthy, 1 nearly dead or sick. */
+  /** 0 unhurt, 1 nearly dead of its wounds. */
   Hurt: 9,
   /**
    * Its actual colour, as a point on the colour wheel: Warm is 1 for red and
@@ -36,14 +36,18 @@ export const Ray = {
   ColourGreen: 11,
   /** Fire along the ray, stronger when nearer. */
   Fire: 12,
-  /** A branch or stone lying along the ray, stronger when nearer. */
+  /** A stone (above zero) or a branch (below) lying along the ray, stronger when nearer. */
   Items: 13,
   /** A block along the ray, stronger when nearer; below zero for a heavy block. Walls read on their own input. */
   Block: 14,
   /** How brightly it is displaying (see the Display output); 0 if it is not, or if nobody is there. */
   Display: 15,
+  /** 1 if it is infected, 0 if not or if nobody is there. Hurt is wounds alone. */
+  Sick: 16,
+  /** A store of dropped food along the ray, stronger when nearer. */
+  Store: 17,
 } as const;
-export const INPUTS_PER_RAY = 16;
+export const INPUTS_PER_RAY = 18;
 
 const AFTER_RAYS = RAY_COUNT * INPUTS_PER_RAY;
 export const Input = {
@@ -93,9 +97,19 @@ export const Input = {
   HoldingBlock: AFTER_RAYS + 24,
   /** Whether its energy has lately been rising (above zero) or falling (below): a smoothed reward signal. */
   EnergyTrend: AFTER_RAYS + 25,
-  Bias: AFTER_RAYS + 26,
+  /** Which side the closest creature outside the field of view is on: 1 right, -1 left, 0 straight behind or nobody. */
+  BehindSide: AFTER_RAYS + 26,
+  /** What that creature eats: -1 a pure plant-eater, 1 a pure meat-eater, 0 if nobody is there. */
+  BehindMeatEater: AFTER_RAYS + 27,
+  /** Above zero if it is warmer to the right, below if to the left. */
+  WarmerSide: AFTER_RAYS + 28,
+  /** The cell it is facing, where Hold lifts and sets down blocks: 1 a light block, -1 a heavy one, 0 none. */
+  Facing: AFTER_RAYS + 29,
+  /** 1 while it stands in or beside a block, sheltered from heat and cold. */
+  Sheltered: AFTER_RAYS + 30,
+  Bias: AFTER_RAYS + 31,
 } as const;
-export const INPUT_COUNT = AFTER_RAYS + 27;
+export const INPUT_COUNT = AFTER_RAYS + 32;
 
 export const Output = {
   Turn: 0,
@@ -139,9 +153,11 @@ export const INPUT_LABELS: string[] = [
     `Red or cyan ${ray}`,
     `Green or violet ${ray}`,
     `Fire ${ray}`,
-    `Branch or stone ${ray}`,
+    `Stone or branch ${ray}`,
     `Block ${ray}`,
     `Display ${ray}`,
+    `Sick ${ray}`,
+    `Stored food ${ray}`,
   ]),
   'Creature behind',
   'Crowding',
@@ -169,6 +185,11 @@ export const INPUT_LABELS: string[] = [
   'Holding food',
   'Holding a block',
   'Energy trend',
+  'Behind on the right',
+  'Meat-eater behind',
+  'Warmer to the right',
+  'Block in front',
+  'Sheltered',
   'Bias',
 ];
 export const OUTPUT_LABELS: string[] = [
