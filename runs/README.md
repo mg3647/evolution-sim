@@ -1,0 +1,31 @@
+# Run reports
+
+One JSON file per report, made by the **Report** button in the app (top bar,
+next to Save and Load). Reports are data for later analysis; nothing in the app
+reads them back. Adding a file here does not rebuild the site.
+
+## File name
+
+`<date>_<time>_<seed>_tick<N>.json`, for example
+`2026-10-11_15-00-00_genesis_tick60000.json`.
+
+## What is inside (reportVersion 1)
+
+| Part | What it holds |
+| --- | --- |
+| `question`, `notes` | What the person was testing and noticed, in their words. |
+| `appVersion`, `saveVersion`, `reportVersion` | Which code made the run, so results are only compared across the same behaviour. |
+| `run` | Seed, tick, population, the full `config`, `changedSettings` (only what differs from the defaults), and `configKey`: the same for every run with the same settings and a different seed, so repeats group together. |
+| `clean` | True when nothing was done by hand and nothing was reseeded: a fair sample of its settings. |
+| `interventions` | Everything done by hand: events, tools, setting changes, loading a save. A loaded save loses what was done before it, so a `loadedSave` entry means the history is incomplete. |
+| `headline` | A few numbers to scan: peak and minimum population, species counts, first time meat-eaters passed 10%, how fast traits were still moving in the second half (`*TrendPer10k`, near 0 means settled), and `wiringActivityRatioEnd` (above 1: selection kept brain links; near or below 1: drift). |
+| `series` | Every charted statistic over the whole run, as columns (`names[i]` matches `data[i]`), thinned to at most 200 points. `tick` is the first column. |
+| `species` | Each species' first and last tick seen, peak size and final size. |
+| `events` | The most recent entries of the event log (the log keeps 30). |
+| `final` | Where the population ended: trait spreads (mean, 10th, 50th, 90th percentile), generations, creatures per biome against land share, diet histogram, and cumulative totals (births, deaths by cause, mating, blocks, fires). |
+
+## Comparing runs
+
+Group by `run.configKey`, keep `clean: true`, compare `headline` and `series`
+across seeds. Runs with different `appVersion` may not be comparable if the
+simulation changed between them.

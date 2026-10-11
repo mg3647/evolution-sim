@@ -1,7 +1,7 @@
 import type { SimConfig } from '../sim/config';
 import type { EventKind } from '../sim/environment';
 import type { ToolKind } from '../sim/world';
-import type { FromWorker, HistoryData, LabData, ProfileGroup, Snapshot, Speed, ToWorker, TreeData } from './protocol';
+import type { FromWorker, HistoryData, LabData, ProfileGroup, ReportSummary, Snapshot, Speed, ToWorker, TreeData } from './protocol';
 
 export interface SimClientHandlers {
   onSnapshot: (snapshot: Snapshot) => void;
@@ -11,6 +11,8 @@ export interface SimClientHandlers {
   onLab: (lab: LabData) => void;
   /** A save is ready: the world as JSON text, with the tick and seed it was taken at. */
   onSaved: (json: string, tick: number, seed: string) => void;
+  /** A run report is ready: the file as JSON text, the name to give it, and a short summary. */
+  onReport: (json: string, fileName: string, summary: ReportSummary) => void;
   onError: (message: string) => void;
 }
 
@@ -28,6 +30,7 @@ export class SimClient {
       else if (message.type === 'profiles') handlers.onProfiles(message.groups);
       else if (message.type === 'lab') handlers.onLab(message.lab);
       else if (message.type === 'saved') handlers.onSaved(message.json, message.tick, message.seed);
+      else if (message.type === 'report') handlers.onReport(message.json, message.fileName, message.summary);
       else handlers.onError(message.message);
     };
   }
@@ -91,6 +94,11 @@ export class SimClient {
   /** Ask for the world as save data; it arrives through `onSaved`. */
   save(): void {
     this.send({ type: 'save' });
+  }
+
+  /** Ask for a run report; it arrives through `onReport`. */
+  report(question: string, notes: string, appVersion: string): void {
+    this.send({ type: 'report', question, notes, appVersion });
   }
 
   /** Replace the world with one from save data. A bad file reports through `onError`. */

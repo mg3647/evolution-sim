@@ -8,11 +8,12 @@
   import { EVENT_LABELS, type TimedEventKind } from '../sim/environment';
   import type { ToolKind } from '../sim/world';
   import { SimClient } from '../worker/client';
-  import type { HistoryData, LabData, ProfileGroup, Snapshot, Speed, TreeData } from '../worker/protocol';
+  import type { HistoryData, LabData, ProfileGroup, ReportSummary, Snapshot, Speed, TreeData } from '../worker/protocol';
   import Chart, { type ChartEvent, type ChartSeries } from './Chart.svelte';
   import EnvironmentPanel from './EnvironmentPanel.svelte';
   import Inspector from './Inspector.svelte';
   import LabView from './LabView.svelte';
+  import ReportDialog from './ReportDialog.svelte';
   import LineageTree from './LineageTree.svelte';
   import SettingsPanel from './SettingsPanel.svelte';
   import SpeciesList from './SpeciesList.svelte';
@@ -81,6 +82,8 @@
   let lab = $state.raw<LabData | null>(null);
   /** Whether the full-screen Lab view is open. */
   let showLab = $state(false);
+  let showReport = $state(false);
+  let report = $state.raw<{ json: string; fileName: string; summary: ReportSummary } | null>(null);
   /** Where the settings are kept between visits. */
   const SETTINGS_STORE = 'evolution-sim.settings';
 
@@ -231,6 +234,7 @@
         onProfiles: (groups) => (profiles = groups),
         onLab: (data) => (lab = data),
         onSaved: download,
+        onReport: (json, fileName, summary) => (report = { json, fileName, summary }),
         onError: (message) => {
           adoptLoadedSettings = false;
           errorMessage = message;
@@ -316,10 +320,14 @@
 
   /** Hand the saved world to the browser as a file download. */
   function download(json: string, tick: number, savedSeed: string) {
+    downloadFile(json, `evolution-sim-${savedSeed.replace(/[^\w-]+/g, '_')}-tick${tick}.json`);
+  }
+
+  function downloadFile(json: string, fileName: string) {
     const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
     const link = document.createElement('a');
     link.href = url;
-    link.download = `evolution-sim-${savedSeed.replace(/[^\w-]+/g, '_')}-tick${tick}.json`;
+    link.download = fileName;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -412,6 +420,16 @@
         Load
       </button>
       <input class="file" type="file" accept=".json,application/json" bind:this={fileInput} onchange={loadFile} />
+      <button
+        title="Make a small summary of this run to keep in the repository for later analysis"
+        onclick={() => {
+          report = null;
+          showReport = true;
+        }}
+        disabled={!snapshot}
+      >
+        Report
+      </button>
     </div>
 
     <div class="stats">
@@ -535,6 +553,15 @@
         onReset={resetSettings}
       />
     </div>
+  {/if}
+
+  {#if showReport}
+    <ReportDialog
+      {report}
+      onPrepare={(question, notes) => client?.report(question, notes, __APP_VERSION__)}
+      onClose={() => (showReport = false)}
+      onDownload={downloadFile}
+    />
   {/if}
 
   {#if showLab}

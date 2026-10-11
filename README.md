@@ -37,7 +37,9 @@ a full-screen analysis page: deaths by cause, a stream of species, the diet
 gene's distribution, a density map with a time slider, behaviour, life
 histories, food flow, selection at work, gene diversity, the most successful
 founders, traits by biome, which senses each species uses, and brain
-comparisons. Events are marked on every chart.
+comparisons. Events are marked on every chart. The Report button makes a small
+summary of a run (settings, seed, every charted series, species, your notes and
+everything you did by hand) to keep in the `runs/` folder; see `runs/README.md`.
 
 ## Run it
 

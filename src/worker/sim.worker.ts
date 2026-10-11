@@ -9,6 +9,7 @@ import { RESTART_KEYS } from '../sim/presets';
 import { brainProfile } from '../sim/profile';
 import { BEHAVIOUR_DIET_BINS, BEHAVIOUR_SPEED_BINS, DENSITY_GRID } from '../sim/stats';
 import { wrappedDelta } from '../sim/geometry';
+import { buildReport, reportFileName, type Intervention } from '../sim/report';
 import { loadWorld, saveWorld, type SavedWorld } from '../sim/serialize';
 import { applyTool, clearWorldWalls, triggerWorldEvent, type World } from '../sim/world';
 import {
@@ -60,6 +61,21 @@ let sentTreeTick = -1;
 let windowStart = 0;
 let windowTicks = 0;
 let measuredTps = 0;
+/** Things done to the running world by hand, for the run report. */
+let interventions: Intervention[] = [];
+/** Repeats of one intervention within this many ticks are counted as one entry. */
+const COALESCE_TICKS = 60;
+
+function noteIntervention(kind: string, detail?: string): void {
+  if (!runner) return;
+  const tick = runner.world.tick;
+  const last = interventions[interventions.length - 1];
+  if (last && last.kind === kind && last.detail === detail && tick - last.tick <= COALESCE_TICKS) {
+    last.count = (last.count ?? 1) + 1;
+    return;
+  }
+  interventions.push({ tick, kind, ...(detail !== undefined ? { detail } : {}) });
+}
 
 function post(message: FromWorker, transfer: Transferable[] = []): void {
   self.postMessage(message, { transfer });
@@ -617,6 +633,7 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
     // The random-events switch belongs to the user, so it survives a restart.
     const randomEvents = runner?.world.environment.randomEvents ?? message.config.randomEvents;
     runner = new SimRunner(message.config);
+    interventions = [];
     runner.world.environment.randomEvents = randomEvents;
     runner.setSpeed(speed);
     worldReplaced();
@@ -638,31 +655,60 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
   } else if (message.type === 'pick') {
     pick(runner.world, message.x, message.y, message.radius);
   } else if (message.type === 'event') {
+    noteIntervention('event', message.kind);
     triggerWorldEvent(runner.world, message.kind);
     // While paused, run one tick so the event's deaths show at once.
     if (!runner.running) runner.stepTicks(1);
   } else if (message.type === 'tool') {
+    noteIntervention('tool', message.tool);
     applyTool(runner.world, message.tool, message.x, message.y, message.fromX, message.fromY);
     // While paused, run one tick so a meteor's deaths show at once.
     if (message.tool === 'meteor' && !runner.running) runner.stepTicks(1);
   } else if (message.type === 'clearWalls') {
+    noteIntervention('clearWalls');
     clearWorldWalls(runner.world);
   } else if (message.type === 'setRandomEvents') {
+    noteIntervention('randomEvents', String(message.enabled));
     runner.world.environment.randomEvents = message.enabled;
   } else if (message.type === 'setRendering') {
     rendering = message.enabled;
   } else if (message.type === 'setConfig') {
     const config = runner.world.config as unknown as Record<string, unknown>;
     for (const [key, value] of Object.entries(message.changes)) {
-      if (!RESTART_KEYS.has(key as keyof SimConfig)) config[key] = value;
+      if (RESTART_KEYS.has(key as keyof SimConfig) || config[key] === value) continue;
+      noteIntervention('setting', `${key}=${String(value)}`);
+      config[key] = value;
     }
   } else if (message.type === 'save') {
     const { world } = runner;
     post({ type: 'saved', json: JSON.stringify(saveWorld(world)), tick: world.tick, seed: world.config.seed });
     return;
+  } else if (message.type === 'report') {
+    const report = buildReport(runner.world, interventions, {
+      question: message.question,
+      notes: message.notes,
+      appVersion: message.appVersion,
+      createdAt: new Date().toISOString(),
+    });
+    const json = JSON.stringify(report);
+    post({
+      type: 'report',
+      json,
+      fileName: reportFileName(report),
+      summary: {
+        tick: report.run.tick,
+        clean: report.clean,
+        reseeded: report.run.reseeded,
+        interventions: report.interventions.total,
+        bytes: json.length,
+      },
+    });
+    return;
   } else if (message.type === 'load') {
     try {
       runner.setWorld(loadWorld(JSON.parse(message.json) as SavedWorld));
+      // A loaded world carries no record of what was done to it before, so the report says so.
+      interventions = [{ tick: runner.world.tick, kind: 'loadedSave' }];
       worldReplaced();
     } catch (error) {
       const reason = error instanceof SyntaxError ? 'This file is not a saved world.' : (error as Error).message;
