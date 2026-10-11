@@ -1,5 +1,5 @@
 import { BIOME_COUNT } from '../sim/biomes';
-import { enabledLinks, INPUT_COUNT, OUTPUT_COUNT } from '../sim/brain';
+import { enabledLinks, idleOutputs, INPUT_COUNT, OUTPUT_COUNT } from '../sim/brain';
 import type { SimConfig } from '../sim/config';
 import { Held } from '../sim/creatures';
 import { daylightAt } from '../sim/environment';
@@ -130,6 +130,7 @@ function inspect(world: World, i: number): Inspection {
     links: enabledLinks(brain),
     inputs: Array.from(brain.activation.subarray(0, INPUT_COUNT)),
     outputs: Array.from(brain.activation.subarray(INPUT_COUNT, INPUT_COUNT + OUTPUT_COUNT)),
+    idleOutputs: idleOutputs(config, brain),
     species: c.species[i]!,
     brain: {
       hiddenCount: brain.hiddenIds.length,

@@ -15,6 +15,7 @@
     brain,
     strength,
     note,
+    idle,
     live = false,
   }: {
     brain: BrainView;
@@ -22,6 +23,8 @@
     strength?: number[];
     /** Text under the diagram, in place of the default explanation. */
     note?: string;
+    /** Per action, why it does nothing here, or null; idle actions and the links into them are drawn faint. */
+    idle?: (string | null)[];
     /** The brain is a living creature's: make the links carrying a signal right now glow. */
     live?: boolean;
   } = $props();
@@ -35,6 +38,8 @@
     y: number;
     label: string;
     side: 'input' | 'hidden' | 'output';
+    /** Why this action does nothing here, if it does nothing. */
+    idle?: string;
   }
 
   /** Place the neurons: inputs that are wired up on the left, outputs on the right, hidden between. */
@@ -53,7 +58,8 @@
     );
     for (let k = 0; k < OUTPUT_COUNT; k++) {
       const index = INPUT_COUNT + k;
-      nodes.set(index, { index, x: OUTPUT_X, y: column(OUTPUT_COUNT, k), label: OUTPUT_LABELS[k]!, side: 'output' });
+      const why = idle?.[k] ?? undefined;
+      nodes.set(index, { index, x: OUTPUT_X, y: column(OUTPUT_COUNT, k), label: OUTPUT_LABELS[k]!, side: 'output', idle: why });
     }
     hidden.forEach((index, k) =>
       nodes.set(index, { index, x: HIDDEN_X, y: column(hidden.length, k), label: '', side: 'hidden' }),
@@ -81,8 +87,8 @@
         path,
         color: weight >= 0 ? POSITIVE : NEGATIVE,
         width: 0.6 + Math.min(3, Math.abs(weight)),
-        opacity: 0.18 + 0.82 * Math.min(1, signal),
-        firing: live && Math.abs((brain.activation[from.index] ?? 0) * weight) >= FIRING,
+        opacity: to.idle ? 0.12 : 0.18 + 0.82 * Math.min(1, signal),
+        firing: live && !to.idle && Math.abs((brain.activation[from.index] ?? 0) * weight) >= FIRING,
       };
     }),
   );
@@ -107,12 +113,23 @@
     />
   {/each}
   {#each [...layout.nodes.values()] as node (node.index)}
-    <circle cx={node.x} cy={node.y} r="5" fill={fill(node.index)} stroke="#8a9aa9" stroke-width="1" />
-    {#if node.side === 'input'}
-      <text x={node.x - 10} y={node.y + 3.5} text-anchor="end">{node.label}</text>
-    {:else if node.side === 'output'}
-      <text x={node.x + 10} y={node.y + 3.5}>{node.label}</text>
-    {/if}
+    <g class:idle={node.idle}>
+      {#if node.idle}<title>{node.label}: {node.idle}</title>{/if}
+      <circle
+        cx={node.x}
+        cy={node.y}
+        r="5"
+        fill={node.idle ? 'none' : fill(node.index)}
+        stroke="#8a9aa9"
+        stroke-width="1"
+        stroke-dasharray={node.idle ? '2 2' : undefined}
+      />
+      {#if node.side === 'input'}
+        <text x={node.x - 10} y={node.y + 3.5} text-anchor="end">{node.label}</text>
+      {:else if node.side === 'output'}
+        <text x={node.x + 10} y={node.y + 3.5}>{node.label}</text>
+      {/if}
+    </g>
   {/each}
 </svg>
 <p>
@@ -122,7 +139,9 @@
     Senses on the left, actions on the right, hidden neurons between. Blue links excite, orange links
     suppress, and thicker means stronger. A link lights up when its source is active{live
       ? ', and glows while it is carrying a strong signal right now'
-      : ''}. Senses with no link are left out.
+      : ''}. Senses with no link are left out{idle?.some((why) => why !== null)
+      ? '. Faint, dashed actions do nothing for this creature in this world; hover one to see why'
+      : ''}.
   {/if}
 </p>
 
@@ -137,6 +156,10 @@
   text {
     fill: var(--text);
     font-size: 10px;
+  }
+
+  .idle {
+    opacity: 0.4;
   }
 
   p {

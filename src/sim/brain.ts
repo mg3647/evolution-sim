@@ -207,6 +207,20 @@ export const OUTPUT_LABELS: string[] = [
   'Display',
 ];
 
+/**
+ * Why each action does nothing for this creature in this world, or null
+ * where it does something. A brain can still wire an idle action, since
+ * evolution cannot see that it is idle; the panels show it greyed out.
+ */
+export function idleOutputs(config: SimConfig, brain: Pick<Brain, 'plasticLinks'>): (string | null)[] {
+  const idle: (string | null)[] = new Array<string | null>(OUTPUT_COUNT).fill(null);
+  if (config.reproductionMode === 2) idle[Output.Reproduce] = 'Does nothing here: creatures only breed with a mate (see How creatures reproduce)';
+  if (config.reproductionMode === 0) idle[Output.Mate] = 'Does nothing here: creatures breed alone (see How creatures reproduce)';
+  if (brain.plasticLinks.length === 0) idle[Output.Learn] = 'Does nothing for this creature: none of its links learn';
+  if (!config.hearing) idle[Output.Call] = 'Does nothing here: hearing is switched off, so nobody hears calls';
+  return idle;
+}
+
 export interface LinkGene {
   /** Id shared by every link between the same two neurons, across all brains. */
   innovation: number;
