@@ -24,7 +24,18 @@ export type ToWorker =
   /** Change settings in the running world. Settings that only matter at creation are ignored. */
   | { type: 'setConfig'; changes: Partial<SimConfig> }
   | { type: 'save' }
+  /** Build a run report, with what the person wrote about the run. */
+  | { type: 'report'; question: string; notes: string; appVersion: string }
   | { type: 'load'; json: string };
+
+/** What the report dialog shows before anything is sent. */
+export interface ReportSummary {
+  tick: number;
+  clean: boolean;
+  reseeded: number;
+  interventions: number;
+  bytes: number;
+}
 
 /** Number of floats per creature in `Snapshot.creatures`. */
 export const CREATURE_STRIDE = 12;
@@ -349,4 +360,5 @@ export type FromWorker =
   | { type: 'history'; history: HistoryData }
   | { type: 'tree'; tree: TreeData }
   | { type: 'saved'; json: string; tick: number; seed: string }
+  | { type: 'report'; json: string; fileName: string; summary: ReportSummary }
   | { type: 'error'; message: string };
