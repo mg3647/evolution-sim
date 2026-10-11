@@ -1,9 +1,11 @@
 name: Deploy to GitHub Pages
 
-# Runs only when started by hand from the Actions tab, so nothing is published
-# until someone chooses to. Pages must first be enabled for the repository
+# Publishes the latest main on every push to it, and can also be started by
+# hand from the Actions tab. Pages must first be enabled for the repository
 # with "GitHub Actions" as its source (Settings > Pages).
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:

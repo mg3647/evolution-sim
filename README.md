@@ -83,7 +83,8 @@ share of creatures standing in it, how often it held any, and their mean genes.
 ## Publishing
 
 `.github/workflows/deploy.yml` builds the site and publishes it to GitHub
-Pages. It runs only when started by hand from the Actions tab, and needs Pages
+Pages at https://mg3647.github.io/evolution-sim/. It runs on every push to
+`main` (and can be started by hand from the Actions tab), and needs Pages
 enabled for the repository with "GitHub Actions" as the source.
 
 ## Layout
