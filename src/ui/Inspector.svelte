@@ -25,12 +25,12 @@
         : [],
     })),
   );
-  /** What it is doing right now, strongest first. */
+  /** What it is doing right now, strongest first; actions that do nothing here go last. */
   const doing = $derived(
     creature
       ? creature.outputs
-          .map((value, k) => ({ value, label: OUTPUT_LABELS[k]! }))
-          .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
+          .map((value, k) => ({ value, label: OUTPUT_LABELS[k]!, idle: creature.idleOutputs[k] ?? null }))
+          .sort((a, b) => Number(a.idle !== null) - Number(b.idle !== null) || Math.abs(b.value) - Math.abs(a.value))
       : [],
   );
 
@@ -114,13 +114,13 @@
       hidden {creature.hiddenNeurons === 1 ? 'neuron' : 'neurons'}: junctions that let it combine senses
       before acting. Children inherit the wiring with small random changes.
     </p>
-    <BrainGraph brain={creature.brain} live />
+    <BrainGraph brain={creature.brain} idle={creature.idleOutputs} live />
 
     <h3>What it is doing now</h3>
     <ul>
       {#each doing as action (action.label)}
-        <li>
-          <span>{action.label}</span>
+        <li class:idle={action.idle !== null} title={action.idle ?? undefined}>
+          <span>{action.label}{action.idle !== null ? ' (no effect)' : ''}</span>
           <span class="track"><span class="fill out" style={bar(action.value)}></span></span>
           <span class="value">{action.value.toFixed(2)}</span>
         </li>
@@ -156,29 +156,40 @@
       means it bites the nearest creature in reach. Emit scent: right of centre means it leaves a scent on
       the ground that others can smell. Call: right of centre means it makes a sound others can hear from
       farther than they can see. Give: right of centre means it hands energy to the creature in front.
-      Hold: right of centre means it picks up what is underfoot (a stone, a branch or a load of food) and
-      keeps hold of it; left of centre means it sets it down.
+      Hold: right of centre means it picks up what is underfoot (a stone, a branch or a load of food), lifts
+      a light block it faces while standing still, or pushes a block it walks into, and keeps hold; left of
+      centre means it sets it down. Mate: right of centre means it is willing to breed with a willing
+      creature in reach. Learn: speeds up, or below zero reverses, what its links learn. Eat: far left
+      stops it eating. Display: right of centre shows a bright signal others can see, at a cost.
+      Greyed-out actions do nothing for this creature in this world; hover one to see why.
     </p>
     <p class="note">
       Each of the three rays (left, ahead, right) reports the ground along it: plants, meat, water,
-      wall and fire, each reading higher the more or the nearer it is.
+      wall, fire, stored food, a stone (right of centre) or branch (left), and a block (right of centre
+      for a light one, left for a heavy one), each reading higher the more or the nearer it is. A ray
+      stops at the first wall or block, so nothing behind one is seen. While swimming, water shows the
+      way back to land.
     </p>
     <p class="note">
       Each ray also reports the nearest creature in its direction. &ldquo;Creature&rdquo; is how close it
       is. &ldquo;Kin&rdquo; is how closely its colour matches, so relatives read high. &ldquo;Bigger&rdquo;
       is right of centre if it is larger. &ldquo;Meat-eater&rdquo; is right of centre for a meat-eater
       and left for a plant-eater. &ldquo;Coming&rdquo; is right of centre if it is facing this way.
-      &ldquo;Hurt&rdquo; rises as it is wounded or sick. The two colour senses give its actual colour:
+      &ldquo;Hurt&rdquo; rises as it is wounded, and &ldquo;Sick&rdquo; is on if it has the plague. The two colour senses give its actual colour:
       &ldquo;Red or cyan&rdquo; is right of centre for red, left for cyan; &ldquo;Green or violet&rdquo; is
       right for yellow-green, left for violet. All read zero when no creature is there.
     </p>
     <p class="note">
-      &ldquo;Creature behind&rdquo; is how close the nearest creature out of sight is. &ldquo;Crowding&rdquo;
+      &ldquo;Creature behind&rdquo; is how close the nearest creature out of sight is, &ldquo;Behind on
+      the right&rdquo; which side it is on, and &ldquo;Meat-eater behind&rdquo; what it eats. &ldquo;Crowding&rdquo;
       counts creatures all around. &ldquo;Pain&rdquo; is how hard it was just bitten. &ldquo;Scent to the
       right&rdquo; is right of centre when scent is stronger on that side. &ldquo;Calls on the left&rdquo;
       and &ldquo;on the right&rdquo; are how loud other creatures' calls are on each side.
       &ldquo;Temperature&rdquo; is left of centre when cold and right when hot. &ldquo;Warmer ahead&rdquo; is
-      right of centre if it is warmer straight ahead.
+      right of centre if it is warmer straight ahead, and &ldquo;Warmer to the right&rdquo; if it is warmer
+      on that side. &ldquo;Block in front&rdquo; is right of centre for a light block in the cell it faces
+      (one it can lift) and left for a heavy one. &ldquo;Sheltered&rdquo; is on beside a block, where heat
+      and cold cost less.
     </p>
     </details>
   {:else}
@@ -276,6 +287,10 @@
     color: var(--muted);
     text-transform: uppercase;
     letter-spacing: 0.05em;
+  }
+
+  li.idle {
+    opacity: 0.45;
   }
 
   .quiet {
