@@ -139,6 +139,7 @@ function pairWorld(overrides: Partial<SimConfig>): World {
     reproduceThreshold: 0.5,
     minReproduceAge: 0,
     randomEvents: false,
+    blockDensity: 0,
     ...overrides,
   });
   const { creatures: c } = world;
@@ -147,6 +148,7 @@ function pairWorld(overrides: Partial<SimConfig>): World {
   c.x[1] = 208;
   c.y[1] = 200;
   for (let i = 0; i < 2; i++) {
+    c.size[i] = 1;
     c.energy[i] = maxEnergyFor(c.size[i]!, world.config);
     c.heading[i] = 0;
     c.brain[i] = compileBrain([], []);

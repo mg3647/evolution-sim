@@ -237,7 +237,8 @@ function sendSnapshot(now: number): void {
     blockBuilt += p.blockBuilt[i]!;
   }
   for (let i = 0; i < cells; i++) {
-    blocks[i] = p.blocks[i]! + p.blockBuilt[i]!;
+    // 1 block, 2 moved by a creature, 3 heavy, 4 heavy and moved.
+    blocks[i] = p.blocks[i] === 0 ? 0 : p.blockHeavy[i]! * 2 + 1 + p.blockBuilt[i]!;
     blockSpecies[i] = p.blockSpecies[i]!;
     fire[i] = p.fire[i]! > 0 ? 1 : 0;
     ash[i] = p.ash[i]! * 255;

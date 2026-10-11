@@ -128,7 +128,7 @@ export interface SavedWorld {
   config: SimConfig;
   tick: number;
   rng: RngState;
-  field: Record<(typeof FIELD_ARRAYS)[number], number[]>;
+  field: Record<(typeof FIELD_ARRAYS)[number], number[]> & { blockHeavy?: number[] };
   plantCapacityTotal: number;
   creatures: { count: number; nextId: number; brains: SavedBrain[] } & Record<
     (typeof CREATURE_FIELDS)[number],
@@ -182,6 +182,7 @@ export function saveWorld(world: World): SavedWorld {
 
   const field = {} as SavedWorld['field'];
   for (const name of FIELD_ARRAYS) field[name] = Array.from(plants[name]);
+  field.blockHeavy = Array.from(plants.blockHeavy);
 
   const creatures = { count: c.count, nextId: c.nextId, brains: [] } as unknown as SavedWorld['creatures'];
   for (const name of CREATURE_FIELDS) creatures[name] = Array.from(c[name].subarray(0, c.count));
@@ -279,6 +280,10 @@ export function loadWorld(savedWorld: SavedWorld): World {
     blocks: new Uint8Array(saved.field.blocks),
     blockSpecies: new Uint32Array(saved.field.blockSpecies),
     blockBuilt: new Uint8Array(saved.field.blockBuilt),
+    // Saves from before heavy blocks have none.
+    blockHeavy: new Uint8Array(saved.field.blockHeavy ?? new Array<number>(cells).fill(0)),
+    heavyGripTick: new Int32Array(cells),
+    heavyGripper: new Int32Array(cells),
     nearBlocks: new Uint8Array(cells),
     store: new Float64Array(saved.field.store),
     branches: new Uint8Array(saved.field.branches),

@@ -51,6 +51,12 @@ export interface PlantField {
   blockSpecies: Uint32Array;
   /** 1 for a block that a creature has moved. */
   blockBuilt: Uint8Array;
+  /** 1 for a heavy block: one that moves only while two creatures push it at once. */
+  blockHeavy: Uint8Array;
+  /** For each heavy block, the tick plus one when a creature last pushed on it, or 0; not saved. */
+  heavyGripTick: Int32Array;
+  /** For each heavy block, the id of the creature that last pushed on it; not saved. */
+  heavyGripper: Int32Array;
   /** How many blocks stand in each cell and the eight around it. Follows from `blocks`. */
   nearBlocks: Uint8Array;
   /** Plant food dropped in each cell by creatures: a store that slowly spoils. Eaten like plants. */
@@ -197,6 +203,9 @@ export function createPlantField(config: SimConfig, rng: Rng): PlantField {
     blocks: new Uint8Array(cols * rows),
     blockSpecies: new Uint32Array(cols * rows),
     blockBuilt: new Uint8Array(cols * rows),
+    blockHeavy: new Uint8Array(cols * rows),
+    heavyGripTick: new Int32Array(cols * rows),
+    heavyGripper: new Int32Array(cols * rows),
     nearBlocks: new Uint8Array(cols * rows),
     store: new Float64Array(cols * rows),
     branches: new Uint8Array(cols * rows),

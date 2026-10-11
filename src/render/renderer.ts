@@ -495,7 +495,8 @@ export class WorldRenderer {
       if (!blocks[i]) continue;
       const x = (i % cols) * w;
       const y = Math.floor(i / cols) * h;
-      const built = blocks[i] === 2;
+      const built = blocks[i] === 2 || blocks[i] === 4;
+      const heavy = blocks[i]! >= 3;
       const hue = speciesHue(blockSpecies[i]!);
       const face = built ? hsvToRgb(hue, 0.5, 0.82) : BLOCK_FACE;
       const lit = built ? hsvToRgb(hue, 0.3, 1) : BLOCK_LIT;
@@ -503,6 +504,8 @@ export class WorldRenderer {
       g.rect(x, y, w, h).fill(shade);
       g.rect(x, y, w - edge, h - edge).fill(lit);
       g.rect(x + edge, y + edge, w - edge * 2, h - edge * 2).fill(face);
+      // A heavy block has a dark inner plate, so it reads as something that needs two to move.
+      if (heavy) g.rect(x + edge * 2.2, y + edge * 2.2, w - edge * 4.4, h - edge * 4.4).fill(shade);
     }
   }
 

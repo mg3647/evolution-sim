@@ -49,9 +49,11 @@ function countNear(field: PlantField, cell: number, by: number): void {
  * Put a block in a cell. `species` is the species of the creature that put
  * it there, or 0 if nobody did; `built` marks it as moved by a creature.
  */
-export function addBlock(field: PlantField, cell: number, species = 0, built = false): void {
+export function addBlock(field: PlantField, cell: number, species = 0, built = false, heavy = false): void {
   if (field.blocks[cell] === 1) return;
   field.blocks[cell] = 1;
+  field.blockHeavy[cell] = heavy ? 1 : 0;
+  field.heavyGripTick[cell] = 0;
   field.blockSpecies[cell] = species;
   field.blockBuilt[cell] = built ? 1 : 0;
   countNear(field, cell, 1);
@@ -63,6 +65,8 @@ export function removeBlock(field: PlantField, cell: number): boolean {
   field.blocks[cell] = 0;
   field.blockSpecies[cell] = 0;
   field.blockBuilt[cell] = 0;
+  field.blockHeavy[cell] = 0;
+  field.heavyGripTick[cell] = 0;
   countNear(field, cell, -1);
   return true;
 }
@@ -90,7 +94,7 @@ export function scatterBlocks(field: PlantField, config: SimConfig, rng: Rng): v
     if (field.water[cell] === 1 || field.walls[cell] === 1) continue;
     const biome = field.biome[cell]!;
     const chance = biome === Biome.Desert || biome === Biome.Tundra ? elsewhere * OPEN_LAND_BLOCKS : elsewhere;
-    if (rng.chance(Math.min(1, chance))) addBlock(field, cell);
+    if (rng.chance(Math.min(1, chance))) addBlock(field, cell, 0, false, rng.chance(config.heavyBlockShare));
   }
 }
 
@@ -112,17 +116,38 @@ export function cellBeyond(field: PlantField, from: number, to: number): number 
   return ((ty + dy + rows) % rows) * cols + ((tx + dx + cols) % cols);
 }
 
+/** How many ticks a creature's push on a heavy block lasts, for a second creature to join it. */
+const GRIP_TICKS = 2;
+
 /**
  * Shove the block in `to` one cell on, away from a creature of the given
  * species coming from `from`. Returns whether it moved: it does not if the
- * cell beyond is solid or water.
+ * cell beyond is solid or water. A heavy block moves only if `grip` is given
+ * and a different creature pushed on it this tick or the one before; the
+ * first to push leaves the mark and stays put.
  */
-export function pushBlock(field: PlantField, from: number, to: number, species: number): boolean {
+export function pushBlock(
+  field: PlantField,
+  from: number,
+  to: number,
+  species: number,
+  grip?: { tick: number; creature: number },
+): boolean {
   if (field.blocks[to] === 0) return false;
+  const heavy = field.blockHeavy[to] === 1;
+  if (heavy) {
+    if (!grip) return false;
+    const recent = field.heavyGripTick[to]! > 0 && grip.tick + 1 - field.heavyGripTick[to]! <= GRIP_TICKS;
+    if (!recent || field.heavyGripper[to] === grip.creature) {
+      field.heavyGripTick[to] = grip.tick + 1;
+      field.heavyGripper[to] = grip.creature;
+      return false;
+    }
+  }
   const beyond = cellBeyond(field, from, to);
   if (beyond < 0 || !canHoldBlock(field, beyond)) return false;
   removeBlock(field, to);
-  addBlock(field, beyond, species, true);
+  addBlock(field, beyond, species, true, heavy);
   return true;
 }
 
