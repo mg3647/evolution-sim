@@ -1,16 +1,20 @@
 import { BIOME_TRAITS } from './biomes';
-import { blockBetween } from './blocks';
+import { Obstacle, obstacleBetween } from './blocks';
 import { Input, INPUTS_PER_RAY, RAY_COUNT, Ray } from './brain';
 import type { SimConfig } from './config';
 import { Held, type Creatures } from './creatures';
 import { daylightAt, seasonAt } from './environment';
 import { maxEnergyFor } from './genome';
 import { cellIndexAt, groundHue, temperatureAt, visibility, type PlantField } from './plants';
-import { soundCellAt, type SoundField } from './sound';
+import { callShare, soundCellAt, type SoundField } from './sound';
 import type { SpatialHash } from './spatialHash';
 
 /** Points along each ray where the ground is sampled, as fractions of its length. */
-const GROUND_SAMPLES = [0.5, 1];
+const GROUND_SAMPLES = [0.25, 0.5, 0.75, 1];
+/** The sample whose scent is compared left against right. */
+const SCENT_SAMPLE = 1;
+/** How strongly something seen at the first sample reads; one at the end of sight reads a quarter. */
+const NEAREST = 1 + GROUND_SAMPLES[0]!;
 const TWO_PI = Math.PI * 2;
 /** This many creatures within sensing range reads as fully crowded. */
 const CROWD_FULL = 8;
@@ -24,12 +28,15 @@ const TREND_GAIN = 50;
 /**
  * Fills a brain's inputs with what a creature perceives. Vision is three
  * rays (left, ahead, right). Each reports the ground along it (plants, meat,
- * water, wall) and, for the closest creature in its direction, how near it
- * is, how alike its colour is, whether it is bigger, what it eats, whether
- * it is coming this way, whether it is hurt, and its actual colour. A creature the colour of the
- * ground under it can only be seen from closer. Beyond vision a creature
- * feels what is behind it, how crowded it is, scent, the temperature, and
- * its own body.
+ * water, wall, fire, items, blocks, stored food) up to the first wall or
+ * block, which hides what lies past it, and, for the closest creature in its
+ * direction, how near it is, how alike its colour is, whether it is bigger,
+ * what it eats, whether it is coming this way, whether it is wounded or sick,
+ * and its actual colour. A creature the colour of the ground under it can
+ * only be seen from closer, and one behind a wall or block not at all.
+ * Beyond vision a creature feels what is behind it and on which side, how
+ * crowded it is, scent, calls, the temperature and where it is warmer, the
+ * cell it faces, shelter, and its own body.
  */
 export class Senses {
   /** After sense(): index of the closest creature in view, or -1, and the gap to its edge. */
@@ -52,6 +59,8 @@ export class Senses {
   private cosHeading = 1;
   private sinHeading = 0;
   private nearestBehind = Infinity;
+  private behindIndex = -1;
+  private behindSide = 0;
   private neighbors = 0;
 
   // This runs for every creature every tick and dominates the cost of a tick,
@@ -109,6 +118,9 @@ export class Senses {
     let scentLeft = 0;
     let scentRight = 0;
 
+    const here = cellIndexAt(field, x, y);
+    const swimming = field.water[here] === 1;
+    const storeLeast = config.biteSize;
     for (let ray = 0; ray < RAY_COUNT; ray++) {
       // Each ray is the heading turned by a whole number of spreads: -1, 0, +1.
       const turn = ray - 1;
@@ -120,39 +132,52 @@ export class Senses {
       let water = 0;
       let fire = 0;
       let items = 0;
+      let store = 0;
       let block = 0;
-      let heavyBlock = false;
+      // Walked from near to far, so the first hit of each kind is the nearest, and the walk stops at a
+      // wall or block: nothing past one is seen, nor is scent from past one smelled.
       for (const t of GROUND_SAMPLES) {
         let px = turn === 0 ? x + cosHeading * range * t : x + dx * t;
         let py = turn === 0 ? y + sinHeading * range * t : y + dy * t;
         px -= Math.floor(px / worldWidth) * worldWidth;
         py -= Math.floor(py / worldHeight) * worldHeight;
         const cell = cellIndexAt(field, px, py);
-        plants += field.energy[cell]!;
-        meat += field.meat[cell]!;
-        // A nearer wall or shore reads stronger.
-        if (field.walls[cell]) wall = Math.max(wall, 1.5 - t);
-        if (field.blocks[cell] && 1.5 - t > block) {
-          block = 1.5 - t;
-          heavyBlock = field.blockHeavy[cell] === 1;
-        }
-        if (field.water[cell]) water = Math.max(water, 1.5 - t);
-        if (field.fire[cell]) fire = Math.max(fire, 1.5 - t);
-        if (field.stones[cell] || field.branches[cell]) items = Math.max(items, 1.5 - t);
-        if (t === GROUND_SAMPLES[0]) {
+        if (t === GROUND_SAMPLES[SCENT_SAMPLE]) {
           if (turn < 0) scentLeft = field.scent[cell]!;
           else if (turn > 0) scentRight = field.scent[cell]!;
         }
+        // What is underfoot has its own senses.
+        if (cell === here) continue;
+        const near = NEAREST - t;
+        if (field.walls[cell]) {
+          wall = near;
+          break;
+        }
+        if (field.blocks[cell]) {
+          // Heavy blocks read below zero, light ones above, so a creature can tell which it faces.
+          block = field.blockHeavy[cell] === 1 ? -near : near;
+          break;
+        }
+        plants += field.energy[cell]!;
+        meat += field.meat[cell]!;
+        // In water, the water input shows the way back to land instead.
+        if (water === 0 && (swimming ? !field.water[cell] : field.water[cell])) water = near;
+        if (fire === 0 && field.fire[cell]) fire = near;
+        if (items === 0) {
+          if (field.stones[cell]) items = near;
+          else if (field.branches[cell]) items = -near;
+        }
+        if (store === 0 && field.store[cell]! >= storeLeast) store = near;
       }
       const o = Input.Rays + ray * INPUTS_PER_RAY;
       inputs[o + Ray.Plants] = (plants / GROUND_SAMPLES.length) * plantScale;
       inputs[o + Ray.Meat] = Math.min(1, (meat / GROUND_SAMPLES.length) * meatScale);
-      inputs[o + Ray.Water] = Math.min(1, water);
-      inputs[o + Ray.Wall] = Math.min(1, wall);
-      inputs[o + Ray.Fire] = Math.min(1, fire);
-      inputs[o + Ray.Items] = Math.min(1, items);
-      // Heavy blocks read below zero, light ones above, so a creature can tell which it faces.
-      inputs[o + Ray.Block] = Math.min(1, block) * (heavyBlock ? -1 : 1);
+      inputs[o + Ray.Water] = water;
+      inputs[o + Ray.Wall] = wall;
+      inputs[o + Ray.Fire] = fire;
+      inputs[o + Ray.Items] = items;
+      inputs[o + Ray.Block] = block;
+      inputs[o + Ray.Store] = store;
       inputs[o + Ray.Near] = 0;
       inputs[o + Ray.Kin] = 0;
       inputs[o + Ray.Bigger] = 0;
@@ -162,6 +187,7 @@ export class Senses {
       inputs[o + Ray.ColourWarm] = 0;
       inputs[o + Ray.ColourGreen] = 0;
       inputs[o + Ray.Display] = 0;
+      inputs[o + Ray.Sick] = 0;
       this.nearest[ray] = Infinity;
     }
 
@@ -177,15 +203,20 @@ export class Senses {
     this.targetIndex = -1;
     this.targetGap = Infinity;
     this.nearestBehind = Infinity;
+    this.behindIndex = -1;
+    this.behindSide = 0;
     this.neighbors = 0;
     this.hash.query(x, y, range, this.visit);
 
     const social = config.socialSenses;
-    inputs[Input.Behind] = social && this.nearestBehind < range ? 1 - this.nearestBehind / range : 0;
+    const felt = social && this.nearestBehind < range;
+    inputs[Input.Behind] = felt ? 1 - this.nearestBehind / range : 0;
+    inputs[Input.BehindSide] = felt ? this.behindSide : 0;
+    inputs[Input.BehindMeatEater] = felt ? creatures.diet[this.behindIndex]! * 2 - 1 : 0;
     inputs[Input.Crowding] = social ? Math.min(1, this.neighbors / CROWD_FULL) : 0;
     inputs[Input.Pain] = social ? Math.min(1, creatures.pain[i]! / PAIN_FULL) : 0;
 
-    const cell = cellIndexAt(field, x, y);
+    const cell = here;
     inputs[Input.Underfoot] = field.energy[cell]! * plantScale;
     inputs[Input.MeatUnderfoot] = Math.min(1, field.meat[cell]! * meatScale);
     inputs[Input.InWater] = field.water[cell]!;
@@ -200,6 +231,14 @@ export class Senses {
         ? Math.min(1, creatures.heldEnergy[i]! / (config.biteSize * creatures.size[i]! ** 2 * config.carryMouthfuls))
         : 0;
     inputs[Input.ScentSide] = Math.min(1, scentRight) - Math.min(1, scentLeft);
+    // The cell it faces, where Hold lifts and sets down blocks; one cell's length ahead, as in the world.
+    let frontX = x + cosHeading * field.cellWidth;
+    let frontY = y + sinHeading * field.cellHeight;
+    frontX -= Math.floor(frontX / worldWidth) * worldWidth;
+    frontY -= Math.floor(frontY / worldHeight) * worldHeight;
+    const front = cellIndexAt(field, frontX, frontY);
+    inputs[Input.Facing] = front !== cell && field.blocks[front] ? (field.blockHeavy[front] === 1 ? -1 : 1) : 0;
+    inputs[Input.Sheltered] = config.shelter > 0 && field.nearBlocks[cell]! > 0 ? 1 : 0;
 
     // Hearing: how loud calls are one sound cell to the left and to the right.
     if (config.hearing) {
@@ -213,8 +252,18 @@ export class Senses {
       leftY -= Math.floor(leftY / worldHeight) * worldHeight;
       rightX -= Math.floor(rightX / worldWidth) * worldWidth;
       rightY -= Math.floor(rightY / worldHeight) * worldHeight;
-      inputs[Input.HearLeft] = Math.min(1, sound.loudness[soundCellAt(sound, leftX, leftY)]!);
-      inputs[Input.HearRight] = Math.min(1, sound.loudness[soundCellAt(sound, rightX, rightY)]!);
+      const leftCell = soundCellAt(sound, leftX, leftY);
+      const rightCell = soundCellAt(sound, rightX, rightY);
+      // A caller does not hear its own call: what it added is taken back out.
+      let ownLeft = 0;
+      let ownRight = 0;
+      if (creatures.calling[i] === 1) {
+        const own = soundCellAt(sound, x, y);
+        ownLeft = callShare(sound, own, leftCell);
+        ownRight = callShare(sound, own, rightCell);
+      }
+      inputs[Input.HearLeft] = Math.min(1, Math.max(0, sound.loudness[leftCell]! - ownLeft));
+      inputs[Input.HearRight] = Math.min(1, Math.max(0, sound.loudness[rightCell]! - ownRight));
     } else {
       inputs[Input.HearLeft] = 0;
       inputs[Input.HearRight] = 0;
@@ -228,20 +277,37 @@ export class Senses {
     inputs[Input.Season] = this.season;
     inputs[Input.Daylight] = this.daylight;
     if (config.temperatureStrength > 0) {
-      const here = temperatureAt(field, cell, this.warmth, config, this.dayWarmth);
+      const warmthHere = temperatureAt(field, cell, this.warmth, config, this.dayWarmth);
       let aheadX = x + cosHeading * range;
       let aheadY = y + sinHeading * range;
       aheadX -= Math.floor(aheadX / worldWidth) * worldWidth;
       aheadY -= Math.floor(aheadY / worldHeight) * worldHeight;
       const ahead = temperatureAt(field, cellIndexAt(field, aheadX, aheadY), this.warmth, config, this.dayWarmth);
-      inputs[Input.Temperature] = Math.max(-1, Math.min(1, here));
-      inputs[Input.WarmerAhead] = Math.max(-1, Math.min(1, (ahead - here) * WARMER_GAIN));
+      // To the sides, at the ends of the left and right rays.
+      const sideX = cosHeading * this.cosSpread * range;
+      const sideY = sinHeading * this.cosSpread * range;
+      const turnX = sinHeading * this.sinSpread * range;
+      const turnY = cosHeading * this.sinSpread * range;
+      const right = this.warmthAt(x + sideX - turnX, y + sideY + turnY);
+      const left = this.warmthAt(x + sideX + turnX, y + sideY - turnY);
+      inputs[Input.Temperature] = Math.max(-1, Math.min(1, warmthHere));
+      inputs[Input.WarmerAhead] = Math.max(-1, Math.min(1, (ahead - warmthHere) * WARMER_GAIN));
+      inputs[Input.WarmerSide] = Math.max(-1, Math.min(1, (right - left) * WARMER_GAIN));
     } else {
       inputs[Input.Temperature] = 0;
       inputs[Input.WarmerAhead] = 0;
+      inputs[Input.WarmerSide] = 0;
     }
     inputs[Input.EnergyTrend] = Math.max(-1, Math.min(1, creatures.trend[i]! * TREND_GAIN));
     inputs[Input.Bias] = 1;
+  }
+
+  /** The temperature felt at a point, which may lie outside the world and is wrapped into it. */
+  private warmthAt(px: number, py: number): number {
+    const { config, field } = this;
+    px -= Math.floor(px / config.worldWidth) * config.worldWidth;
+    py -= Math.floor(py / config.worldHeight) * config.worldHeight;
+    return temperatureAt(field, cellIndexAt(field, px, py), this.warmth, config, this.dayWarmth);
   }
 
   private visit = (j: number): void => {
@@ -276,8 +342,12 @@ export class Senses {
     }
     const distance = Math.sqrt(dx * dx + dy * dy);
     if (ray < 0) {
-      // Out of sight, but close enough to feel.
-      if (distance < this.nearestBehind) this.nearestBehind = distance;
+      // Out of sight, but close enough to feel, and on which side.
+      if (distance < this.nearestBehind) {
+        this.nearestBehind = distance;
+        this.behindIndex = j;
+        this.behindSide = (dy * this.cosHeading - dx * this.sinHeading) / distance;
+      }
       return;
     }
 
@@ -288,10 +358,10 @@ export class Senses {
     if (config.camouflage > 0) {
       seen *= visibility(creatures.hue[j]!, groundHue(this.field, theirCell, config), config.camouflage);
     }
-    // A block in the way hides a creature, wholly or in part: a ring of them is a pen.
-    if (config.blockCover > 0 && blockBetween(this.field, this.x, this.y, dx, dy, config.worldWidth, config.worldHeight)) {
-      seen *= 1 - config.blockCover;
-    }
+    // A wall in the way hides a creature; a block wholly or in part: a ring of them is a pen.
+    const obstacle = obstacleBetween(this.field, this.x, this.y, dx, dy, config.worldWidth, config.worldHeight);
+    if (obstacle === Obstacle.Wall) return;
+    if (obstacle === Obstacle.Block) seen *= 1 - config.blockCover;
     if (distance > this.range * seen) return;
 
     const mySize = creatures.size[this.self]!;
@@ -319,6 +389,7 @@ export class Senses {
     // How squarely the other is facing this way: 1 is head-on, -1 is directly away.
     const theirHeading = creatures.heading[j]!;
     inputs[o + Ray.Approaching] = -(Math.cos(theirHeading) * dx + Math.sin(theirHeading) * dy) / distance;
-    inputs[o + Ray.Hurt] = creatures.sick[j]! > 0 ? 1 : 1 - Math.max(0, creatures.health[j]!);
+    inputs[o + Ray.Hurt] = 1 - Math.max(0, creatures.health[j]!);
+    inputs[o + Ray.Sick] = creatures.sick[j]! > 0 ? 1 : 0;
   };
 }

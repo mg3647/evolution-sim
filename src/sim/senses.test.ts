@@ -85,7 +85,7 @@ describe('Senses', () => {
     plants.energy[cellIndexAt(plants, 200, 200)] = config.plantCapacity / 2;
     const inputs = sense(creatures, i);
     expect(inputs[Input.Underfoot]).toBeCloseTo(0.5, 6);
-    expect(inputs[ray(AHEAD) + Ray.Plants]).toBeGreaterThan(0.4);
+    expect(inputs[ray(AHEAD) + Ray.Plants]).toBeCloseTo(0.25, 6);
     expect(inputs[ray(LEFT) + Ray.Plants]).toBe(0);
     expect(inputs[ray(RIGHT) + Ray.Plants]).toBe(0);
   });
@@ -125,11 +125,13 @@ describe('Senses', () => {
     const { plants, creatures, add, sense } = setup();
     const i = add(210, 210, 0);
     plants.walls[cellIndexAt(plants, 210 + config.senseRange, 210)] = 1;
-    expect(sense(creatures, i)[ray(AHEAD) + Ray.Wall]).toBeCloseTo(0.5, 6);
+    expect(sense(creatures, i)[ray(AHEAD) + Ray.Wall]).toBeCloseTo(0.25, 6);
     plants.walls[cellIndexAt(plants, 210 + config.senseRange / 2, 210)] = 1;
     const inputs = sense(creatures, i);
-    expect(inputs[ray(AHEAD) + Ray.Wall]).toBe(1);
+    expect(inputs[ray(AHEAD) + Ray.Wall]).toBeCloseTo(0.75, 6);
     expect(inputs[ray(LEFT) + Ray.Wall]).toBe(0);
+    plants.walls[cellIndexAt(plants, 210 + config.senseRange / 4, 210)] = 1;
+    expect(sense(creatures, i)[ray(AHEAD) + Ray.Wall]).toBe(1);
   });
 
   it('sees water on the ray that crosses it, feels it underfoot, and feels thirst', () => {
@@ -137,7 +139,7 @@ describe('Senses', () => {
     const i = add(210, 210, 0);
     plants.water[cellIndexAt(plants, 210 + config.senseRange, 210)] = 1;
     let inputs = sense(creatures, i);
-    expect(inputs[ray(AHEAD) + Ray.Water]).toBeCloseTo(0.5, 6);
+    expect(inputs[ray(AHEAD) + Ray.Water]).toBeCloseTo(0.25, 6);
     expect(inputs[ray(LEFT) + Ray.Water]).toBe(0);
     expect(inputs[Input.InWater]).toBe(0);
     expect(inputs[Input.Thirst]).toBe(0);
@@ -149,12 +151,13 @@ describe('Senses', () => {
     expect(inputs[Input.Thirst]).toBeCloseTo(0.75, 6);
   });
 
-  it('knows when it is sick, and sees another creature as hurt when it is sick or wounded', () => {
+  it('knows when it is sick, and tells another creature that is sick from one that is wounded', () => {
     const { creatures, add, sense } = setup();
     const i = add(200, 200, 0);
     const other = add(230, 200, 0);
     let inputs = sense(creatures, i);
     expect(inputs[Input.Sick]).toBe(0);
+    expect(inputs[ray(AHEAD) + Ray.Sick]).toBe(0);
     expect(inputs[ray(AHEAD) + Ray.Hurt]).toBe(0);
 
     creatures.health[other] = 0.25;
@@ -165,7 +168,8 @@ describe('Senses', () => {
     creatures.sick[other] = 100;
     inputs = sense(creatures, i);
     expect(inputs[Input.Sick]).toBe(1);
-    expect(inputs[ray(AHEAD) + Ray.Hurt]).toBe(1);
+    expect(inputs[ray(AHEAD) + Ray.Sick]).toBe(1);
+    expect(inputs[ray(AHEAD) + Ray.Hurt]).toBe(0);
     // Immunity is not sickness.
     creatures.sick[i] = -100;
     creatures.sick[other] = -100;
@@ -449,5 +453,112 @@ describe('blocks and sight', () => {
       const value = sense(creatures, watcher)[ray(AHEAD) + Ray.Block]!;
       expect(heavy ? value < 0 : value > 0).toBe(true);
     }
+  });
+
+  it('see a block pressed right up against them, and feel which kind is in front', () => {
+    for (const heavy of [false, true]) {
+      const { plants, creatures, add, sense } = setup();
+      // At the far edge of its own cell, flush against the block in the next.
+      const watcher = add(119.5, 110, 0);
+      addBlock(plants, cellIndexAt(plants, 130, 110), 0, false, heavy);
+      const inputs = sense(creatures, watcher);
+      expect(inputs[ray(AHEAD) + Ray.Block]).toBe(heavy ? -1 : 1);
+      expect(inputs[Input.Facing]).toBe(heavy ? -1 : 1);
+    }
+  });
+
+  it('hide the ground behind them, and a wall hides the creature behind it', () => {
+    const { plants, creatures, add, sense } = setup();
+    const watcher = add(100, 110, 0);
+    plants.energy[cellIndexAt(plants, 160, 110)] = config.plantCapacity;
+    expect(sense(creatures, watcher)[ray(AHEAD) + Ray.Plants]).toBeGreaterThan(0);
+    addBlock(plants, cellIndexAt(plants, 130, 110));
+    expect(sense(creatures, watcher)[ray(AHEAD) + Ray.Plants]).toBe(0);
+
+    const walled = setup();
+    const looker = walled.add(100, 110, 0);
+    walled.add(145, 110, 0);
+    expect(walled.sense(walled.creatures, looker)[ray(AHEAD) + Ray.Near]).toBeGreaterThan(0);
+    walled.plants.walls[cellIndexAt(walled.plants, 125, 110)] = 1;
+    expect(walled.sense(walled.creatures, looker)[ray(AHEAD) + Ray.Near]).toBe(0);
+  });
+
+  it('feel shelter in or beside a block, unless shelter is switched off', () => {
+    for (const shelter of [defaultConfig.shelter, 0]) {
+      const { plants, creatures, add, sense } = setup({ shelter });
+      const i = add(110, 110, Math.PI / 2);
+      expect(sense(creatures, i)[Input.Sheltered]).toBe(0);
+      addBlock(plants, cellIndexAt(plants, 130, 110));
+      expect(sense(creatures, i)[Input.Sheltered]).toBe(shelter > 0 ? 1 : 0);
+    }
+  });
+});
+
+describe('items, stores and shore along the rays', () => {
+  it('tell a stone ahead from a branch ahead', () => {
+    const { plants, creatures, add, sense } = setup();
+    const i = add(100, 110, 0);
+    plants.stones[cellIndexAt(plants, 145, 110)] = 1;
+    expect(sense(creatures, i)[ray(AHEAD) + Ray.Items]).toBeGreaterThan(0);
+    plants.stones[cellIndexAt(plants, 145, 110)] = 0;
+    plants.branches[cellIndexAt(plants, 145, 110)] = 1;
+    expect(sense(creatures, i)[ray(AHEAD) + Ray.Items]).toBeLessThan(0);
+  });
+
+  it('see a store of dropped food from a distance, stronger when nearer', () => {
+    const { plants, creatures, add, sense } = setup();
+    const i = add(100, 110, 0);
+    expect(sense(creatures, i)[ray(AHEAD) + Ray.Store]).toBe(0);
+    plants.store[cellIndexAt(plants, 160, 110)] = config.biteSize * 4;
+    const far = sense(creatures, i)[ray(AHEAD) + Ray.Store]!;
+    expect(far).toBeGreaterThan(0);
+    plants.store[cellIndexAt(plants, 130, 110)] = config.biteSize * 4;
+    expect(sense(creatures, i)[ray(AHEAD) + Ray.Store]).toBeGreaterThan(far);
+  });
+
+  it('show the way to land while swimming', () => {
+    const { plants, creatures, add, sense } = setup();
+    const i = add(110, 110, 0);
+    plants.water.fill(1);
+    expect(sense(creatures, i)[ray(AHEAD) + Ray.Water]).toBe(0);
+    plants.water[cellIndexAt(plants, 160, 110)] = 0;
+    expect(sense(creatures, i)[ray(AHEAD) + Ray.Water]).toBeGreaterThan(0);
+    expect(sense(creatures, i)[ray(LEFT) + Ray.Water]).toBe(0);
+  });
+});
+
+describe('what is behind', () => {
+  it('feels which side the creature behind is on, and what it eats', () => {
+    const { creatures, add, sense } = setup();
+    const i = add(200, 200, 0);
+    let inputs = sense(creatures, i);
+    expect(inputs[Input.BehindSide]).toBe(0);
+    expect(inputs[Input.BehindMeatEater]).toBe(0);
+    // Behind and to its right (+y is right when heading along +x).
+    const other = add(185, 215, 0, 0.5, 1, 1);
+    inputs = sense(creatures, i);
+    expect(inputs[Input.BehindSide]).toBeGreaterThan(0.5);
+    expect(inputs[Input.BehindMeatEater]).toBe(1);
+    creatures.y[other] = 185;
+    creatures.diet[other] = 0;
+    inputs = sense(creatures, i);
+    expect(inputs[Input.BehindSide]).toBeLessThan(-0.5);
+    expect(inputs[Input.BehindMeatEater]).toBe(-1);
+  });
+});
+
+describe('hearing', () => {
+  it('does not hear its own call', () => {
+    const { creatures, add, sense } = setup();
+    const caller = add(150, 150, 0);
+    creatures.calling[caller] = 1;
+    let inputs = sense(creatures, caller);
+    expect(inputs[Input.HearLeft]).toBe(0);
+    expect(inputs[Input.HearRight]).toBe(0);
+    // Another caller nearby is still heard.
+    const other = add(150, 50, 0);
+    creatures.calling[other] = 1;
+    inputs = sense(creatures, caller);
+    expect(inputs[Input.HearLeft]).toBeGreaterThan(0);
   });
 });
