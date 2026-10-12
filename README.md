@@ -34,7 +34,10 @@ can trigger droughts, ice ages and food booms, and use hand tools to place
 meteors and plague, draw walls, and make land fertile or barren. Creatures can
 leave and smell scent. You can inspect any creature's brain wiring, see the
 family tree and species of the living population, change any setting while
-the world runs, pick a preset, and save and load a world. The Lab button opens
+the world runs, pick a preset, and save and load a world. Species get short
+made-up names ("Noxora") and colours chosen to stay apart for colour-blind
+viewers, the same in every view. Watch (or the F key) hides the panels and lets
+the world fill the screen with only the headline numbers. The Lab button opens
 a full-screen analysis page: deaths by cause, a stream of species, the diet
 gene's distribution, a density map with a time slider, behaviour, life
 histories, food flow, selection at work, gene diversity, the most successful

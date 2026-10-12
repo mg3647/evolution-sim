@@ -1,6 +1,6 @@
 <script lang="ts">
   import type uPlot from 'uplot';
-  import { speciesColor, streamSeries as seriesOfStream } from './speciesColors';
+  import { speciesColor, speciesName, streamSeries as seriesOfStream } from './speciesColors';
   import { BIOME_GROUND } from '../render/renderer';
   import { BIOME_LABELS } from '../sim/biomes';
   import type { HistoryData, LabData, ProfileGroup } from '../worker/protocol';
@@ -207,7 +207,7 @@
   const blockKey = $derived(history ? history.blockMoves.map((s) => s.id).join(',') : '');
   const blockSeries = $derived<ChartSeries[]>(
     (history?.blockMoves ?? []).map((s) => ({
-      label: s.id === 0 ? 'Other species' : `Species ${s.id}`,
+      label: speciesName(s.id),
       color: speciesColor(s.id),
     })),
   );
@@ -725,12 +725,15 @@
     overflow-y: auto;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 560px), 1fr));
+    /* Later cards fill the gaps a full-width card leaves, so the grid has no holes. */
+    grid-auto-flow: dense;
     align-content: start;
     gap: 14px;
     padding: 14px;
   }
 
   .card {
+    align-self: start;
     min-width: 0;
     padding: 14px;
     background: var(--panel);

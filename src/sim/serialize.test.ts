@@ -224,7 +224,7 @@ describe('save and load', () => {
 
   it('refuses files it cannot read', () => {
     const saved = saveWorld(createWorld(smallConfig));
-    expect(() => loadWorld({ ...saved, version: SAVE_VERSION + 1 })).toThrow(/save version/);
+    expect(() => loadWorld({ ...saved, version: SAVE_VERSION + 1 })).toThrow(/newer version/);
     expect(() => loadWorld({} as SavedWorld)).toThrow(/not a saved world/);
     expect(() => loadWorld(null as unknown as SavedWorld)).toThrow(/not a saved world/);
     const damaged = { ...saved, field: { ...saved.field, energy: saved.field.energy.slice(1) } };

@@ -321,6 +321,9 @@ export function saveWorld(world: World): SavedWorld {
 /** Rebuild a world from saved data. Throws if the data is not a save this version can read. */
 export function loadWorld(savedWorld: SavedWorld): World {
   let saved = savedWorld;
+  if (saved && typeof saved === 'object' && saved.version > SAVE_VERSION) {
+    throw new Error('This world was saved by a newer version of the sim. Reload the page to get the latest version, then load it again.');
+  }
   if (saved && saved.version >= OLDEST_LOADABLE_VERSION && saved.version < 17) saved = renumberBrains(saved);
   if (saved && saved.version >= OLDEST_LOADABLE_VERSION && saved.version < 18) saved = wiringToTicks(saved);
   if (!saved || typeof saved !== 'object' || !(saved.version >= OLDEST_LOADABLE_VERSION && saved.version <= SAVE_VERSION)) {

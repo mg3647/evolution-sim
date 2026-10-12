@@ -259,6 +259,10 @@ const KIN_HUE = 0.1;
 
 /** Health value that marks a creature struck down by an event this tick. */
 const STRUCK = -2;
+/** Health a plague death is marked with, so the death pass can tell it from fire or a meteor. */
+const PLAGUE_DEATH = -3;
+/** The lowest a bite or spines can take health, kept above STRUCK so a kill is never counted as a disaster. */
+const WOUNDED_FLOOR = -1;
 /** Share of the newest change in its energy that enters the smoothed trend each turn. */
 const TREND_SMOOTHING = 0.2;
 
@@ -423,12 +427,19 @@ export function step(world: World): void {
     creatures.display[i] = display;
     creatures.calling[i] = calling ? 1 : 0;
     const sick = updateInfection(world, i);
+    // A plague death ends its turn here.
+    if (creatures.health[i]! <= 0) continue;
     const diet = creatures.diet[i]!;
 
     // Bite the closest creature in view if it is within reach. Teeth made for
     // meat do more harm, and a bigger attacker hurts a smaller victim more, in
     // proportion to their sizes.
-    if (attacking && world.senses.targetIndex >= 0 && world.senses.targetGap <= config.attackReach) {
+    if (
+      attacking &&
+      world.senses.targetIndex >= 0 &&
+      world.senses.targetGap <= config.attackReach &&
+      creatures.health[world.senses.targetIndex]! > 0
+    ) {
       const victim = world.senses.targetIndex;
       const ratio = size / creatures.size[victim]!;
       const teeth = config.herbivoreAttack + (1 - config.herbivoreAttack) * diet;
@@ -439,16 +450,18 @@ export function step(world: World): void {
         ratio *
         (creatures.held[i] === Held.Stone ? 1 + config.stoneBite : 1) *
         (creatures.held[victim] === Held.Branch ? 1 - config.branchShield : 1);
-      creatures.health[victim]! -= damage;
+      creatures.health[victim] = Math.max(WOUNDED_FLOOR, creatures.health[victim]! - damage);
       creatures.pain[victim]! += damage;
       // Spines and poison bite back at a bite that lands: the biter is hurt,
       // the more so the smaller it is.
       const harm = damage > 0 ? (config.defenseDamage * creatures.defense[victim]!) / ratio : 0;
       if (harm > 0) {
-        creatures.health[i]! -= harm;
+        creatures.health[i] = Math.max(WOUNDED_FLOOR, creatures.health[i]! - harm);
         creatures.pain[i]! += harm;
         world.defended += harm;
       }
+      // Killed by its victim's spines: its turn ends here.
+      if (creatures.health[i]! <= 0) continue;
     }
 
     // Illness and wounds sap strength.
@@ -510,6 +523,8 @@ export function step(world: World): void {
       creatures.pain[i]! += config.fireDamage;
       const left = creatures.health[i]! - config.fireDamage;
       creatures.health[i] = left > 0 ? left : STRUCK;
+      // Burned to death: it does not eat, carry or breed.
+      if (left <= 0) continue;
     }
     const maxEnergy = maxEnergyFor(size, config);
     let energy = creatures.energy[i]!;
@@ -677,7 +692,7 @@ export function step(world: World): void {
     if (!killed && !starved && !parched && creatures.age[i]! < config.maxAge) continue;
     if (struck) {
       world.deaths.disaster++;
-      if (creatures.sick[i]! > 0) world.plagueDeaths++;
+      if (creatures.health[i]! <= PLAGUE_DEATH) world.plagueDeaths++;
     }
     else if (killed) world.deaths.killed++;
     else if (parched) world.deaths.thirst++;
@@ -780,7 +795,7 @@ function updateInfection(world: World, i: number): boolean {
       creatures.sick[j] = config.plagueDuration;
     }
   });
-  if (rng.chance(config.plagueDeathChance)) creatures.health[i] = STRUCK;
+  if (rng.chance(config.plagueDeathChance)) creatures.health[i] = PLAGUE_DEATH;
   // The last tick of illness turns into immunity.
   creatures.sick[i] = state > 1 ? state - 1 : -config.plagueImmunity;
   return true;

@@ -1,13 +1,14 @@
 import { pathwayInput, pathwayOutput, type TraitName } from '../sim/associations';
 import { Input, INPUT_COUNT, INPUT_LABELS, INPUTS_PER_RAY, OUTPUT_LABELS, RAY_COUNT } from '../sim/brain';
 import type { ProfileGroup } from '../worker/protocol';
-import { INPUT_GROUPS, SENSE_GROUPS, type SenseGroup } from './senseGroups';
+import { speciesName } from './speciesColors';
+import { INPUT_GROUPS, SENSE_GROUPS, senseSides, type SenseGroup } from './senseGroups';
 
 /** Words for what an action does when a habit drives it up, and when it holds it back. */
 const ACTION_WORDS: [string, string][] = [
   ['turn right', 'turn left'],
   ['speed up', 'slow down'],
-  ['split', 'hold off splitting'],
+  ['breed', 'hold off breeding'],
   ['bite', 'hold off biting'],
   ['leave scent', 'leave less scent'],
   ['call', 'stay quiet'],
@@ -20,7 +21,7 @@ const ACTION_WORDS: [string, string][] = [
 ];
 
 /** Short column names for the actions. */
-export const ACTION_SHORT = ['Turn', 'Thrust', 'Split', 'Bite', 'Scent', 'Call', 'Give', 'Hold', 'Mate', 'Learn', 'Eat', 'Display'];
+export const ACTION_SHORT = ['Turn', 'Thrust', 'Breed', 'Bite', 'Scent', 'Call', 'Give', 'Hold', 'Mate', 'Learn', 'Eat', 'Display'];
 
 /** What an action does, given the sign of a habit's effect. */
 export function actionWord(output: number, effect: number): string {
@@ -28,11 +29,22 @@ export function actionWord(output: number, effect: number): string {
   return effect >= 0 ? words[0] : words[1];
 }
 
-/** "Plants ahead → speed up", or without a sign, "Plants ahead → Thrust". */
+/**
+ * "Plants ahead → speed up", or without a sign, "Plants ahead → Thrust". A
+ * two-way sense is named by its upper side ("Stone ahead → speed up"), the side
+ * a habit's effect is measured for; see habitOpposite for the other.
+ */
 export function habitLabel(pathway: number, effect?: number): string {
   const input = pathwayInput(pathway);
   const output = pathwayOutput(pathway);
-  return `${INPUT_LABELS[input]} → ${effect === undefined ? OUTPUT_LABELS[output] : actionWord(output, effect)}`;
+  const sense = senseSides(input)?.[0] ?? INPUT_LABELS[input];
+  return `${sense} → ${effect === undefined ? OUTPUT_LABELS[output] : actionWord(output, effect)}`;
+}
+
+/** For a two-way sense, what the habit does on the other side ("Branch ahead → slow down"); otherwise null. */
+export function habitOpposite(pathway: number, effect: number): string | null {
+  const sides = senseSides(pathwayInput(pathway));
+  return sides ? `${sides[1]} → ${actionWord(pathwayOutput(pathway), -effect)}` : null;
 }
 
 /** One row of the sense-action map: a kind of sense, seen on the three rays or felt once. */
@@ -69,7 +81,7 @@ export function groupName(group: ProfileGroup): string {
   if (group.id === 'all') return 'Everyone';
   if (group.id === 'plants') return 'Plant-eaters';
   if (group.id === 'meat') return 'Meat-eaters';
-  return `Species ${group.speciesId}`;
+  return speciesName(group.speciesId);
 }
 
 /** What the upper and lower halves of each trait are called. */

@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { HistoryData } from '../worker/protocol';
-  import { speciesColor } from './speciesColors';
+  import { speciesColor, speciesName } from './speciesColors';
 
   let {
     history,
@@ -58,10 +58,10 @@
       if (peak < MIN_PEAK || first < 0) continue;
       const color = speciesColor(species.id);
       if (first > 0) {
-        out.push({ tick: history.tick[first]!, kind: 'born', text: `Species ${species.id} appears`, color });
+        out.push({ tick: history.tick[first]!, kind: 'born', text: `${speciesName(species.id)} appears`, color });
       }
       if (lastSeen < n - 3) {
-        out.push({ tick: history.tick[lastSeen]!, kind: 'gone', text: `Species ${species.id} dies out`, color });
+        out.push({ tick: history.tick[lastSeen]!, kind: 'gone', text: `${speciesName(species.id)} dies out`, color });
       }
     }
     // Die-offs: find the steepest falls, then keep one per stretch.
@@ -173,7 +173,8 @@
 
   <div class="legend">
     <span class="title">Run so far · {year(tick)} ticks</span>
-    <span><i class="dot" style="background:#6db3ff"></i>new species</span>
+    <span><i class="line"></i>population</span>
+    <span><i class="dot rainbow"></i>new species, in its colour</span>
     <span><i class="x">✕</i>species gone</span>
     <span><i class="tri"></i>big die-off</span>
     <span><i class="dia"></i>event</span>
@@ -227,12 +228,25 @@
     margin-left: auto;
   }
 
+  .line {
+    display: inline-block;
+    width: 12px;
+    height: 2px;
+    margin-right: 4px;
+    vertical-align: middle;
+    background: #e8c468;
+  }
+
   .dot {
     display: inline-block;
     width: 8px;
     height: 8px;
     margin-right: 4px;
     border-radius: 50%;
+  }
+
+  .rainbow {
+    background: conic-gradient(#e69f00, #56b4e9, #f0e442, #cc79a7, #1fc08f, #e69f00);
   }
 
   .x {
