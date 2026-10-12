@@ -77,3 +77,51 @@ export function senseGroup(input: number): SenseGroup {
 
 /** Every input's group, by input number. */
 export const INPUT_GROUPS: SenseGroup[] = Array.from({ length: INPUT_COUNT }, (_, input) => senseGroup(input));
+
+/**
+ * Two-way senses read above zero for one thing and below for another, such as
+ * a stone (above) or a branch (below). These are the names of the two sides,
+ * so the screen can say which one is meant instead of "Stone or branch".
+ */
+const RAY_SIDES: Partial<Record<number, [string, string]>> = {
+  [Ray.Kin]: ['Kin', 'Unlike'],
+  [Ray.Bigger]: ['Bigger', 'Smaller'],
+  [Ray.MeatEater]: ['Meat-eater', 'Plant-eater'],
+  [Ray.Approaching]: ['Coming', 'Going away'],
+  [Ray.ColourWarm]: ['Red', 'Cyan'],
+  [Ray.ColourGreen]: ['Green', 'Violet'],
+  [Ray.Items]: ['Stone', 'Branch'],
+  [Ray.Block]: ['Light block', 'Heavy block'],
+};
+const RAY_SIDE_WORDS = ['left', 'ahead', 'right'];
+
+const OTHER_SIDES: Partial<Record<number, [string, string]>> = {
+  [Input.ScentSide]: ['Scent to the right', 'Scent to the left'],
+  [Input.Season]: ['Summer', 'Winter'],
+  [Input.Temperature]: ['Hot', 'Cold'],
+  [Input.WarmerAhead]: ['Warmer ahead', 'Colder ahead'],
+  [Input.ItemUnderfoot]: ['Stone underfoot', 'Branch underfoot'],
+  [Input.HoldingTool]: ['Holding a stone', 'Holding a branch'],
+  [Input.EnergyTrend]: ['Energy rising', 'Energy falling'],
+  [Input.BehindSide]: ['Creature behind on the right', 'Creature behind on the left'],
+  [Input.BehindMeatEater]: ['Meat-eater behind', 'Plant-eater behind'],
+  [Input.WarmerSide]: ['Warmer to the right', 'Warmer to the left'],
+  [Input.Facing]: ['Light block in front', 'Heavy block in front'],
+};
+
+/** The names of a two-way sense's sides, [above zero, below zero], or null for a one-way sense. */
+export function senseSides(input: number): [string, string] | null {
+  if (input < RAY_COUNT * INPUTS_PER_RAY) {
+    const sides = RAY_SIDES[input % INPUTS_PER_RAY];
+    if (!sides) return null;
+    const ray = RAY_SIDE_WORDS[Math.floor(input / INPUTS_PER_RAY)]!;
+    return [`${sides[0]} ${ray}`, `${sides[1]} ${ray}`];
+  }
+  return OTHER_SIDES[input] ?? null;
+}
+
+/** What a sense is reading right now, naming the side for a two-way one: "Branch ahead", not "Stone or branch ahead". */
+export function senseNow(input: number, value: number, label: string): string {
+  const sides = senseSides(input);
+  return sides ? sides[value >= 0 ? 0 : 1] : label;
+}
