@@ -21,7 +21,7 @@ import type { World } from './world';
  * alone (interventions, reseeding), the whole time series, how species came
  * and went, and where the population ended up.
  */
-export const REPORT_VERSION = 3;
+export const REPORT_VERSION = 4;
 
 /** Most points kept per series; longer histories are thinned evenly. */
 const MAX_POINTS = 200;
@@ -77,13 +77,14 @@ export interface ReportHabit {
   startShare?: number;
 }
 
-/** Young per 1,000 ticks lived, with and without a habit or trait; z beyond 2 either way is a clear difference. */
+/** Young per 1,000 ticks lived, with and without a habit or trait; `standsOut` once the number of comparisons is allowed for. */
 export interface ReportBreeding {
   withRate: number;
   withoutRate: number;
   withCount: number;
   withoutCount: number;
   z: number;
+  standsOut: boolean;
 }
 
 export interface RunReport {
@@ -142,7 +143,9 @@ export interface RunReport {
       meanRate: number;
       /** Traits: the upper half of adults against the lower half. */
       traits: (ReportBreeding & { trait: string; median: number })[];
-      /** Habits with a clear difference (|z| at least 2), strongest first. */
+      /** Habits compared: the number of comparisons the habits that stand out were picked from. */
+      habitsTested: number;
+      /** Habits whose difference stands out after allowing for the number of comparisons (Benjamini-Hochberg), strongest first. */
       habits: (ReportBreeding & { habit: string })[];
     };
   };
@@ -215,6 +218,7 @@ function rounded(split: BreedingSplit): ReportBreeding {
     withCount: split.withCount,
     withoutCount: split.withoutCount,
     z: round(split.z),
+    standsOut: split.standsOut,
   };
 }
 
@@ -264,8 +268,9 @@ function wiringReport(world: World, adoption: AdoptionHistory | undefined): RunR
       minAge: breeding.minAge,
       meanRate: round(breeding.meanRate),
       traits: breeding.traits.map((t) => ({ trait: t.trait, median: round(t.median), ...rounded(t) })),
+      habitsTested: breeding.habits.length,
       habits: breeding.habits
-        .filter((b) => Math.abs(b.z) >= 2)
+        .filter((b) => b.standsOut)
         .sort((a, b) => Math.abs(b.z) - Math.abs(a.z))
         .slice(0, MAX_HABITS)
         .map((b) => ({ habit: habitName(b.pathway), ...rounded(b) })),
