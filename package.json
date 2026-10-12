@@ -10,7 +10,8 @@
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "longrun": "vitest run --config vitest.longrun.config.ts"
+    "longrun": "vitest run --config vitest.longrun.config.ts scripts/longrun.run.ts",
+    "bench": "vitest run --config vitest.longrun.config.ts scripts/bench.run.ts"
   },
   "dependencies": {
     "pixi.js": "^8.22.0",
