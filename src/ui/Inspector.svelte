@@ -2,12 +2,12 @@
   import { BIOME_LABELS } from '../sim/biomes';
   import { HELD_LABELS } from '../sim/creatures';
   import { INPUT_LABELS, OUTPUT_LABELS } from '../sim/brain';
-  import { speciesHue } from '../render/renderer';
+  import { speciesColor, speciesName } from './speciesColors';
   import { pathwayInput, pathwayOutput } from '../sim/associations';
   import type { Inspection, ProfileGroup } from '../worker/protocol';
-  import { actionWord, DRIVES, habitLabel, HOLDS_BACK, percent } from './habits';
+  import { actionWord, DRIVES, habitLabel, habitOpposite, HOLDS_BACK, percent } from './habits';
   import BrainGraph from './BrainGraph.svelte';
-  import { INPUT_GROUPS, SENSE_GROUP_HINTS, SENSE_GROUPS } from './senseGroups';
+  import { INPUT_GROUPS, SENSE_GROUP_HINTS, SENSE_GROUPS, senseNow, senseSides } from './senseGroups';
   import { Input } from '../sim/brain';
 
   let { creature, profiles = [] }: { creature: Inspection | null; profiles?: ProfileGroup[] } = $props();
@@ -31,9 +31,18 @@
     (creature?.habits ?? []).slice(0, HABITS_SHOWN).map((h) => ({
       ...h,
       label: habitLabel(h.pathway, h.effect),
+      opposite: habitOpposite(h.pathway, h.effect),
       kinShare: kin ? kin.group.pathways.share[h.pathway]! : null,
       learned: h.learns ? h.effect - h.inborn : 0,
     })),
+  );
+  /**
+   * Whether to tag its rare habits as "unusual". Early in a run, or in a young
+   * species, nearly every habit is rare, so the tag would be on every row and
+   * mean nothing; it is shown only when most of its habits are shared widely.
+   */
+  const tagUnusual = $derived(
+    habits.length > 0 && habits.filter((h) => h.kinShare !== null && h.kinShare < UNUSUAL).length * 2 < habits.length,
   );
   /** The largest effect among the habits shown, for scaling their bars. */
   const strongest = $derived(Math.max(1, ...habits.map((h) => Math.abs(h.effect))));
@@ -70,7 +79,7 @@
       group,
       readings: creature
         ? creature.inputs
-            .map((value, input) => ({ value, input, label: INPUT_LABELS[input]! }))
+            .map((value, input) => ({ value, input, label: senseNow(input, value, INPUT_LABELS[input]!), twoWay: senseSides(input) !== null }))
             .filter((r) => INPUT_GROUPS[r.input] === group && r.input !== Input.Bias && Math.abs(r.value) >= SHOWN)
             .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
         : [],
@@ -108,8 +117,8 @@
       <div title="The group of alike creatures it belongs to; see the Evolution tab">
         <dt>Species</dt>
         <dd>
-          <span class="swatch" style="background: hsl({speciesHue(creature.species) * 360}, 70%, 60%)"></span>
-          {creature.species}
+          <span class="swatch" style="background: {speciesColor(creature.species)}"></span>
+          {speciesName(creature.species)}
         </dd>
       </div>
       <div><dt>Age</dt><dd>{creature.age.toLocaleString()}</dd></div>
@@ -140,6 +149,14 @@
       <div title="Spines or poison, from 0 to 1. Whatever bites it loses health in return. Costs energy to keep.">
         <dt>Defenses</dt>
         <dd>{creature.defense.toFixed(2)}</dd>
+      </div>
+      <div title="Share of its energy it hands to each child, as a percentage. Low gives many thinly fed young; high gives few well-fed ones. Evolves.">
+        <dt>Gives each child</dt>
+        <dd>{Math.round(creature.investment * 100)}%</dd>
+      </div>
+      <div title="How full its energy store must be before it can breed. Low breeds early and often; high saves up. Evolves.">
+        <dt>Breeds at</dt>
+        <dd>{Math.round(creature.readiness * 100)}% full</dd>
       </div>
       <div title="One thing at a time: a stone makes its bite stronger, a branch takes part of bites aimed at it, and food can be set down elsewhere as a store">
         <dt>Holding</dt>
@@ -177,7 +194,7 @@
       <ul class="habits">
         {#each habits as h (h.pathway)}
           <li>
-            <span class="habit" title={habitLabel(h.pathway)}>{h.label}</span>
+            <span class="habit" title={h.opposite ? `${h.label}; the other way round, ${h.opposite}` : habitLabel(h.pathway)}>{h.label}</span>
             <span class="strength"
               ><span style="width: {(Math.abs(h.effect) / strongest) * 100}%; background: {h.effect >= 0 ? DRIVES : HOLDS_BACK}"></span
             ></span>
@@ -185,8 +202,10 @@
               {#if h.kinShare !== null}
                 {#if h.kinShare >= SHARED}
                   <span class="tag shared" title="{percent(h.kinShare)} of {kin?.name} have it">shared {percent(h.kinShare)}</span>
-                {:else if h.kinShare < UNUSUAL}
+                {:else if h.kinShare < UNUSUAL && tagUnusual}
                   <span class="tag unusual" title="Only {percent(h.kinShare)} of {kin?.name} have it">unusual</span>
+                {:else if h.kinShare < UNUSUAL}
+                  <span class="tag" title="Only {percent(h.kinShare)} of {kin?.name} have it">{percent(h.kinShare)}</span>
                 {:else}
                   <span class="tag" title="{percent(h.kinShare)} of {kin?.name} have it">{percent(h.kinShare)}</span>
                 {/if}
@@ -213,7 +232,7 @@
             its leaning, not what it senses.
           {:else}
             {#each w.pushes as p, k (p.input)}
-              {k > 0 ? ', ' : ''}<span style="color: {p.push >= 0 ? DRIVES : HOLDS_BACK}">{INPUT_LABELS[p.input]}</span>
+              {k > 0 ? ', ' : ''}<span style="color: {p.push >= 0 ? DRIVES : HOLDS_BACK}">{senseNow(p.input, creature.inputs[p.input]!, INPUT_LABELS[p.input]!)}</span>
               <span class="muted">({actionWord(w.output, p.push)})</span>
             {/each}.
           {/if}
@@ -244,8 +263,10 @@
             {#each readings as reading (reading.input)}
               <li>
                 <span>{reading.label}</span>
-                <span class="track"><span class="fill" style={bar(reading.value)}></span></span>
-                <span class="value">{reading.value.toFixed(2)}</span>
+                <span class="track"><span class="fill" style={bar(reading.twoWay ? Math.abs(reading.value) : reading.value)}></span></span>
+                <span class="value" title={reading.twoWay ? 'How strongly; the name says which side' : undefined}
+                  >{(reading.twoWay ? Math.abs(reading.value) : reading.value).toFixed(2)}</span
+                >
               </li>
             {/each}
           </ul>
@@ -257,7 +278,7 @@
       <summary>What the actions and senses mean</summary>
     <p class="note">
       Turn: left of centre is left, right is right. Thrust: far left is standing still, far right is full
-      speed. Reproduce: right of centre means it splits once it has enough energy. Attack: right of centre
+      speed. Breed: right of centre means it has young on its own once it has enough energy. Bite: right of centre
       means it bites the nearest creature in reach. Emit scent: right of centre means it leaves a scent on
       the ground that others can smell. Call: right of centre means it makes a sound others can hear from
       farther than they can see. Give: right of centre means it hands energy to the creature in front.

@@ -1,6 +1,6 @@
 <script lang="ts">
   import type uPlot from 'uplot';
-  import { speciesColor, streamSeries as seriesOfStream } from './speciesColors';
+  import { speciesColor, speciesName, streamSeries as seriesOfStream } from './speciesColors';
   import { BIOME_GROUND } from '../render/renderer';
   import { BIOME_LABELS } from '../sim/biomes';
   import type { HistoryData, LabData, ProfileGroup } from '../worker/protocol';
@@ -207,7 +207,7 @@
   const blockKey = $derived(history ? history.blockMoves.map((s) => s.id).join(',') : '');
   const blockSeries = $derived<ChartSeries[]>(
     (history?.blockMoves ?? []).map((s) => ({
-      label: s.id === 0 ? 'Other species' : `Species ${s.id}`,
+      label: speciesName(s.id),
       color: speciesColor(s.id),
     })),
   );
@@ -538,8 +538,8 @@
       <details class="about" open={explain}><summary>What this shows</summary><p class="teaches">
         Every brain link keeps a running count of how many samples it has been in the population. A link can last
         a long time by chance alone, so a neutral shadow runs alongside: a copy of the population with the same
-        births and deaths, but where nothing is favoured. The survival chart takes every link that first appeared
-        at least 20 samples ago and shows how many are still carried. Above the shadow, selection is keeping new
+        births and deaths, but where nothing is favoured: each newborn's shadow copies a random creature old enough to breed. The survival chart takes every link that first appeared
+        at least 600 ticks ago and shows how many are still carried. Above the shadow, selection is keeping new
         wiring that chance would lose; below it, selection is purging new wiring.
       </p></details>
       <div class="charts">
@@ -604,7 +604,7 @@
           <thead>
             <tr>
               <th>Biome</th><th>Land</th><th>Creatures</th><th>Share</th><th></th>
-              <th>Size</th><th>Fur</th><th>Defenses</th><th>Speed</th><th>Diet</th>
+              <th>Size</th><th>Fur</th><th>Defenses</th><th>Speed</th><th>Diet</th><th title="Share of its energy a parent gives each child">Gives</th><th title="How full a creature must be to breed">Breeds at</th>
             </tr>
           </thead>
           <tbody>
@@ -624,13 +624,15 @@
                 <td>{biome.count > 0 ? biome.meanDefense.toFixed(2) : '-'}</td>
                 <td>{biome.count > 0 ? biome.meanSpeed.toFixed(2) : '-'}</td>
                 <td>{biome.count > 0 ? biome.meanDiet.toFixed(2) : '-'}</td>
+                <td>{biome.count > 0 ? percent(biome.meanInvestment) : '-'}</td>
+                <td>{biome.count > 0 ? percent(biome.meanReadiness) : '-'}</td>
               </tr>
             {/each}
           </tbody>
         </table>
         <p class="caption">
           Land is each biome's share of the dry land; share is its part of the population. A biome holding far
-          less than its share of land is hard to live in. Diet runs from 0 (plants only) to 1 (meat only).
+          less than its share of land is hard to live in. Diet runs from 0 (plants only) to 1 (meat only). Gives is the share of its energy a parent hands to each child; Breeds at is how full a creature must be to breed.
         </p>
       {:else}
         <p class="empty">No creatures yet.</p>
@@ -725,12 +727,15 @@
     overflow-y: auto;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 560px), 1fr));
+    /* Later cards fill the gaps a full-width card leaves, so the grid has no holes. */
+    grid-auto-flow: dense;
     align-content: start;
     gap: 14px;
     padding: 14px;
   }
 
   .card {
+    align-self: start;
     min-width: 0;
     padding: 14px;
     background: var(--panel);

@@ -18,12 +18,26 @@ export interface Genes {
   fur: number;
   /** Spines or poison, from 0 (none) to 1: whatever bites it is hurt in return. Costs energy to keep. */
   defense: number;
+  /**
+   * Share of its energy a parent hands to each child, from config.minInvestment
+   * to config.maxInvestment. Low gives many thinly fed young; high gives few
+   * well-fed ones and leaves the parent short.
+   */
+  investment: number;
+  /**
+   * How full its energy store must be, as a share of the most it can hold,
+   * before a creature can breed. Low breeds early and often, from a smaller
+   * store; high waits and saves up.
+   */
+  readiness: number;
   /** Standard deviation of the changes applied to each gene at birth. */
   mutationRate: number;
 }
 
 /** Hue shifts by this fraction of the mutation rate, slowly enough that relatives look alike. */
 const HUE_MUTATION_SCALE = 0.5;
+/** The life-history genes shift by this fraction of the mutation rate: their ranges are narrow. */
+const LIFE_HISTORY_MUTATION_SCALE = 0.5;
 
 /**
  * Clamp a gene to its limits. The result is rounded to 32-bit precision, the
@@ -45,6 +59,8 @@ export function founderGenes(rng: Rng, config: SimConfig): Genes {
       hue: rng.float(),
       fur: 0,
       defense: 0,
+      investment: config.offspringShare,
+      readiness: config.reproduceThreshold,
       mutationRate: config.initialMutationRate,
     },
     rng,
@@ -66,6 +82,8 @@ export function crossGenes(a: Genes, b: Genes, rng: Rng): Genes {
     hue: pick('hue'),
     fur: pick('fur'),
     defense: pick('defense'),
+    investment: pick('investment'),
+    readiness: pick('readiness'),
     mutationRate: Math.fround((a.mutationRate + b.mutationRate) / 2),
   };
 }
@@ -91,12 +109,40 @@ export function mutateGenes(parent: Genes, rng: Rng, config: SimConfig): Genes {
     // Like diet, fur shifts by a fixed step so it can grow from nothing.
     fur: clamp(parent.fur + rng.gaussian() * rate, 0, 1),
     defense: clamp(parent.defense + rng.gaussian() * rate, 0, 1),
+    ...lifeHistory(parent, rate, rng, config),
     mutationRate: clamp(
       rate * Math.exp(rng.gaussian() * rate),
       config.minMutationRate,
       config.maxMutationRate,
     ),
   };
+}
+
+/**
+ * A child's investment and readiness genes. They shift by a fixed step, like
+ * diet. With config.lifeHistoryMutates off they stay at the settings' values
+ * for everyone, as a control: what the genes do then is drift-free by
+ * construction. The random numbers are drawn either way, so the rest of a run
+ * goes the same with the switch on or off.
+ */
+function lifeHistory(parent: Genes, rate: number, rng: Rng, config: SimConfig): Pick<Genes, 'investment' | 'readiness'> {
+  const step = rate * LIFE_HISTORY_MUTATION_SCALE;
+  // The limits always take in the founders' values, so a setting beyond them
+  // (a readiness above 1, say, for a world with no births) holds for founders.
+  const investment = clamp(
+    parent.investment + rng.gaussian() * step,
+    Math.min(config.minInvestment, config.offspringShare),
+    Math.max(config.maxInvestment, config.offspringShare),
+  );
+  const readiness = clamp(
+    parent.readiness + rng.gaussian() * step,
+    Math.min(config.minReadiness, config.reproduceThreshold),
+    Math.max(config.maxReadiness, config.reproduceThreshold),
+  );
+  if (!config.lifeHistoryMutates) {
+    return { investment: Math.fround(config.offspringShare), readiness: Math.fround(config.reproduceThreshold) };
+  }
+  return { investment, readiness };
 }
 
 /** Energy locked up in a body of this size. It becomes meat when the creature dies. */

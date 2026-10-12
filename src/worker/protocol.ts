@@ -67,6 +67,9 @@ export interface Inspection {
   fur: number;
   // Spines or poison, from 0 to 1.
   defense: number;
+  /** Share of its energy it hands to each child, and how full it must be to breed (see Genes). */
+  investment: number;
+  readiness: number;
   /** What it is holding (see Held in creatures.ts), and the energy of it if it is food. */
   held: number;
   heldEnergy: number;
@@ -230,6 +233,8 @@ export interface HistoryData {
   meanDiet: Float32Array;
   meanFur: Float32Array;
   meanDefense: Float32Array;
+  meanInvestment: Float32Array;
+  meanReadiness: Float32Array;
   toolHolders: Float32Array;
   foodHolders: Float32Array;
   meatEaters: Float32Array;
@@ -250,6 +255,8 @@ export interface HistoryData {
   spreadDiet: Float32Array;
   spreadFur: Float32Array;
   spreadDefense: Float32Array;
+  spreadInvestment: Float32Array;
+  spreadReadiness: Float32Array;
   /** See History in stats.ts for what each of these holds. */
   deathsStarved: Float32Array;
   deathsOldAge: Float32Array;
@@ -343,6 +350,8 @@ export interface BiomeView {
   meanFur: number;
   meanDefense: number;
   meanDiet: number;
+  meanInvestment: number;
+  meanReadiness: number;
 }
 
 /** Bars in the Lab's diet histogram. */
@@ -381,5 +390,7 @@ export type FromWorker =
   | { type: 'history'; history: HistoryData }
   | { type: 'tree'; tree: TreeData }
   | { type: 'saved'; json: string; tick: number; seed: string }
+  /** A saved world has replaced the running one; these are its settings. */
+  | { type: 'loaded'; config: SimConfig }
   | { type: 'report'; json: string; fileName: string; summary: ReportSummary }
   | { type: 'error'; message: string };

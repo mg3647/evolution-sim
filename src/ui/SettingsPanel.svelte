@@ -95,6 +95,12 @@
     return Number.isInteger(value) ? value.toLocaleString() : String(Number(value.toPrecision(4)));
   }
 
+  /** A setting's value as shown: its name for a choice, else the number. */
+  function shownValue(setting: SettingInfo, value: unknown): string {
+    const choice = setting.choices?.[(value as number) - setting.min];
+    return choice ?? format(value as number);
+  }
+
   function changed(key: keyof SimConfig, event: Event) {
     const value = Number((event.currentTarget as HTMLInputElement).value);
     if (Number.isFinite(value)) onChange(key, value);
@@ -226,22 +232,31 @@
           <span class="name">
             {setting.label}{#if key}<span class="tag tag-{key.tag.toLowerCase()}" title="{KEY_TAG_HINTS[key.tag]}. {key.why}">{key.tag}</span>{/if}{#if isWaiting(setting.key)}<span
                 class="restart waiting"
-                title="The running world still uses {format(running?.[setting.key] as number)}. Press Restart with these settings to use {format(config[setting.key] as number)}."
+                title="The running world still uses {shownValue(setting, running?.[setting.key])}. Press Restart with these settings to use {shownValue(setting, config[setting.key])}."
                 >waiting for restart</span
               >{:else if restart}<span class="restart">restart</span>{/if}
           </span>
-          <input
-            type="range"
-            min={setting.min}
-            max={setting.max}
-            step={setting.step}
-            value={config[setting.key]}
-            aria-label={setting.label}
-            oninput={(event) => changed(setting.key, event)}
-          />
-          <span class="value" class:changed={isChanged(setting.key)}>
-            {format(config[setting.key] as number)}
-          </span>
+          {#if setting.choices}
+            <select class="choice" value={config[setting.key]} aria-label={setting.label} onchange={(event) => changed(setting.key, event)}>
+              {#each setting.choices as choice, k (k)}
+                <option value={setting.min + k}>{choice}</option>
+              {/each}
+            </select>
+            <span class="value" class:changed={isChanged(setting.key)}></span>
+          {:else}
+            <input
+              type="range"
+              min={setting.min}
+              max={setting.max}
+              step={setting.step}
+              value={config[setting.key]}
+              aria-label={setting.label}
+              oninput={(event) => changed(setting.key, event)}
+            />
+            <span class="value" class:changed={isChanged(setting.key)}>
+              {format(config[setting.key] as number)}
+            </span>
+          {/if}
         </div>
         {#if explained === setting.key}
           <div class="explainer">
@@ -251,13 +266,14 @@
               <p><span class="tag tag-{key.tag.toLowerCase()}">{key.tag}</span> {key.why}</p>
             {/if}
             <p class="facts">
-              Default {format(defaultConfig[setting.key] as number)} · slider from {format(setting.min)} to
-              {format(setting.max)} ·
+              Default {shownValue(setting, defaultConfig[setting.key])} ·
+              {#if setting.choices}one of {setting.choices.join(', ')}{:else}slider from {format(setting.min)} to
+                {format(setting.max)}{/if} ·
               {restart ? 'applies on the next restart' : 'applies at once'}
             </p>
             {#if isWaiting(setting.key)}
               <p class="facts waiting-note">
-                Waiting for a restart: the running world still uses {format(running?.[setting.key] as number)}.
+                Waiting for a restart: the running world still uses {shownValue(setting, running?.[setting.key])}.
               </p>
             {/if}
             {#if isChanged(setting.key)}
@@ -570,6 +586,11 @@
   input[type='number'] {
     width: 100%;
     padding: 1px 4px;
+    font-size: 12px;
+  }
+
+  .choice {
+    width: 100%;
     font-size: 12px;
   }
 

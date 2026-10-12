@@ -1,28 +1,34 @@
-import { speciesHue } from '../render/renderer';
+import { speciesRgb } from '../render/speciesPalette';
 import type { HistoryData } from '../worker/protocol';
 
-/** A hex colour for a hue, saturation and lightness in [0, 1]; the charts need hex. */
-export function hslToHex(h: number, s: number, l: number): string {
-  const a = s * Math.min(l, 1 - l);
-  const channel = (n: number) => {
-    const k = (n + h * 12) % 12;
-    const value = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
-    return Math.round(value * 255)
-      .toString(16)
-      .padStart(2, '0');
-  };
-  return `#${channel(0)}${channel(8)}${channel(4)}`;
+/** The colour a species is drawn in everywhere, as CSS hex; id 0 stands for the smaller species lumped together. */
+export function speciesColor(id: number): string {
+  return `#${speciesRgb(id).toString(16).padStart(6, '0')}`;
 }
 
-/** The colour a species is drawn in everywhere; id 0 stands for the smaller species lumped together. */
-export function speciesColor(id: number): string {
-  return id === 0 ? '#5a6672' : hslToHex(speciesHue(id), 0.7, 0.6);
+const ONSETS = ['B', 'D', 'F', 'G', 'K', 'L', 'M', 'N', 'P', 'R', 'S', 'T', 'V', 'Z', 'Th', 'Sh'];
+const VOWELS = ['a', 'e', 'i', 'o', 'u', 'y', 'au', 'ei'];
+const MIDDLES = ['l', 'r', 'n', 'm', 'v', 's', 'th', 'd', 'k', 'z', 'b', 't', 'x', 'ph', 'll', 'nd'];
+const ENDINGS = ['', 'n', 'ra', 's'];
+
+/**
+ * A short made-up name for a species, such as "Velora", so one can be followed
+ * from view to view. The same id always gives the same name, and no two ids
+ * below 65,536 share one: the id is shuffled by an odd multiplier (a one-to-one
+ * map on 16 bits), then read off as onset, vowel, middle, vowel and ending.
+ */
+export function speciesName(id: number): string {
+  if (id <= 0) return 'Smaller species';
+  let x = Math.imul(id, 40503) & 0xffff;
+  const pick = (list: string[]) => {
+    const part = list[x % list.length]!;
+    x = Math.floor(x / list.length);
+    return part;
+  };
+  return pick(ONSETS) + pick(VOWELS) + pick(MIDDLES) + pick(VOWELS) + pick(ENDINGS);
 }
 
 /** The series of the species stream chart, one per species the history follows. */
 export function streamSeries(history: HistoryData | null): { label: string; color: string }[] {
-  return (history?.species ?? []).map((s) => ({
-    label: s.id === 0 ? 'Smaller species' : `Species ${s.id}`,
-    color: speciesColor(s.id),
-  }));
+  return (history?.species ?? []).map((s) => ({ label: speciesName(s.id), color: speciesColor(s.id) }));
 }
