@@ -6,7 +6,7 @@ import { loadWorld, saveWorld } from './serialize';
 import { createWiringTally, sampleWiring, } from './wiring';
 import { createWorld, hashWorld, step } from './world';
 
-const genes = { size: 1, speed: 1, sensorRange: 1, diet: 0, hue: 0, fur: 0, defense: 0, mutationRate: 0.1 };
+const genes = { size: 1, speed: 1, sensorRange: 1, diet: 0, hue: 0, fur: 0, defense: 0, investment: 0.5, readiness: 0.8, mutationRate: 0.1 };
 const WINDOW = 600;
 const link = (innovation: number) => ({ innovation, from: 0, to: 80, weight: 1, enabled: true });
 

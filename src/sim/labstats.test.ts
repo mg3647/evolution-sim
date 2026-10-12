@@ -131,7 +131,7 @@ describe('the species stream', () => {
 describe('the density history', () => {
   function herd(x: number, y: number, count: number) {
     const creatures = createCreatures(count);
-    const genes = { size: 1, speed: 1, sensorRange: 1, diet: 0, hue: 0, fur: 0, defense: 0, mutationRate: 0.05 };
+    const genes = { size: 1, speed: 1, sensorRange: 1, diet: 0, hue: 0, fur: 0, defense: 0, investment: 0.5, readiness: 0.8, mutationRate: 0.05 };
     for (let k = 0; k < count; k++) {
       spawnCreature(creatures, { x, y, heading: 0, energy: 1, genes, brain: compileBrain([], []) });
     }
@@ -162,7 +162,7 @@ describe('the density history', () => {
 });
 
 describe('behaviour map', () => {
-  const genes = { size: 1, speed: 1, sensorRange: 1, diet: 0, hue: 0, fur: 0, defense: 0, mutationRate: 0.05 };
+  const genes = { size: 1, speed: 1, sensorRange: 1, diet: 0, hue: 0, fur: 0, defense: 0, investment: 0.5, readiness: 0.8, mutationRate: 0.05 };
 
   it('counts each creature into its diet and speed cell under its species', () => {
     const creatures = createCreatures(8);

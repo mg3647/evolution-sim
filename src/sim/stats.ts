@@ -21,6 +21,8 @@ export interface History {
   meanDiet: Float32Array;
   meanFur: Float32Array;
   meanDefense: Float32Array;
+  meanInvestment: Float32Array;
+  meanReadiness: Float32Array;
   /** Creatures holding a stone or branch, and creatures holding food. */
   toolHolders: Float32Array;
   foodHolders: Float32Array;
@@ -44,6 +46,8 @@ export interface History {
   spreadDiet: Float32Array;
   spreadFur: Float32Array;
   spreadDefense: Float32Array;
+  spreadInvestment: Float32Array;
+  spreadReadiness: Float32Array;
   /** Deaths per 1,000 ticks since the previous sample, by cause. Other is plague, meteors and fire. */
   deathsStarved: Float32Array;
   deathsOldAge: Float32Array;
@@ -235,6 +239,8 @@ export const HISTORY_SERIES = [
   'meanDiet',
   'meanFur',
   'meanDefense',
+  'meanInvestment',
+  'meanReadiness',
   'toolHolders',
   'foodHolders',
   'meatEaters',
@@ -252,6 +258,8 @@ export const HISTORY_SERIES = [
   'spreadDiet',
   'spreadFur',
   'spreadDefense',
+  'spreadInvestment',
+  'spreadReadiness',
   'deathsStarved',
   'deathsOldAge',
   'deathsKilled',
@@ -298,6 +306,8 @@ export interface Sample {
   meanDiet: number;
   meanFur: number;
   meanDefense: number;
+  meanInvestment: number;
+  meanReadiness: number;
   toolHolders: number;
   foodHolders: number;
   meatEaters: number;
@@ -315,6 +325,8 @@ export interface Sample {
   spreadDiet: number;
   spreadFur: number;
   spreadDefense: number;
+  spreadInvestment: number;
+  spreadReadiness: number;
   deathsStarved: number;
   deathsOldAge: number;
   deathsKilled: number;
@@ -365,6 +377,8 @@ export function createHistory(interval: number, capacity: number): History {
     meanDiet: new Float32Array(capacity),
     meanFur: new Float32Array(capacity),
     meanDefense: new Float32Array(capacity),
+    meanInvestment: new Float32Array(capacity),
+    meanReadiness: new Float32Array(capacity),
     toolHolders: new Float32Array(capacity),
     foodHolders: new Float32Array(capacity),
     meatEaters: new Float32Array(capacity),
@@ -382,6 +396,8 @@ export function createHistory(interval: number, capacity: number): History {
     spreadDiet: new Float32Array(capacity),
     spreadFur: new Float32Array(capacity),
     spreadDefense: new Float32Array(capacity),
+    spreadInvestment: new Float32Array(capacity),
+    spreadReadiness: new Float32Array(capacity),
     deathsStarved: new Float32Array(capacity),
     deathsOldAge: new Float32Array(capacity),
     deathsKilled: new Float32Array(capacity),

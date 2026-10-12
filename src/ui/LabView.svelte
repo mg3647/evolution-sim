@@ -604,7 +604,7 @@
           <thead>
             <tr>
               <th>Biome</th><th>Land</th><th>Creatures</th><th>Share</th><th></th>
-              <th>Size</th><th>Fur</th><th>Defenses</th><th>Speed</th><th>Diet</th>
+              <th>Size</th><th>Fur</th><th>Defenses</th><th>Speed</th><th>Diet</th><th title="Share of its energy a parent gives each child">Gives</th><th title="How full a creature must be to breed">Breeds at</th>
             </tr>
           </thead>
           <tbody>
@@ -624,6 +624,8 @@
                 <td>{biome.count > 0 ? biome.meanDefense.toFixed(2) : '-'}</td>
                 <td>{biome.count > 0 ? biome.meanSpeed.toFixed(2) : '-'}</td>
                 <td>{biome.count > 0 ? biome.meanDiet.toFixed(2) : '-'}</td>
+                <td>{biome.count > 0 ? biome.meanInvestment.toFixed(2) : '-'}</td>
+                <td>{biome.count > 0 ? biome.meanReadiness.toFixed(2) : '-'}</td>
               </tr>
             {/each}
           </tbody>

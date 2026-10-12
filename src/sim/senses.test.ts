@@ -40,7 +40,7 @@ function setup(overrides: Partial<SimConfig> = {}) {
       y,
       heading,
       energy: 25,
-      genes: { size, speed: 1, sensorRange: 1, diet, hue, fur: 0, defense: 0, mutationRate: 0.05 },
+      genes: { size, speed: 1, sensorRange: 1, diet, hue, fur: 0, defense: 0, investment: 0.5, readiness: 0.8, mutationRate: 0.05 },
       brain,
       age: 900,
     });

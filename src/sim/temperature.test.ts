@@ -131,7 +131,7 @@ describe('the new senses', () => {
         y,
         heading: 0,
         energy: 25,
-        genes: { size: 1, speed: 1, sensorRange: 1, diet: 0.2, hue, fur: 0, defense: 0, mutationRate: 0.05 },
+        genes: { size: 1, speed: 1, sensorRange: 1, diet: 0.2, hue, fur: 0, defense: 0, investment: 0.5, readiness: 0.8, mutationRate: 0.05 },
         brain,
       });
     const sense = (i: number, warmth = 0) => {

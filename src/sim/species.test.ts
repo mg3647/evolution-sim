@@ -11,7 +11,7 @@ import { createWorld, step } from './world';
 // Fixed settings, so these tests do not move when the defaults are retuned.
 const config = { ...defaultConfig, speciesThreshold: 1, speciesMinAge: 1000, speciesMinMembers: 3 };
 const NOW = 5000;
-const baseGenes: Genes = { size: 1, speed: 1, sensorRange: 1, diet: 0.1, hue: 0.5, fur: 0, defense: 0, mutationRate: 0.05 };
+const baseGenes: Genes = { size: 1, speed: 1, sensorRange: 1, diet: 0.1, hue: 0.5, fur: 0, defense: 0, investment: 0.5, readiness: 0.8, mutationRate: 0.05 };
 
 /** A population and its family tree, built by hand. */
 function setup() {

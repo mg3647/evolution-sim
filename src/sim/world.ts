@@ -147,6 +147,12 @@ export interface World {
   parents: { count: number; size: number; speed: number; sensorRange: number; diet: number };
   /** Health that biters have lost to their victims' defenses since the world was created. */
   defended: number;
+  /**
+   * Since the world was created: tries to breed that failed because the gift
+   * was too small to build a body, energy children started with in all, and
+   * deaths before breeding age.
+   */
+  lifeHistory: { tooSmall: number; childEnergy: number; juvenileDeaths: number };
   /** Wildfires so far, and how much is burning now. */
   fires: FireTally;
   /** What creatures have done with blocks since the world was created. */
@@ -322,6 +328,7 @@ export function createWorld(config: SimConfig): World {
     mateCandidates: [],
     reseeded: 0,
     defended: 0,
+    lifeHistory: { tooSmall: 0, childEnergy: 0, juvenileDeaths: 0 },
     fires: createFireTally(),
     blockTally: createBlockTally(),
     blockMoves: {},
@@ -664,7 +671,7 @@ export function step(world: World): void {
     // creature that wishes for a mate waits for one rather than breeding alone. Alone, the birth is
     // now; with a mate, who is near enough and willing is settled once everyone has moved.
     if (
-      energy >= config.reproduceThreshold * maxEnergy &&
+      energy >= creatures.readiness[i]! * maxEnergy &&
       age >= config.minReproduceAge &&
       creatures.count < config.maxCreatures
     ) {
@@ -704,6 +711,7 @@ export function step(world: World): void {
       else world.deaths.starved++;
     } else world.deaths.oldAge++;
     lab.died++;
+    if (creatures.age[i]! < config.minReproduceAge) world.lifeHistory.juvenileDeaths++;
     lab.ageAtDeath += creatures.age[i]!;
     lab.childrenAtDeath += creatures.children[i]!;
     // The body and whatever it had stored stay behind as meat, and what it held falls where it died.
@@ -905,7 +913,7 @@ export function clearWorldWalls(world: World): void {
  * holds `energy`. Returns the energy the parent gives up.
  */
 function giveBirth(world: World, parent: number, energy: number): number {
-  return bear(world, parent, -1, energy * world.config.offspringShare);
+  return bear(world, parent, -1, energy * world.creatures.investment[parent]!);
 }
 
 /**
@@ -916,7 +924,7 @@ function canBreed(world: World, a: number): boolean {
   const { creatures, config } = world;
   return (
     creatures.health[a]! > 0 &&
-    creatures.energy[a]! >= config.reproduceThreshold * maxEnergyFor(creatures.size[a]!, config) &&
+    creatures.energy[a]! >= creatures.readiness[a]! * maxEnergyFor(creatures.size[a]!, config) &&
     creatures.age[a]! >= config.minReproduceAge &&
     creatures.count < config.maxCreatures
   );
@@ -973,9 +981,9 @@ function pairUp(world: World): void {
       bestGap = gap;
     });
     if (best < 0) continue;
-    // Each offers half the usual share, so a child of two starts with what a child of one does.
-    const offerA = (creatures.energy[a]! * config.offspringShare) / 2;
-    const offerB = (creatures.energy[best]! * config.offspringShare) / 2;
+    // Each offers half its own share, so a child of two like parents starts with what a child of one does.
+    const offerA = (creatures.energy[a]! * creatures.investment[a]!) / 2;
+    const offerB = (creatures.energy[best]! * creatures.investment[best]!) / 2;
     const carrier = rng.chance(0.5) ? a : best;
     const given = bear(world, carrier, carrier === a ? best : a, offerA + offerB);
     if (given > 0) {
@@ -1024,7 +1032,11 @@ function bear(world: World, carrier: number, other: number, offered: number): nu
   const given = Math.min(offered, (childMax + body) / (1 - config.birthCost));
   const lost = given * config.birthCost;
   // Too little to build a body: no birth this tick.
-  if (given - lost <= body) return 0;
+  if (given - lost <= body) {
+    world.lifeHistory.tooSmall++;
+    return 0;
+  }
+  world.lifeHistory.childEnergy += given - lost - body;
   ledger.heatOut += lost;
 
   // The child appears just behind the carrier rather than on top of it.
@@ -1235,6 +1247,8 @@ function sampleHistory(world: World): void {
     meanDiet,
     meanFur: meanOf(creatures.fur, creatures),
     meanDefense: meanOf(creatures.defense, creatures),
+    meanInvestment: meanOf(creatures.investment, creatures),
+    meanReadiness: meanOf(creatures.readiness, creatures),
     toolHolders,
     foodHolders,
     meatEaters,
@@ -1252,6 +1266,8 @@ function sampleHistory(world: World): void {
     spreadDiet,
     spreadFur: spreadOf(creatures.fur, creatures),
     spreadDefense: spreadOf(creatures.defense, creatures),
+    spreadInvestment: spreadOf(creatures.investment, creatures),
+    spreadReadiness: spreadOf(creatures.readiness, creatures),
   }, speciesCounts, movesBySpecies);
   world.blockMoves = {};
   world.parents = { count: 0, size: 0, speed: 0, sensorRange: 0, diet: 0 };

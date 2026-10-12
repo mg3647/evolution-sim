@@ -9,7 +9,7 @@ reads them back. Adding a file here does not rebuild the site.
 `<date>_<time>_<seed>_tick<N>.json`, for example
 `2026-10-11_15-00-00_genesis_tick60000.json`.
 
-## What is inside (reportVersion 2)
+## What is inside (reportVersion 3)
 
 | Part | What it holds |
 | --- | --- |
@@ -22,7 +22,7 @@ reads them back. Adding a file here does not rebuild the site.
 | `series` | Every charted statistic over the whole run, as columns (`names[i]` matches `data[i]`), thinned to at most 200 points. `tick` is the first column. |
 | `species` | Each species' first and last tick seen, peak size and final size. |
 | `events` | The most recent entries of the event log (the log keeps 30). |
-| `final` | Where the population ended: trait spreads (mean, 10th, 50th, 90th percentile), generations, creatures per biome against land share, diet histogram, and cumulative totals (births, deaths by cause, mating, blocks, fires). |
+| `final` | Where the population ended: trait spreads (mean, 10th, 50th, 90th percentile), generations, creatures per biome against land share, diet histogram, and cumulative totals (births, deaths by cause, mating, blocks, fires). Version 3 adds the `investment` and `readiness` genes to the traits, and to the totals `birthsTooSmall` (tries to breed whose gift could not build a body), `childStartEnergy` (mean energy a child started with) and `juvenileDeaths` (deaths before breeding age). |
 | `wiring` | Added in version 2. Brain habits: which senses are linked to which actions (directly or through hidden neurons). `common` is the most widespread habits now, with `share` and mean `effect` (above 0, more of the sense gives more of the action). `spread` and `faded` are the habits whose share changed most since the app started sampling (`startShare`); a loaded save starts sampling again. `breeding` compares young per 1,000 ticks lived among adults: `traits` the upper half against the lower half, `habits` those with a habit against those without, keeping only clear differences (`z` at least 2 either way). These are associations among the living, not proof of cause. |
 
 ## Comparing runs

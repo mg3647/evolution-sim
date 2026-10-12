@@ -20,7 +20,7 @@ import type { World } from './world';
  */
 
 /** Bumped whenever the saved layout changes. */
-export const SAVE_VERSION = 18;
+export const SAVE_VERSION = 19;
 /**
  * Oldest save this version still opens. Saves from 14 on load with the newer
  * fields at their neutral values (settings added since take their defaults,
@@ -28,7 +28,9 @@ export const SAVE_VERSION = 18;
  * on, mating is off), so they play as they did before. Brains from before 17
  * are renumbered to make room for the new senses and actions. Saves from before
  18 have no heavy-block grips under way, and their wiring tallies are moved
- from sample numbers to ticks.
+ from sample numbers to ticks. Saves from before 19 give every creature the
+ investment and readiness genes of that save's own settings, and keep them
+ fixed, so they breed as they did before.
  */
 export const OLDEST_LOADABLE_VERSION = 14;
 
@@ -65,6 +67,8 @@ const CREATURE_FIELDS = [
   'hue',
   'fur',
   'defense',
+  'investment',
+  'readiness',
   'mutationRate',
 ] as const;
 
@@ -220,6 +224,8 @@ export interface SavedWorld {
   structural?: World['structural'];
   reseeded: number;
   defended: number;
+  /** Absent in saves from before 19. */
+  lifeHistory?: World['lifeHistory'];
   fires: World['fires'];
   blockTally: World['blockTally'];
   blockMoves: World['blockMoves'];
@@ -291,6 +297,7 @@ export function saveWorld(world: World): SavedWorld {
     structural: { ...world.structural },
     reseeded: world.reseeded,
     defended: world.defended,
+    lifeHistory: { ...world.lifeHistory },
     fires: { ...world.fires },
     blockTally: { ...world.blockTally },
     blockMoves: { ...world.blockMoves },
@@ -333,6 +340,8 @@ export function loadWorld(savedWorld: SavedWorld): World {
   }
   // Settings added since the save was made take their defaults.
   const config = { ...defaultConfig, ...saved.config };
+  // Before 19 everyone bred by the same two settings; an old world keeps doing so.
+  if (saved.version < 19) config.lifeHistoryMutates = false;
   const cells = saved.field.energy.length;
   const cols = Math.max(1, Math.round(config.worldWidth / config.plantCellSize));
   const rows = Math.max(1, Math.round(config.worldHeight / config.plantCellSize));
@@ -384,6 +393,8 @@ export function loadWorld(savedWorld: SavedWorld): World {
   // A field added since the save was made starts at its value for a newborn.
   for (const name of CREATURE_FIELDS) if (saved.creatures[name]) creatures[name].set(saved.creatures[name]);
   if (!saved.creatures.energyLast) creatures.energyLast.set(creatures.energy.subarray(0, count));
+  if (!saved.creatures.investment) creatures.investment.fill(config.offspringShare, 0, count);
+  if (!saved.creatures.readiness) creatures.readiness.fill(config.reproduceThreshold, 0, count);
   creatures.brain = saved.creatures.brains.map((savedBrain) => {
     const brain = compileBrain(
       savedBrain.links.map((link) => ({ ...link })),
@@ -445,6 +456,7 @@ export function loadWorld(savedWorld: SavedWorld): World {
     mateCandidates: [],
     reseeded: saved.reseeded,
     defended: saved.defended,
+    lifeHistory: saved.lifeHistory ? { ...saved.lifeHistory } : { tooSmall: 0, childEnergy: 0, juvenileDeaths: 0 },
     fires: { ...saved.fires },
     blockTally: { ...saved.blockTally },
     blockMoves: { ...saved.blockMoves },

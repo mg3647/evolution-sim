@@ -38,7 +38,7 @@ const idler = () =>
 
 function duel(defense: number, overrides: Partial<SimConfig> = {}, victimSize = 1) {
   const world = createWorld({ ...arena, ...overrides });
-  const genes = { size: 1, speed: 1, sensorRange: 1, diet: 1, hue: 0.9, fur: 0, defense: 0, mutationRate: 0.05 };
+  const genes = { size: 1, speed: 1, sensorRange: 1, diet: 1, hue: 0.9, fur: 0, defense: 0, investment: 0.5, readiness: 0.8, mutationRate: 0.05 };
   const attacker = spawnCreature(world.creatures, { x: 200, y: 200, heading: 0, energy: 50, genes, brain: biter() });
   const victim = spawnCreature(world.creatures, {
     x: 200 + world.config.creatureRadius * (1 + victimSize) + 2,

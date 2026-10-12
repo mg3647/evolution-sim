@@ -21,6 +21,8 @@
     { id: 'diet', label: 'Diet', mean: 'meanDiet', spread: 'spreadDiet', color: '#e0566a', hint: '0 eats only plants, 1 only meat', selection: 'Diet (0 plants, 1 meat)' },
     { id: 'fur', label: 'Fur', mean: 'meanFur', spread: 'spreadFur', color: '#f2f2f2', hint: 'Thickness of coat, from 0 (none) to 1' },
     { id: 'defense', label: 'Defenses', mean: 'meanDefense', spread: 'spreadDefense', color: '#e8c468', hint: 'Spines or poison, from 0 (none) to 1' },
+    { id: 'investment', label: 'Gives each child', mean: 'meanInvestment', spread: 'spreadInvestment', color: '#7fd6a4', hint: 'Share of its energy a parent hands to each child' },
+    { id: 'readiness', label: 'Breeds when full to', mean: 'meanReadiness', spread: 'spreadReadiness', color: '#9fc4e8', hint: 'How full its energy store must be before it can breed' },
   ];
 </script>
 
