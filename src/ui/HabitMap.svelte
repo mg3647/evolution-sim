@@ -279,7 +279,7 @@
             <b>{b.withoutRate.toFixed(2)}</b> for those without, comparing within each species
             ({times(b.withoutRate > 0 ? b.withRate / b.withoutRate : Infinity)}).
             <span class="muted">
-              {Math.abs(b.z) >= 2 ? 'A clear difference' : 'Could be chance'}
+              {b.standsOut ? 'Worth a look: it stands out even allowing for the many habits compared' : 'Could be chance'}
               ({b.withCount.toLocaleString()} with, {b.withoutCount.toLocaleString()} without).
             </span>
           </p>

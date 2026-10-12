@@ -12,7 +12,7 @@
   let { breeding, onPick }: { breeding: BreedingLinks | null; onPick?: (pathway: number) => void } = $props();
 
   const ratio = (s: BreedingSplit) => (s.withoutRate > 0 ? s.withRate / s.withoutRate : s.withRate > 0 ? Infinity : 1);
-  const clear = (s: BreedingSplit) => Math.abs(s.z) >= 2;
+  const clear = (s: BreedingSplit) => s.standsOut;
 
   /** Width and offset of a bar drawn out from the middle, for a ratio of young. */
   function bar(r: number): string {
@@ -47,7 +47,7 @@
       <h3>Traits: upper half against lower half</h3>
       <ul>
         {#each traits as t (t.trait)}
-          <li class:faint={!clear(t)} title="{t.withCount.toLocaleString()} in the upper half, {t.withoutCount.toLocaleString()} in the lower; {clear(t) ? 'a clear difference' : 'could be chance'}">
+          <li class:faint={!clear(t)} title="{t.withCount.toLocaleString()} in the upper half, {t.withoutCount.toLocaleString()} in the lower; {clear(t) ? 'worth a look: stands out after allowing for chance' : 'could be chance'}">
             <span class="label">{TRAIT_HALVES[t.trait][0]}</span>
             <span class="track"><span class="mid"></span><span class="fill" style={bar(t.r)}></span></span>
             <span class="value">{times(t.r)}</span>
@@ -58,7 +58,7 @@
     <div>
       <h3>Habits that go with more young</h3>
       {#if habits.helps.length === 0}
-        <p class="empty">None stands out clearly.</p>
+        <p class="empty">None stands out once chance is allowed for.</p>
       {:else}
         <ul>
           {#each habits.helps as h (h.pathway)}
@@ -72,7 +72,7 @@
       {/if}
       <h3>Habits that go with fewer</h3>
       {#if habits.hurts.length === 0}
-        <p class="empty">None stands out clearly.</p>
+        <p class="empty">None stands out once chance is allowed for.</p>
       {:else}
         <ul>
           {#each habits.hurts as h (h.pathway)}
@@ -90,6 +90,7 @@
     Each bar is how many young one side has for every one the other side has: right of the line, more. Traits split
     adults at the middle value; habits compare those with it to those without. Every comparison is made within each species and then
     pooled, so a habit gets no credit just for being common in a species that is thriving. Faint rows could be chance.
+    Habits listed stand out even allowing for how many are compared at once, but about 1 in 20 of them may still be chance.
     These are associations among the living, not proof: a habit can ride along with another that matters.
   </p>
 {/if}

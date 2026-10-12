@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   breedingLinks,
+  markStandouts,
+  twoSidedP,
+  type BreedingSplit,
   createAdoptionHistory,
   pathwayIndex,
   pathwayStats,
@@ -147,5 +150,31 @@ describe('breedingLinks', () => {
     const habit = breedingLinks(c, habits, 100).habits[0]!;
     expect(Math.abs(habit.z)).toBeLessThan(1);
     expect(habit.withRate).toBeCloseTo(habit.withoutRate, 1);
+  });
+});
+
+describe('allowing for many comparisons', () => {
+  const split = (z: number): BreedingSplit => ({ withRate: 1, withoutRate: 1, withCount: 10, withoutCount: 10, z, standsOut: false });
+
+  it('gives the usual two-sided chances', () => {
+    expect(twoSidedP(0)).toBeCloseTo(1, 6);
+    expect(twoSidedP(1.96)).toBeCloseTo(0.05, 3);
+    expect(twoSidedP(-2.576)).toBeCloseTo(0.01, 3);
+  });
+
+  it('keeps a strong difference but drops one that is only clear on its own among many', () => {
+    const splits = [split(6), split(-2.2), ...Array.from({ length: 998 }, () => split(0.3))];
+    markStandouts(splits);
+    expect(splits[0]!.standsOut).toBe(true);
+    // z = 2.2 passes the single-test bar, but not with a thousand tests.
+    expect(splits[1]!.standsOut).toBe(false);
+    expect(splits.filter((s) => s.standsOut)).toHaveLength(1);
+  });
+
+  it('keeps every difference up to the largest rank that passes', () => {
+    // By rank, p is 0.001 (bar 0.017), 0.030 (bar 0.033) and 0.50 (bar 0.05): the first two pass.
+    const splits = [split(0.67), split(3.29), split(2.17)];
+    markStandouts(splits);
+    expect(splits.map((s) => s.standsOut)).toEqual([false, true, true]);
   });
 });
