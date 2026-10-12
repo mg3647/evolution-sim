@@ -18,7 +18,9 @@ seasons and the hour: being too hot or too cold costs energy, big bodies and
 fur hold heat in, and creatures can feel the temperature. Heat and wetness
 divide the 4,000 by 4,000 map into five biomes (grassland, forest, rainforest,
 desert, tundra), each with a perk and a drawback. A defense gene (spines or
-poison) hurts whatever bites its owner, at a cost in energy. Branches lie in
+poison) hurts whatever bites its owner, at a cost in energy. How much a parent
+gives each child and how full it must be before it breeds are genes too, so
+lineages can evolve many thinly fed young or few well-fed ones. Branches lie in
 forests and stones in deserts; lightning starts wildfires in hot weather, which
 spread through plants, hurt what stands in them, warm the land around and
 leave ash where plants regrow faster. Creatures can pick up and hold one thing:
