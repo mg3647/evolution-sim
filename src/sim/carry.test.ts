@@ -47,7 +47,7 @@ function brainOf(wiring: Wiring) {
 
 function setup(overrides: Partial<SimConfig> = {}) {
   const world = createWorld({ ...arena, ...overrides });
-  const genes = { size: 1, speed: 1, sensorRange: 1, diet: 0, hue: 0.9, fur: 0, defense: 0, mutationRate: 0.05 };
+  const genes = { size: 1, speed: 1, sensorRange: 1, diet: 0, hue: 0.9, fur: 0, defense: 0, investment: 0.5, readiness: 0.8, mutationRate: 0.05 };
   const add = (x: number, wiring: Wiring, diet = 0) =>
     spawnCreature(world.creatures, {
       x,

@@ -103,7 +103,7 @@ import { Senses } from './senses';
 import { buildSound, createSoundField, type SoundField } from './sound';
 import { SpatialHash } from './spatialHash';
 import { classifySpecies, createSpeciesState, type SpeciesState } from './species';
-import { createWiringTally, sampleWiring, type WiringTally } from './wiring';
+import { createWiringTally, markFounding, sampleWiring, type WiringTally } from './wiring';
 import { createHistory, meanOf, recordBehaviour, recordDensity, recordSample, spreadOf, type History } from './stats';
 
 export interface World {
@@ -147,6 +147,12 @@ export interface World {
   parents: { count: number; size: number; speed: number; sensorRange: number; diet: number };
   /** Health that biters have lost to their victims' defenses since the world was created. */
   defended: number;
+  /**
+   * Since the world was created: tries to breed that failed because the gift
+   * was too small to build a body, energy children started with in all, and
+   * deaths before breeding age.
+   */
+  lifeHistory: { tooSmall: number; childEnergy: number; juvenileDeaths: number };
   /** Wildfires so far, and how much is burning now. */
   fires: FireTally;
   /** What creatures have done with blocks since the world was created. */
@@ -322,6 +328,7 @@ export function createWorld(config: SimConfig): World {
     mateCandidates: [],
     reseeded: 0,
     defended: 0,
+    lifeHistory: { tooSmall: 0, childEnergy: 0, juvenileDeaths: 0 },
     fires: createFireTally(),
     blockTally: createBlockTally(),
     blockMoves: {},
@@ -664,7 +671,7 @@ export function step(world: World): void {
     // creature that wishes for a mate waits for one rather than breeding alone. Alone, the birth is
     // now; with a mate, who is near enough and willing is settled once everyone has moved.
     if (
-      energy >= config.reproduceThreshold * maxEnergy &&
+      energy >= creatures.readiness[i]! * maxEnergy &&
       age >= config.minReproduceAge &&
       creatures.count < config.maxCreatures
     ) {
@@ -704,6 +711,7 @@ export function step(world: World): void {
       else world.deaths.starved++;
     } else world.deaths.oldAge++;
     lab.died++;
+    if (creatures.age[i]! < config.minReproduceAge) world.lifeHistory.juvenileDeaths++;
     lab.ageAtDeath += creatures.age[i]!;
     lab.childrenAtDeath += creatures.children[i]!;
     // The body and whatever it had stored stay behind as meat, and what it held falls where it died.
@@ -728,6 +736,8 @@ export function step(world: World): void {
   while (creatures.count < config.minPopulation) {
     ledger.seedIn += spawnFounder(world, 0);
     world.reseeded++;
+    // Wiring brought in from outside is not an innovation of this world's evolution.
+    markFounding(world.wiring, world.creatures.brain[creatures.count - 1]!);
   }
 
   if (world.tick % config.speciesInterval === 0) {
@@ -905,7 +915,7 @@ export function clearWorldWalls(world: World): void {
  * holds `energy`. Returns the energy the parent gives up.
  */
 function giveBirth(world: World, parent: number, energy: number): number {
-  return bear(world, parent, -1, energy * world.config.offspringShare);
+  return bear(world, parent, -1, energy * world.creatures.investment[parent]!);
 }
 
 /**
@@ -916,7 +926,7 @@ function canBreed(world: World, a: number): boolean {
   const { creatures, config } = world;
   return (
     creatures.health[a]! > 0 &&
-    creatures.energy[a]! >= config.reproduceThreshold * maxEnergyFor(creatures.size[a]!, config) &&
+    creatures.energy[a]! >= creatures.readiness[a]! * maxEnergyFor(creatures.size[a]!, config) &&
     creatures.age[a]! >= config.minReproduceAge &&
     creatures.count < config.maxCreatures
   );
@@ -973,9 +983,9 @@ function pairUp(world: World): void {
       bestGap = gap;
     });
     if (best < 0) continue;
-    // Each offers half the usual share, so a child of two starts with what a child of one does.
-    const offerA = (creatures.energy[a]! * config.offspringShare) / 2;
-    const offerB = (creatures.energy[best]! * config.offspringShare) / 2;
+    // Each offers half its own share, so a child of two like parents starts with what a child of one does.
+    const offerA = (creatures.energy[a]! * creatures.investment[a]!) / 2;
+    const offerB = (creatures.energy[best]! * creatures.investment[best]!) / 2;
     const carrier = rng.chance(0.5) ? a : best;
     const given = bear(world, carrier, carrier === a ? best : a, offerA + offerB);
     if (given > 0) {
@@ -1024,7 +1034,11 @@ function bear(world: World, carrier: number, other: number, offered: number): nu
   const given = Math.min(offered, (childMax + body) / (1 - config.birthCost));
   const lost = given * config.birthCost;
   // Too little to build a body: no birth this tick.
-  if (given - lost <= body) return 0;
+  if (given - lost <= body) {
+    world.lifeHistory.tooSmall++;
+    return 0;
+  }
+  world.lifeHistory.childEnergy += given - lost - body;
   ledger.heatOut += lost;
 
   // The child appears just behind the carrier rather than on top of it.
@@ -1096,10 +1110,28 @@ function bear(world: World, carrier: number, other: number, offered: number): nu
 /**
  * The neutral shadow of a newborn: a copy of a random living creature's
  * shadow, plus the links its brain gained that its parents' did not have.
+ *
+ * The donor is drawn only from creatures old enough to breed. A real link can
+ * only be passed on once its carrier has reached breeding age, so a donor
+ * drawn from everyone, newborns included, would let shadow links spread from
+ * creatures that never live to breed and outlast real links with no selection
+ * at all.
  */
 function shadowFor(world: World, parents: number[], brain: Brain): number[] {
-  const { creatures } = world;
-  const chosen = creatures.shadow[world.shadowRng.int(0, creatures.count)]!;
+  const { creatures, config } = world;
+  let adults = 0;
+  for (let i = 0; i < creatures.count; i++) if (creatures.age[i]! >= config.minReproduceAge) adults++;
+  let donor = parents[0]!;
+  if (adults > 0) {
+    let pick = world.shadowRng.int(0, adults);
+    for (let i = 0; i < creatures.count; i++) {
+      if (creatures.age[i]! >= config.minReproduceAge && pick-- === 0) {
+        donor = i;
+        break;
+      }
+    }
+  }
+  const chosen = creatures.shadow[donor]!;
   // Links either parent had are inherited, not new, so crossover does not pass for innovation.
   const had = new Set(parents.flatMap((parent) => creatures.brain[parent]!.links.map((link) => link.innovation)));
   const shadow = chosen.slice();
@@ -1110,7 +1142,8 @@ function shadowFor(world: World, parents: number[], brain: Brain): number[] {
       held.add(link.innovation);
     }
   }
-  return shadow;
+  // A real brain stops gaining links at the cap, so the shadow drops its oldest to stay within it too.
+  return shadow.length > config.maxLinks ? shadow.slice(shadow.length - config.maxLinks) : shadow;
 }
 
 function sampleHistory(world: World): void {
@@ -1190,7 +1223,7 @@ function sampleHistory(world: World): void {
   let built = 0;
   for (let cell = 0; cell < world.plants.blockBuilt.length; cell++) built += world.plants.blockBuilt[cell]!;
 
-  const wiring = sampleWiring(world.wiring, creatures);
+  const wiring = sampleWiring(world.wiring, creatures, world.tick, world.config.wiringSurvivalTicks);
   recordSample(world.history, {
     deathsStarved: perThousand(deaths.starved, then.starved),
     deathsOldAge: perThousand(deaths.oldAge, then.oldAge),
@@ -1235,6 +1268,8 @@ function sampleHistory(world: World): void {
     meanDiet,
     meanFur: meanOf(creatures.fur, creatures),
     meanDefense: meanOf(creatures.defense, creatures),
+    meanInvestment: meanOf(creatures.investment, creatures),
+    meanReadiness: meanOf(creatures.readiness, creatures),
     toolHolders,
     foodHolders,
     meatEaters,
@@ -1252,6 +1287,8 @@ function sampleHistory(world: World): void {
     spreadDiet,
     spreadFur: spreadOf(creatures.fur, creatures),
     spreadDefense: spreadOf(creatures.defense, creatures),
+    spreadInvestment: spreadOf(creatures.investment, creatures),
+    spreadReadiness: spreadOf(creatures.readiness, creatures),
   }, speciesCounts, movesBySpecies);
   world.blockMoves = {};
   world.parents = { count: 0, size: 0, speed: 0, sensorRange: 0, diet: 0 };
@@ -1276,85 +1313,5 @@ export function totalEnergy(world: World): number {
   );
 }
 
-function hashBytes(h: number, bytes: Uint8Array): number {
-  for (let i = 0; i < bytes.length; i++) {
-    h ^= bytes[i]!;
-    h = Math.imul(h, 16777619);
-  }
-  return h;
-}
-
-function bytesOf(
-  array: Uint8Array | Uint16Array | Uint32Array | Int32Array | Float32Array | Float64Array,
-  count = array.length,
-): Uint8Array {
-  return new Uint8Array(array.buffer, array.byteOffset, count * array.BYTES_PER_ELEMENT);
-}
-
-/**
- * Hash of the full world state (FNV-1a over its bytes). Two worlds with the
- * same hash are, for testing purposes, in the same state.
- */
-export function hashWorld(world: World): number {
-  const { creatures: c, plants } = world;
-  const s = world.rng.getState();
-  const header = [world.tick, s.a, s.b, s.c, s.d, c.count, c.nextId, ...world.innovations.counts()];
-  let h = 2166136261;
-  h = hashBytes(h, bytesOf(new Uint32Array(header)));
-  h = hashBytes(h, bytesOf(plants.energy));
-  h = hashBytes(h, bytesOf(plants.meat));
-  h = hashBytes(h, bytesOf(plants.capacity));
-  h = hashBytes(h, bytesOf(plants.scent));
-  h = hashBytes(h, plants.walls);
-  h = hashBytes(h, plants.blocks);
-  h = hashBytes(h, bytesOf(plants.blockSpecies));
-  h = hashBytes(h, plants.blockBuilt);
-  h = hashBytes(h, bytesOf(plants.store));
-  h = hashBytes(h, plants.branches);
-  h = hashBytes(h, plants.stones);
-  h = hashBytes(h, bytesOf(plants.fire));
-  h = hashBytes(h, bytesOf(plants.ash));
-  for (const field of [
-    c.id,
-    c.parentId,
-    c.generation,
-    c.founder,
-    c.species,
-    c.x,
-    c.y,
-    c.heading,
-    c.energy,
-    c.age,
-    c.children,
-    c.health,
-    c.hydration,
-    c.pain,
-    c.sick,
-    c.calling,
-    c.held,
-    c.heldEnergy,
-    c.size,
-    c.speed,
-    c.sensorRange,
-    c.diet,
-    c.hue,
-    c.fur,
-    c.defense,
-    c.mutationRate,
-  ]) {
-    h = hashBytes(h, bytesOf(field, c.count));
-  }
-  for (let i = 0; i < c.count; i++) {
-    const brain = c.brain[i]!;
-    h = hashBytes(h, bytesOf(new Uint32Array(brain.links.map((link) => link.innovation * 2 + +link.enabled))));
-    h = hashBytes(h, bytesOf(new Float32Array(brain.links.map((link) => link.weight))));
-    h = hashBytes(h, bytesOf(brain.linkFrom));
-    h = hashBytes(h, bytesOf(brain.linkTo));
-    h = hashBytes(h, bytesOf(brain.activation));
-    h = hashBytes(h, bytesOf(new Float32Array(brain.hiddenTau)));
-    h = hashBytes(h, bytesOf(brain.linkWeight));
-    h = hashBytes(h, bytesOf(brain.plasticRate));
-    h = hashBytes(h, bytesOf(new Uint32Array(c.shadow[i]!)));
-  }
-  return h >>> 0;
-}
+// The world's fingerprint is taken over its save, so it covers everything a save holds.
+export { hashWorld } from './serialize';

@@ -60,6 +60,8 @@ export interface Creatures {
   hue: Float32Array;
   fur: Float32Array;
   defense: Float32Array;
+  investment: Float32Array;
+  readiness: Float32Array;
   mutationRate: Float32Array;
   /** One brain per creature, parallel to the arrays above. */
   brain: Brain[];
@@ -104,6 +106,8 @@ const FIELDS = [
   'hue',
   'fur',
   'defense',
+  'investment',
+  'readiness',
   'mutationRate',
 ] as const satisfies readonly (keyof Creatures)[];
 
@@ -164,6 +168,8 @@ export function createCreatures(capacity: number): Creatures {
     hue: new Float32Array(capacity),
     fur: new Float32Array(capacity),
     defense: new Float32Array(capacity),
+    investment: new Float32Array(capacity),
+    readiness: new Float32Array(capacity),
     mutationRate: new Float32Array(capacity),
     brain: [],
     shadow: [],
@@ -220,6 +226,8 @@ export function spawnCreature(c: Creatures, options: SpawnOptions): number {
   c.hue[i] = options.genes.hue;
   c.fur[i] = options.genes.fur;
   c.defense[i] = options.genes.defense;
+  c.investment[i] = options.genes.investment;
+  c.readiness[i] = options.genes.readiness;
   c.mutationRate[i] = options.genes.mutationRate;
   c.brain[i] = options.brain;
   c.shadow[i] = options.shadow ?? options.brain.links.map((link) => link.innovation);
@@ -247,6 +255,8 @@ export function genesOf(c: Creatures, i: number): Genes {
     hue: c.hue[i]!,
     fur: c.fur[i]!,
     defense: c.defense[i]!,
+    investment: c.investment[i]!,
+    readiness: c.readiness[i]!,
     mutationRate: c.mutationRate[i]!,
   };
 }

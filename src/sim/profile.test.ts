@@ -5,7 +5,7 @@ import { brainProfile, HIDDEN_NODE } from './profile';
 
 const TURN = INPUT_COUNT + Output.Turn;
 const THRUST = INPUT_COUNT + Output.Thrust;
-const genes = { size: 1, speed: 1, sensorRange: 1, diet: 0.1, hue: 0.5, fur: 0, defense: 0, mutationRate: 0.05 };
+const genes = { size: 1, speed: 1, sensorRange: 1, diet: 0.1, hue: 0.5, fur: 0, defense: 0, investment: 0.5, readiness: 0.8, mutationRate: 0.05 };
 
 function link(innovation: number, from: number, to: number, weight: number, enabled = true): LinkGene {
   return { innovation, from, to, weight, enabled };

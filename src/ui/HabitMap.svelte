@@ -1,7 +1,7 @@
 <script lang="ts">
   import { pathwayIndex, pathwayInput, pathwayOutput } from '../sim/associations';
   import { INPUT_LABELS, OUTPUT_COUNT, OUTPUT_LABELS, RAY_COUNT } from '../sim/brain';
-  import { speciesHue } from '../render/renderer';
+  import { speciesColor } from './speciesColors';
   import type { LabData, ProfileGroup } from '../worker/protocol';
   import {
     ACTION_SHORT,
@@ -9,12 +9,13 @@
     DRIVES,
     groupName,
     habitLabel,
+    habitOpposite,
     HOLDS_BACK,
     percent,
     SENSE_ROWS,
     times,
   } from './habits';
-  import { SENSE_GROUP_HINTS, SENSE_GROUPS } from './senseGroups';
+  import { SENSE_GROUP_HINTS, SENSE_GROUPS, senseSides } from './senseGroups';
   import Sparkline from './Sparkline.svelte';
 
   /** A row is shown when some cell in it reaches this share, unless every row is asked for. */
@@ -107,6 +108,9 @@
     return {
       p,
       sense: INPUT_LABELS[input]!,
+      /** For a two-way sense, the side the effect is for, and what the other side does. */
+      upper: senseSides(input)?.[0] ?? INPUT_LABELS[input]!,
+      opposite: habitOpposite(p, effect),
       action: OUTPUT_LABELS[output]!,
       share,
       effect,
@@ -137,7 +141,7 @@
           }}
         >
           {#if g.speciesId > 0}
-            <span class="swatch" style="background: hsl({speciesHue(g.speciesId) * 360}, 70%, 60%)"></span>
+            <span class="swatch" style="background: {speciesColor(g.speciesId)}"></span>
           {/if}
           {groupName(g)} <small>{g.profile.count.toLocaleString()}</small>
         </button>
@@ -209,8 +213,9 @@
         {#if detail.share > 0}
           <p class="headline">
             <b>{percent(detail.share)}</b> of {groupName(group).toLowerCase()} are wired so that the stronger
-            <i>{detail.sense}</i> reads, the more they <b style="color: {detail.effect >= 0 ? DRIVES : HOLDS_BACK}">{detail.word}</b>
+            <i>{detail.upper}</i> reads, the more they <b style="color: {detail.effect >= 0 ? DRIVES : HOLDS_BACK}">{detail.word}</b>
             <span class="muted">(average strength {detail.effect >= 0 ? '+' : ''}{detail.effect.toFixed(2)})</span>.
+            {#if detail.opposite}<span class="muted">The other way round: {detail.opposite}.</span>{/if}
           </p>
         {:else}
           <p class="headline">No one in {groupName(group).toLowerCase()} has this habit right now.</p>
@@ -222,7 +227,7 @@
             <li>
               <span class="name">
                 {#if row.group.speciesId > 0}
-                  <span class="swatch" style="background: hsl({speciesHue(row.group.speciesId) * 360}, 70%, 60%)"></span>
+                  <span class="swatch" style="background: {speciesColor(row.group.speciesId)}"></span>
                 {/if}
                 {groupName(row.group)}
               </span>
@@ -274,7 +279,7 @@
             <b>{b.withoutRate.toFixed(2)}</b> for those without, comparing within each species
             ({times(b.withoutRate > 0 ? b.withRate / b.withoutRate : Infinity)}).
             <span class="muted">
-              {Math.abs(b.z) >= 2 ? 'A clear difference' : 'Could be chance'}
+              {b.standsOut ? 'Worth a look: it stands out even allowing for the many habits compared' : 'Could be chance'}
               ({b.withCount.toLocaleString()} with, {b.withoutCount.toLocaleString()} without).
             </span>
           </p>
