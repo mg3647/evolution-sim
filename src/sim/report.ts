@@ -21,7 +21,7 @@ import type { World } from './world';
  * alone (interventions, reseeding), the whole time series, how species came
  * and went, and where the population ended up.
  */
-export const REPORT_VERSION = 3;
+export const REPORT_VERSION = 4;
 
 /** Most points kept per series; longer histories are thinned evenly. */
 const MAX_POINTS = 200;
@@ -424,6 +424,8 @@ export function buildReport(
         diet: spread(column(c.diet)),
         fur: spread(column(c.fur)),
         defense: spread(column(c.defense)),
+        investment: spread(column(c.investment)),
+        readiness: spread(column(c.readiness)),
         mutationRate: spread(column(c.mutationRate)),
         age: spread(column(c.age)),
       },
@@ -450,6 +452,9 @@ export function buildReport(
         energyGivenToKin: round(world.social.givenToKin),
         fires: world.fires.started,
         cellsBurned: world.fires.cellsBurned,
+        birthsTooSmall: world.lifeHistory.tooSmall,
+        childStartEnergy: round(world.lifeHistory.childEnergy / Math.max(1, world.births)),
+        juvenileDeaths: world.lifeHistory.juvenileDeaths,
       },
     },
     wiring: wiringReport(world, adoption),

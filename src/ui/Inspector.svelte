@@ -150,6 +150,14 @@
         <dt>Defenses</dt>
         <dd>{creature.defense.toFixed(2)}</dd>
       </div>
+      <div title="Share of its energy it hands to each child, as a percentage. Low gives many thinly fed young; high gives few well-fed ones. Evolves.">
+        <dt>Gives each child</dt>
+        <dd>{Math.round(creature.investment * 100)}%</dd>
+      </div>
+      <div title="How full its energy store must be before it can breed. Low breeds early and often; high saves up. Evolves.">
+        <dt>Breeds at</dt>
+        <dd>{Math.round(creature.readiness * 100)}% full</dd>
+      </div>
       <div title="One thing at a time: a stone makes its bite stronger, a branch takes part of bites aimed at it, and food can be set down elsewhere as a store">
         <dt>Holding</dt>
         <dd>{HELD_LABELS[creature.held]}{creature.heldEnergy > 0 ? ` (${creature.heldEnergy.toFixed(1)})` : ''}</dd>

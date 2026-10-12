@@ -21,7 +21,7 @@ const arena: SimConfig = {
   healRate: 0,
 };
 
-const genes = { size: 1, speed: 1, sensorRange: 1, diet: 1, hue: 0.9, fur: 0, defense: 0, mutationRate: 0.05 };
+const genes = { size: 1, speed: 1, sensorRange: 1, diet: 1, hue: 0.9, fur: 0, defense: 0, investment: 0.5, readiness: 0.8, mutationRate: 0.05 };
 
 /** A brain whose outputs are each held fully on or off by a bias link. */
 function brainOf(outputs: Partial<Record<keyof typeof Output, number>>) {

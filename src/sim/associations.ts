@@ -267,6 +267,8 @@ export const TRAITS = [
   'diet',
   'fur',
   'defense',
+  'investment',
+  'readiness',
   'mutationRate',
   'links',
   'hiddenNeurons',

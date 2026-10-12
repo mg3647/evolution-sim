@@ -222,6 +222,35 @@ describe('save and load', () => {
     run(copy, 100);
   });
 
+  it('keeps each creature\'s investment and readiness genes', () => {
+    const world = run(createWorld(smallConfig), 300);
+    const copy = roundTrip(world);
+    const n = world.creatures.count;
+    expect(Array.from(copy.creatures.investment.subarray(0, n))).toEqual(Array.from(world.creatures.investment.subarray(0, n)));
+    expect(Array.from(copy.creatures.readiness.subarray(0, n))).toEqual(Array.from(world.creatures.readiness.subarray(0, n)));
+    expect(copy.lifeHistory).toEqual(world.lifeHistory);
+  });
+
+  it('opens a version 18 save with everyone breeding by that save\'s own settings, as before', () => {
+    const world = run(createWorld({ ...smallConfig, offspringShare: 0.6, reproduceThreshold: 0.7 }), 200);
+    const saved = JSON.parse(JSON.stringify(saveWorld(world))) as SavedWorld;
+    saved.version = 18;
+    delete (saved.creatures as Partial<SavedWorld['creatures']>).investment;
+    delete (saved.creatures as Partial<SavedWorld['creatures']>).readiness;
+    delete (saved.config as Partial<SimConfig>).lifeHistoryMutates;
+    delete saved.lifeHistory;
+    const copy = loadWorld(saved);
+    const n = copy.creatures.count;
+    expect(Array.from(copy.creatures.investment.subarray(0, n)).every((v) => v === Math.fround(0.6))).toBe(true);
+    expect(Array.from(copy.creatures.readiness.subarray(0, n)).every((v) => v === Math.fround(0.7))).toBe(true);
+    expect(copy.config.lifeHistoryMutates).toBe(false);
+    run(copy, 300);
+    const m = copy.creatures.count;
+    expect(Array.from(copy.creatures.investment.subarray(0, m)).every((v) => v === Math.fround(0.6))).toBe(true);
+    // Saved again, it stays an old-style world.
+    expect(roundTrip(copy).config.lifeHistoryMutates).toBe(false);
+  });
+
   it('refuses files it cannot read', () => {
     const saved = saveWorld(createWorld(smallConfig));
     expect(() => loadWorld({ ...saved, version: SAVE_VERSION + 1 })).toThrow(/newer version/);

@@ -18,7 +18,7 @@ const TURN = INPUT_COUNT + Output.Turn;
 const THRUST = INPUT_COUNT + Output.Thrust;
 const ATTACK = INPUT_COUNT + Output.Attack;
 const HIDDEN = 1000;
-const genes = { size: 1, speed: 1, sensorRange: 1, diet: 0.1, hue: 0.5, fur: 0, defense: 0, mutationRate: 0.05 };
+const genes = { size: 1, speed: 1, sensorRange: 1, diet: 0.1, hue: 0.5, fur: 0, defense: 0, investment: 0.5, readiness: 0.8, mutationRate: 0.05 };
 
 function link(from: number, to: number, weight: number, plasticity = 0, enabled = true): LinkGene {
   return { innovation: from * 10000 + to, from, to, weight, enabled, plasticity };

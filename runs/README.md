@@ -9,7 +9,7 @@ reads them back. Adding a file here does not rebuild the site.
 `<date>_<time>_<seed>_tick<N>.json`, for example
 `2026-10-11_15-00-00_genesis_tick60000.json`.
 
-## What is inside (reportVersion 3)
+## What is inside (reportVersion 4)
 
 | Part | What it holds |
 | --- | --- |
@@ -22,7 +22,7 @@ reads them back. Adding a file here does not rebuild the site.
 | `series` | Every charted statistic over the whole run, as columns (`names[i]` matches `data[i]`), thinned to at most 200 points. `tick` is the first column. |
 | `species` | Each species' first and last tick seen, peak size and final size. |
 | `events` | The most recent entries of the event log (the log keeps 30). |
-| `final` | Where the population ended: trait spreads (mean, 10th, 50th, 90th percentile), generations, creatures per biome against land share, diet histogram, and cumulative totals (births, deaths by cause, mating, blocks, fires). |
+| `final` | Where the population ended: trait spreads (mean, 10th, 50th, 90th percentile), generations, creatures per biome against land share, diet histogram, and cumulative totals (births, deaths by cause, mating, blocks, fires). Version 4 adds the `investment` and `readiness` genes to the traits, and to the totals `birthsTooSmall` (tries to breed whose gift could not build a body), `childStartEnergy` (mean energy a child started with) and `juvenileDeaths` (deaths before breeding age). |
 | `wiring` | Added in version 2. Brain habits: which senses are linked to which actions (directly or through hidden neurons). `common` is the most widespread habits now, with `share` and mean `effect` (above 0, more of the sense gives more of the action). `spread` and `faded` are the habits whose share changed most since the app started sampling (`startShare`); a loaded save starts sampling again. `breeding` compares young per 1,000 ticks lived among adults: `traits` the upper half against the lower half, `habits` those with a habit against those without, keeping only those that stand out once the number of comparisons is allowed for (`standsOut`, Benjamini-Hochberg at a 5% false discovery rate; `habitsTested` is how many habits were compared). Version 2 kept every `z` of at least 2 either way, which lets dozens through by chance alone. These are associations among the living, not proof of cause. |
 
 ## Comparing runs
@@ -34,3 +34,4 @@ simulation changed between them.
 ## Version changes
 
 - **3** (2026-10-12): `breeding` entries gain `standsOut`, `breeding.habitsTested` is added, and `habits` keeps only those that stand out after a Benjamini-Hochberg correction. The neutral shadow behind the wiring numbers now copies only creatures old enough to breed, and wiring brought in by reseeded founders no longer counts as new, so `wiringSurvival` and `wiringShadowSurvival` are not comparable with version 2 reports.
+- **4** (2026-10-12): `final.traits` gains the `investment` and `readiness` genes, and `final.totals` gains `birthsTooSmall`, `childStartEnergy` and `juvenileDeaths`. These genes now evolve, so runs are not comparable with version 3 reports on breeding.

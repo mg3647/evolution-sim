@@ -92,6 +92,8 @@ export const TRAIT_HALVES: Record<TraitName, [string, string]> = {
   diet: ['More meat-eating', 'More plant-eating'],
   fur: ['Furrier', 'Less fur'],
   defense: ['Better defended', 'Less defended'],
+  investment: ['Gives children more', 'Gives children less'],
+  readiness: ['Waits to be fuller', 'Breeds less full'],
   mutationRate: ['Mutates more', 'Mutates less'],
   links: ['More links', 'Fewer links'],
   hiddenNeurons: ['More hidden neurons', 'Fewer hidden neurons'],
