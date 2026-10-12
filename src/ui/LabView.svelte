@@ -624,15 +624,15 @@
                 <td>{biome.count > 0 ? biome.meanDefense.toFixed(2) : '-'}</td>
                 <td>{biome.count > 0 ? biome.meanSpeed.toFixed(2) : '-'}</td>
                 <td>{biome.count > 0 ? biome.meanDiet.toFixed(2) : '-'}</td>
-                <td>{biome.count > 0 ? biome.meanInvestment.toFixed(2) : '-'}</td>
-                <td>{biome.count > 0 ? biome.meanReadiness.toFixed(2) : '-'}</td>
+                <td>{biome.count > 0 ? percent(biome.meanInvestment) : '-'}</td>
+                <td>{biome.count > 0 ? percent(biome.meanReadiness) : '-'}</td>
               </tr>
             {/each}
           </tbody>
         </table>
         <p class="caption">
           Land is each biome's share of the dry land; share is its part of the population. A biome holding far
-          less than its share of land is hard to live in. Diet runs from 0 (plants only) to 1 (meat only).
+          less than its share of land is hard to live in. Diet runs from 0 (plants only) to 1 (meat only). Gives is the share of its energy a parent hands to each child; Breeds at is how full a creature must be to breed.
         </p>
       {:else}
         <p class="empty">No creatures yet.</p>
