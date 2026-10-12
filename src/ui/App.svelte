@@ -227,7 +227,11 @@
 
   // The worker works out the Lab's and tabs' numbers only while they are open.
   const openViews = $derived({ lab: showLab, evolution: activeTab === 'evolution', creature: activeTab === 'creature' });
-  $effect(() => client?.setViews(openViews));
+  $effect(() => {
+    // Read first: while there is no client yet, the call below would not read it, and the effect would never run again.
+    const views = openViews;
+    client?.setViews(views);
+  });
 
   $effect(() => {
     // Read first, so the effect runs again when any of them changes.
