@@ -722,7 +722,10 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
     noteIntervention('clearWalls');
     clearWorldWalls(runner.world);
   } else if (message.type === 'setRandomEvents') {
-    noteIntervention('randomEvents', String(message.enabled));
+    // Only a real change counts, and setting up a new world (as a preset does) is not a change by hand.
+    if (runner.world.environment.randomEvents !== message.enabled && runner.world.tick > 0) {
+      noteIntervention('randomEvents', String(message.enabled));
+    }
     runner.world.environment.randomEvents = message.enabled;
   } else if (message.type === 'setRendering') {
     rendering = message.enabled;
@@ -769,8 +772,11 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
       // A loaded world carries no record of what was done to it before, so the report says so.
       interventions = [{ tick: runner.world.tick, kind: 'loadedSave' }];
       worldReplaced();
+      post({ type: 'loaded', config: { ...runner.world.config } });
     } catch (error) {
-      const reason = error instanceof SyntaxError ? 'This file is not a saved world.' : (error as Error).message;
+      // A file that is not JSON, or is JSON of some other shape, fails before any of the save's own checks.
+      const reason =
+        error instanceof SyntaxError || error instanceof TypeError ? 'This file is not a saved world.' : (error as Error).message;
       post({ type: 'error', message: `Could not load: ${reason}` });
       return;
     }

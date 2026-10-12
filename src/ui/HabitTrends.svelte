@@ -72,7 +72,7 @@
             <ul>
               {#each list.rows as row (row.pathway)}
                 <li>
-                  <button class="link" onclick={() => onPick?.(row.pathway)} title="Show this habit on the map">
+                  <button class="link" onclick={() => onPick?.(row.pathway)} title="{habitLabel(row.pathway)}: show this habit on the map">
                     {habitLabel(row.pathway)}
                   </button>
                   <span class="spark" style="width: {compact ? 60 : 90}px"><Sparkline values={row.line} width={compact ? 60 : 90} height={20} zero color={list.color} /></span>

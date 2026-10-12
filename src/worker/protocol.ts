@@ -381,5 +381,7 @@ export type FromWorker =
   | { type: 'history'; history: HistoryData }
   | { type: 'tree'; tree: TreeData }
   | { type: 'saved'; json: string; tick: number; seed: string }
+  /** A saved world has replaced the running one; these are its settings. */
+  | { type: 'loaded'; config: SimConfig }
   | { type: 'report'; json: string; fileName: string; summary: ReportSummary }
   | { type: 'error'; message: string };

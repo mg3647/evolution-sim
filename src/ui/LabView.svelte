@@ -1,6 +1,6 @@
 <script lang="ts">
   import type uPlot from 'uplot';
-  import { speciesColor, streamSeries as seriesOfStream } from './speciesColors';
+  import { speciesColor, speciesName, streamSeries as seriesOfStream } from './speciesColors';
   import { BIOME_GROUND } from '../render/renderer';
   import { BIOME_LABELS } from '../sim/biomes';
   import type { HistoryData, LabData, ProfileGroup } from '../worker/protocol';
@@ -207,7 +207,7 @@
   const blockKey = $derived(history ? history.blockMoves.map((s) => s.id).join(',') : '');
   const blockSeries = $derived<ChartSeries[]>(
     (history?.blockMoves ?? []).map((s) => ({
-      label: s.id === 0 ? 'Other species' : `Species ${s.id}`,
+      label: speciesName(s.id),
       color: speciesColor(s.id),
     })),
   );
@@ -539,7 +539,7 @@
         Every brain link keeps a running count of how many samples it has been in the population. A link can last
         a long time by chance alone, so a neutral shadow runs alongside: a copy of the population with the same
         births and deaths, but where nothing is favoured: each newborn's shadow copies a random creature old enough to breed. The survival chart takes every link that first appeared
-        at least 20 samples ago and shows how many are still carried. Above the shadow, selection is keeping new
+        at least 600 ticks ago and shows how many are still carried. Above the shadow, selection is keeping new
         wiring that chance would lose; below it, selection is purging new wiring.
       </p></details>
       <div class="charts">
@@ -725,12 +725,15 @@
     overflow-y: auto;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 560px), 1fr));
+    /* Later cards fill the gaps a full-width card leaves, so the grid has no holes. */
+    grid-auto-flow: dense;
     align-content: start;
     gap: 14px;
     padding: 14px;
   }
 
   .card {
+    align-self: start;
     min-width: 0;
     padding: 14px;
     background: var(--panel);

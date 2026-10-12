@@ -41,6 +41,8 @@ export interface SettingInfo {
   min: number;
   max: number;
   step: number;
+  /** Names for each whole value from min up, for a setting that is a choice rather than an amount. */
+  choices?: string[];
 }
 
 export interface SettingGroup {
@@ -156,7 +158,7 @@ export const SETTING_GROUPS: SettingGroup[] = [
     settings: [
       { key: 'maxAge', label: 'Lifespan (ticks)', hint: 'Every creature dies of old age at this many ticks', more: 'Longer lives mean fewer generations per hour, so evolution runs slower. It is the same for all creatures and does not evolve.', min: 500, max: 20000, step: 500 },
       { key: 'minReproduceAge', label: 'Youngest breeding age', hint: 'Ticks a creature must live before it can have young', more: 'Higher makes a childhood: a newborn must survive that long on its own before it can pass anything on.', min: 0, max: 1500, step: 50 },
-      { key: 'reproductionMode', label: 'How creatures reproduce', hint: '0 alone, 1 alone or with a mate, 2 only with a mate', more: 'With a mate, two willing creatures in reach each pay half the usual share and the child inherits a mix of both brains and bodies. Mixing 1 lets you see whether mating survives against going alone.', min: 0, max: 2, step: 1 },
+      { key: 'reproductionMode', label: 'How creatures reproduce', hint: 'Alone, alone or with a mate, or only with a mate', more: 'With a mate, two willing creatures in reach each pay half the usual share and the child inherits a mix of both brains and bodies. Either way lets you see whether mating survives against going alone.', min: 0, max: 2, step: 1, choices: ['Alone', 'Either way', 'With a mate'] },
       { key: 'mateReach', label: 'How near mates must be', hint: 'How close two willing creatures must be, edge to edge, to mate', more: 'A mate must be found before it can be chosen. Larger makes mating easy; small makes it rare, so only creatures that seek each other out will manage it.', min: 2, max: 200, step: 2 },
       { key: 'mateBarrier', label: 'How alike mates must be', hint: 'Mates must differ by less than this in brain and body; 0 lets any two mate', more: 'On the same scale as species, where 1 is a clear difference. Stops very different creatures mixing, so species can stay apart. Lower is stricter.', min: 0, max: 5, step: 0.1 },
       { key: 'displayCost', label: 'Cost of a display', hint: 'Energy per tick for showing the brightest signal; less for less', more: 'A signal that costs energy can only be kept up by creatures that can afford it, which is what makes it worth believing.', min: 0, max: 0.2, step: 0.005 },
