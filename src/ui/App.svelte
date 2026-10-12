@@ -245,6 +245,14 @@
   /** A habit to show on the Lab's sense-action map when it opens. */
   let labHabit = $state<number | null>(null);
 
+  // The worker works out the Lab's and tabs' numbers only while they are open.
+  const openViews = $derived({ lab: showLab, evolution: activeTab === 'evolution', creature: activeTab === 'creature' });
+  $effect(() => {
+    // Read first: while there is no client yet, the call below would not read it, and the effect would never run again.
+    const views = openViews;
+    client?.setViews(views);
+  });
+
   $effect(() => {
     // Read first, so the effect runs again when any of them changes.
     const species = hoveredSpecies ?? pinnedSpecies;
@@ -311,6 +319,7 @@
         onError: (message) => (errorMessage = message),
       });
       client.init({ ...settings, seed });
+      client.setViews(openViews);
       r.onPick = (x, y, radius) => client?.pick(x, y, radius);
       r.onTool = (kind, x, y, fromX, fromY) => client?.applyTool(kind, x, y, fromX, fromY);
     });

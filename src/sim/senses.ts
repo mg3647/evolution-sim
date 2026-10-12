@@ -5,6 +5,7 @@ import type { SimConfig } from './config';
 import { Held, type Creatures } from './creatures';
 import { daylightAt, seasonAt } from './environment';
 import { maxEnergyFor } from './genome';
+import { wrapNear } from './geometry';
 import { cellIndexAt, groundHue, temperatureAt, visibility, type PlantField } from './plants';
 import { callShare, soundCellAt, type SoundField } from './sound';
 import type { SpatialHash } from './spatialHash';
@@ -103,12 +104,13 @@ export class Senses {
       this.season = config.seasonStrength > 0 ? (seasonAt(tick, config) - 1) / config.seasonStrength : 0;
       this.daylight = daylightAt(tick, config);
     }
+    const here = cellIndexAt(field, x, y);
     // Sight shortens in the dark, and reaches further over open desert.
     const range =
       config.senseRange *
       creatures.sensorRange[i]! *
       (config.nightVision + (1 - config.nightVision) * this.daylight) *
-      BIOME_TRAITS[field.biome[cellIndexAt(field, x, y)]!]!.sight;
+      BIOME_TRAITS[field.biome[here]!]!.sight;
     // Plant cover is relative to the richest possible cell; a barren world reads as zero.
     const plantScale = config.plantCapacity > 0 ? 1 / config.plantCapacity : 0;
     const meatScale = 1 / config.meatScale;
@@ -118,9 +120,11 @@ export class Senses {
     let scentLeft = 0;
     let scentRight = 0;
 
-    const here = cellIndexAt(field, x, y);
     const swimming = field.water[here] === 1;
     const storeLeast = config.biteSize;
+    // The ground is sampled twelve times per creature, so the field's arrays are held close.
+    const { cols, rows, cellWidth, cellHeight, walls, blocks, blockHeavy, energy, meat: meatField, water: waterField } = field;
+    const { fire: fireField, stones, branches, store: storeField, scent } = field;
     for (let ray = 0; ray < RAY_COUNT; ray++) {
       // Each ray is the heading turned by a whole number of spreads: -1, 0, +1.
       const turn = ray - 1;
@@ -139,35 +143,37 @@ export class Senses {
       for (const t of GROUND_SAMPLES) {
         let px = turn === 0 ? x + cosHeading * range * t : x + dx * t;
         let py = turn === 0 ? y + sinHeading * range * t : y + dy * t;
-        px -= Math.floor(px / worldWidth) * worldWidth;
-        py -= Math.floor(py / worldHeight) * worldHeight;
-        const cell = cellIndexAt(field, px, py);
+        px = wrapNear(px, worldWidth);
+        py = wrapNear(py, worldHeight);
+        // As cellIndexAt, written out.
+        const cell =
+          Math.min(rows - 1, Math.floor(py / cellHeight)) * cols + Math.min(cols - 1, Math.floor(px / cellWidth));
         if (t === GROUND_SAMPLES[SCENT_SAMPLE]) {
-          if (turn < 0) scentLeft = field.scent[cell]!;
-          else if (turn > 0) scentRight = field.scent[cell]!;
+          if (turn < 0) scentLeft = scent[cell]!;
+          else if (turn > 0) scentRight = scent[cell]!;
         }
         // What is underfoot has its own senses.
         if (cell === here) continue;
         const near = NEAREST - t;
-        if (field.walls[cell]) {
+        if (walls[cell]) {
           wall = near;
           break;
         }
-        if (field.blocks[cell]) {
+        if (blocks[cell]) {
           // Heavy blocks read below zero, light ones above, so a creature can tell which it faces.
-          block = field.blockHeavy[cell] === 1 ? -near : near;
+          block = blockHeavy[cell] === 1 ? -near : near;
           break;
         }
-        plants += field.energy[cell]!;
-        meat += field.meat[cell]!;
+        plants += energy[cell]!;
+        meat += meatField[cell]!;
         // In water, the water input shows the way back to land instead.
-        if (water === 0 && (swimming ? !field.water[cell] : field.water[cell])) water = near;
-        if (fire === 0 && field.fire[cell]) fire = near;
+        if (water === 0 && (swimming ? !waterField[cell] : waterField[cell])) water = near;
+        if (fire === 0 && fireField[cell]) fire = near;
         if (items === 0) {
-          if (field.stones[cell]) items = near;
-          else if (field.branches[cell]) items = -near;
+          if (stones[cell]) items = near;
+          else if (branches[cell]) items = -near;
         }
-        if (store === 0 && field.store[cell]! >= storeLeast) store = near;
+        if (store === 0 && storeField[cell]! >= storeLeast) store = near;
       }
       const o = Input.Rays + ray * INPUTS_PER_RAY;
       inputs[o + Ray.Plants] = (plants / GROUND_SAMPLES.length) * plantScale;
@@ -234,8 +240,8 @@ export class Senses {
     // The cell it faces, where Hold lifts and sets down blocks; one cell's length ahead, as in the world.
     let frontX = x + cosHeading * field.cellWidth;
     let frontY = y + sinHeading * field.cellHeight;
-    frontX -= Math.floor(frontX / worldWidth) * worldWidth;
-    frontY -= Math.floor(frontY / worldHeight) * worldHeight;
+    frontX = wrapNear(frontX, worldWidth);
+    frontY = wrapNear(frontY, worldHeight);
     const front = cellIndexAt(field, frontX, frontY);
     inputs[Input.Facing] = front !== cell && field.blocks[front] ? (field.blockHeavy[front] === 1 ? -1 : 1) : 0;
     inputs[Input.Sheltered] = config.shelter > 0 && field.nearBlocks[cell]! > 0 ? 1 : 0;
@@ -248,10 +254,10 @@ export class Senses {
       let leftY = y - cosHeading * reach;
       let rightX = x - sinHeading * reach;
       let rightY = y + cosHeading * reach;
-      leftX -= Math.floor(leftX / worldWidth) * worldWidth;
-      leftY -= Math.floor(leftY / worldHeight) * worldHeight;
-      rightX -= Math.floor(rightX / worldWidth) * worldWidth;
-      rightY -= Math.floor(rightY / worldHeight) * worldHeight;
+      leftX = wrapNear(leftX, worldWidth);
+      leftY = wrapNear(leftY, worldHeight);
+      rightX = wrapNear(rightX, worldWidth);
+      rightY = wrapNear(rightY, worldHeight);
       const leftCell = soundCellAt(sound, leftX, leftY);
       const rightCell = soundCellAt(sound, rightX, rightY);
       // A caller does not hear its own call: what it added is taken back out.
@@ -280,8 +286,8 @@ export class Senses {
       const warmthHere = temperatureAt(field, cell, this.warmth, config, this.dayWarmth);
       let aheadX = x + cosHeading * range;
       let aheadY = y + sinHeading * range;
-      aheadX -= Math.floor(aheadX / worldWidth) * worldWidth;
-      aheadY -= Math.floor(aheadY / worldHeight) * worldHeight;
+      aheadX = wrapNear(aheadX, worldWidth);
+      aheadY = wrapNear(aheadY, worldHeight);
       const ahead = temperatureAt(field, cellIndexAt(field, aheadX, aheadY), this.warmth, config, this.dayWarmth);
       // To the sides, at the ends of the left and right rays.
       const sideX = cosHeading * this.cosSpread * range;
@@ -305,8 +311,8 @@ export class Senses {
   /** The temperature felt at a point, which may lie outside the world and is wrapped into it. */
   private warmthAt(px: number, py: number): number {
     const { config, field } = this;
-    px -= Math.floor(px / config.worldWidth) * config.worldWidth;
-    py -= Math.floor(py / config.worldHeight) * config.worldHeight;
+    px = wrapNear(px, config.worldWidth);
+    py = wrapNear(py, config.worldHeight);
     return temperatureAt(field, cellIndexAt(field, px, py), this.warmth, config, this.dayWarmth);
   }
 

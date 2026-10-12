@@ -11,6 +11,7 @@ export class SpatialHash {
   /** cellStart[c]..cellStart[c + 1] is the slice of `items` in cell c. */
   private cellStart: Uint32Array;
   private items = new Uint32Array(0);
+  /** Positions as they were at build time, in the same order as `items`. */
   private xs: Float32Array = new Float32Array(0);
   private ys: Float32Array = new Float32Array(0);
 
@@ -44,8 +45,6 @@ export class SpatialHash {
       this.xs = new Float32Array(size);
       this.ys = new Float32Array(size);
     }
-    this.xs.set(xs.subarray(0, count));
-    this.ys.set(ys.subarray(0, count));
 
     // Counting sort: count per cell, prefix-sum into end offsets, then fill backwards.
     const start = this.cellStart;
@@ -59,6 +58,12 @@ export class SpatialHash {
     for (let i = count - 1; i >= 0; i--) {
       const c = this.cellOf(xs[i]!, ys[i]!);
       this.items[--start[c]!] = i;
+    }
+    // Positions are kept in the same order as the items, so a query reads them in a run.
+    for (let k = 0; k < count; k++) {
+      const i = this.items[k]!;
+      this.xs[k] = xs[i]!;
+      this.ys[k] = ys[i]!;
     }
   }
 
@@ -95,10 +100,10 @@ export class SpatialHash {
         for (let k = cellStart[cell]!; k < cellStart[cell + 1]!; k++) {
           const i = items[k]!;
           // Shortest way round the wrapped world, for two points inside it.
-          let dx = xs[i]! - x;
+          let dx = xs[k]! - x;
           if (dx > halfWidth) dx -= worldWidth;
           else if (dx < -halfWidth) dx += worldWidth;
-          let dy = ys[i]! - y;
+          let dy = ys[k]! - y;
           if (dy > halfHeight) dy -= worldHeight;
           else if (dy < -halfHeight) dy += worldHeight;
           if (dx * dx + dy * dy <= r2) visit(i);

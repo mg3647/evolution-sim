@@ -1,7 +1,19 @@
 import type { SimConfig } from '../sim/config';
 import type { EventKind } from '../sim/environment';
 import type { ToolKind } from '../sim/world';
-import type { FromWorker, HistoryData, LabData, ProfileGroup, ReportSummary, Snapshot, Speed, ToWorker, TreeData } from './protocol';
+import { SteadyMapKeeper } from './maps';
+import type {
+  FromWorker,
+  HistoryData,
+  LabData,
+  OpenViews,
+  ProfileGroup,
+  ReportSummary,
+  Snapshot,
+  Speed,
+  ToWorker,
+  TreeData,
+} from './protocol';
 
 export interface SimClientHandlers {
   onSnapshot: (snapshot: Snapshot) => void;
@@ -21,12 +33,18 @@ export interface SimClientHandlers {
 /** Page-side handle on the simulation worker. */
 export class SimClient {
   private worker: Worker;
+  private maps = new SteadyMapKeeper();
 
   constructor(handlers: SimClientHandlers) {
     this.worker = new Worker(new URL('./sim.worker.ts', import.meta.url), { type: 'module' });
     this.worker.onmessage = (event: MessageEvent<FromWorker>) => {
       const message = event.data;
-      if (message.type === 'snapshot') handlers.onSnapshot(message.snapshot);
+      if (message.type === 'snapshot') {
+        this.maps.fill(message.snapshot);
+        handlers.onSnapshot(message.snapshot);
+        // Tell the worker once this picture is on screen, so it never sends faster than the page draws.
+        requestAnimationFrame(() => this.send({ type: 'drawn' }));
+      }
       else if (message.type === 'history') handlers.onHistory(message.history);
       else if (message.type === 'tree') handlers.onTree(message.tree);
       else if (message.type === 'profiles') handlers.onProfiles(message.groups);
@@ -87,6 +105,11 @@ export class SimClient {
   /** Turn drawing data on or off. Off spares the page the work of drawing. */
   setRendering(enabled: boolean): void {
     this.send({ type: 'setRendering', enabled });
+  }
+
+  /** Say which parts of the page are open, so the worker works out only what they show. */
+  setViews(views: OpenViews): void {
+    this.send({ type: 'setViews', views });
   }
 
   /** Change settings in the running world. Settings that only matter at creation are ignored. */
