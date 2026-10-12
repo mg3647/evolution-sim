@@ -32,6 +32,7 @@
     data,
     events = [],
     stacked = false,
+    max,
     height = DEFAULT_HEIGHT,
     syncKey,
   }: {
@@ -44,6 +45,8 @@
     events?: ChartEvent[];
     /** Draw the series as bands piled on top of one another, so the top edge is their total. */
     stacked?: boolean;
+    /** A fixed top for the left axis, such as 100 for shares that add up to 100%. */
+    max?: number;
     /** Height in pixels when not enlarged. */
     height?: number;
     /** Charts sharing a key share their pointer and their zoom. */
@@ -107,7 +110,13 @@
       {
         width: host.clientWidth,
         height: currentHeight(),
-        scales: { x: { time: false } },
+        scales: {
+          x: { time: false },
+          // Piled bands always start from zero, so a band's height is its share of the total.
+          ...(stacked || max !== undefined
+            ? { y: { range: (_u: uPlot, _min: number, top: number): uPlot.Range.MinMax => [0, max ?? (top > 0 ? top : 1)] } }
+            : {}),
+        },
         legend: { live: true },
         cursor: {
           drag: { x: true, y: false },
