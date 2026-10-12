@@ -115,5 +115,6 @@ Creatures can also reproduce with a mate (Settings, Life and breeding: how
 creatures reproduce): two willing creatures in reach each pay half the usual
 share and the child gets a NEAT-style cross of both brains and a mix of both
 bodies. They can show a costly Display others see, switch eating off, and
-modulate how fast their links learn; links that learn drift back to their
+modulate how fast their links learn (by Oja's rule, so learned weights settle
+instead of running to a limit); links that learn drift back to their
 inherited weight unless used. Saves from versions 14 and 15 still open.

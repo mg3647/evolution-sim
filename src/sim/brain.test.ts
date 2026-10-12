@@ -383,6 +383,36 @@ describe('learning', () => {
     expect(after(-4)).toBeLessThan(0.5);
   });
 
+  it('settles at a moderate weight by itself, with no decay and no limit needed', () => {
+    const brain = learner(0.05);
+    brain.activation[0] = 1;
+    for (let i = 0; i < 10000; i++) think(brain);
+    // Oja's rule stops where weight x output = input, here at w x tanh(w) = 1, about 1.2.
+    expect(brain.linkWeight[0]!).toBeCloseTo(1.2, 1);
+    for (let i = 0; i < 1000; i++) think(brain);
+    expect(brain.linkWeight[0]!).toBeCloseTo(1.2, 1);
+  });
+
+  it('keeps unlearning bounded too, and leaves only the pull back when Learn sits at -0.5', () => {
+    const run = (learnBias: number, ticks: number, decay: number): Brain => {
+      const links = [
+        { innovation: 0, from: 0, to: INPUT_COUNT, weight: 0.5, enabled: true, plasticity: 0.05 },
+        { innovation: 1, from: Input.Bias, to: INPUT_COUNT + Output.Learn, weight: learnBias, enabled: true, plasticity: 0 },
+      ];
+      const brain = compileBrain(links, []);
+      brain.activation[0] = 1;
+      brain.activation[Input.Bias] = 1;
+      for (let i = 0; i < ticks; i++) think(brain, decay);
+      return brain;
+    };
+    // Learn near -1: the weight is pushed down until the output goes quiet, not on toward the limit.
+    const unlearned = run(-6, 10000, 0);
+    expect(Math.abs(unlearned.linkWeight[0]!)).toBeLessThan(0.5);
+    // Learn at -0.5 switches learning off, so only the pull back toward the inherited weight acts.
+    const still = run(Math.atanh(-0.5), 50, 0);
+    expect(still.linkWeight[0]!).toBeCloseTo(0.5, 3);
+  });
+
   it('does not pass what was learned to the young, but does pass the learning rate', () => {
     const innovations = new Innovations();
     const rng = new Rng('baldwin');
