@@ -37,6 +37,12 @@ describe('world', () => {
     expect(hashWorld(runWorld({ seed: 'same' }, 1500))).toBe(hashWorld(runWorld({ seed: 'same' }, 1500)));
   });
 
+  it('stays deterministic with turns in a shuffled order, which changes the world', () => {
+    const shuffled = { seed: 'same', shuffleActOrder: true };
+    expect(hashWorld(runWorld(shuffled, 600))).toBe(hashWorld(runWorld(shuffled, 600)));
+    expect(hashWorld(runWorld(shuffled, 600))).not.toBe(hashWorld(runWorld({ seed: 'same' }, 600)));
+  });
+
   it('differs across seeds and across tick counts', () => {
     expect(hashWorld(runWorld({ seed: 'one' }, 100))).not.toBe(hashWorld(runWorld({ seed: 'two' }, 100)));
     expect(hashWorld(runWorld({ seed: 'one' }, 100))).not.toBe(hashWorld(runWorld({ seed: 'one' }, 101)));
