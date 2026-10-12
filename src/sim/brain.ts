@@ -195,8 +195,8 @@ export const INPUT_LABELS: string[] = [
 export const OUTPUT_LABELS: string[] = [
   'Turn',
   'Thrust',
-  'Reproduce',
-  'Attack',
+  'Breed',
+  'Bite',
   'Emit scent',
   'Call',
   'Give',

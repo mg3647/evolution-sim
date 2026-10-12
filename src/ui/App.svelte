@@ -18,7 +18,7 @@
   import HabitTrends from './HabitTrends.svelte';
   import SettingsPanel from './SettingsPanel.svelte';
   import SpeciesList from './SpeciesList.svelte';
-  import { streamSeries } from './speciesColors';
+  import { speciesColor, speciesName, streamSeries } from './speciesColors';
   import Sparkline from './Sparkline.svelte';
   import Timeline from './Timeline.svelte';
   import TraitCards from './TraitCards.svelte';
@@ -63,7 +63,7 @@
 
   const POPULATION_SERIES: ChartSeries[] = [
     { label: 'Creatures', color: '#e8c468' },
-    { label: 'Plants %', color: '#4caf50', axis: 'right' },
+    { label: 'Plant cover %', color: '#4caf50', axis: 'right' },
   ];
   const DIET_SERIES: ChartSeries[] = [
     { label: 'Plant-eaters %', color: '#4caf50' },
@@ -83,6 +83,25 @@
   let tree = $state.raw<TreeData | null>(null);
   let profiles = $state.raw<ProfileGroup[]>([]);
   let lab = $state.raw<LabData | null>(null);
+  /** Watch mode: the map fills the screen with only the headline numbers over it. */
+  let watching = $state(false);
+  /** Whether Watch mode put the browser into full screen, so leaving it should take it out again. */
+  let watchFullscreen = false;
+  function setWatching(on: boolean) {
+    if (on === watching) return;
+    watching = on;
+    if (on) {
+      document.documentElement
+        .requestFullscreen?.()
+        .then(() => (watchFullscreen = true))
+        .catch(() => {});
+    } else if (watchFullscreen) {
+      watchFullscreen = false;
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    }
+    // Refit once the panels have gone or come back.
+    requestAnimationFrame(() => renderer?.fitToView());
+  }
   /** Whether the full-screen Lab view is open. */
   let showLab = $state(false);
   let showReport = $state(false);
@@ -296,13 +315,28 @@
       r.onTool = (kind, x, y, fromX, fromY) => client?.applyTool(kind, x, y, fromX, fromY);
     });
     const onKey = (event: KeyboardEvent) => {
+      const typing = event.target instanceof HTMLElement && event.target.matches('input, select, textarea');
+      if ((event.key === 'f' || event.key === 'F') && !typing && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        if (!showLab && !showSettingsDrawer && !showReport) setWatching(!watching);
+        return;
+      }
       if (event.key !== 'Escape') return;
-      if (showLab) showLab = false;
+      if (watching) setWatching(false);
+      else if (showLab) showLab = false;
       else pickTool(null);
     };
+    // Leaving the browser's full screen (its own Esc) leaves Watch mode too.
+    const onFullscreen = () => {
+      if (!document.fullscreenElement && watchFullscreen) {
+        watchFullscreen = false;
+        setWatching(false);
+      }
+    };
     window.addEventListener('keydown', onKey);
+    document.addEventListener('fullscreenchange', onFullscreen);
     return () => {
       window.removeEventListener('keydown', onKey);
+      document.removeEventListener('fullscreenchange', onFullscreen);
       disposed = true;
       client?.destroy();
       renderer?.destroy();
@@ -427,7 +461,7 @@
   });
 </script>
 
-<div class="layout">
+<div class="layout" class:watching>
   <header>
     <strong>Evolution Sim</strong>
 
@@ -488,6 +522,9 @@
     </div>
 
     <button onclick={() => renderer?.fitToView()} disabled={!snapshot}>Fit view</button>
+    <button title="Watch: let the world fill the screen, with only the headline numbers. Press F to switch, Esc to leave." onclick={() => setWatching(true)} disabled={!snapshot}>
+      Watch
+    </button>
     <button
       title="Open the Lab: full-screen charts and tables about how the population is evolving. The world keeps running."
       onclick={() => (showLab = true)}
@@ -637,6 +674,9 @@
         <div class="floating-card">
           <div class="creature-info">
             <div class="creature-name">Creature #{snapshot.selected.id}</div>
+            <div class="creature-species">
+              <span class="swatch" style="background: {speciesColor(snapshot.selected.species)}"></span>{speciesName(snapshot.selected.species)}
+            </div>
             <div class="creature-stats">
               <div><span class="label">Gen:</span> <span>{snapshot.selected.generation}</span></div>
               <div><span class="label">Age:</span> <span>{snapshot.selected.age}</span></div>
@@ -773,7 +813,7 @@
           <span class="stat-value">{count(snapshot?.population)}</span>
         </div>
         <div class="stat-item">
-          <span class="stat-label">Hunters</span>
+          <span class="stat-label">Meat-eaters</span>
           <span class="stat-value">{count(snapshot?.meatEaters)}</span>
         </div>
         <div class="stat-item">
@@ -808,7 +848,17 @@
             </span>
           </div>
         {/if}
+        {#if watching}
+          <div class="stat-item">
+            <span class="stat-label">Tick</span>
+            <span class="stat-value">{count(snapshot?.tick)}</span>
+          </div>
+        {/if}
       </div>
+
+      {#if watching}
+        <button class="leave-watch" onclick={() => setWatching(false)} title="Bring back the panels (F or Esc)">Leave Watch · F</button>
+      {/if}
     </div>
 
     <Timeline
@@ -842,8 +892,8 @@
               <span class="v">{count(snapshot?.population)}<em class={trend(history?.population).tone}>{trend(history?.population).arrow}</em></span>
               {#if history?.population}<div class="spark"><Sparkline values={history?.population} color="#e8c468" width={120} height={22} /></div>{/if}
             </div>
-            <div class="stat" title="How full of plants the world is">
-              <span class="k">Plants</span>
+            <div class="stat" title="Plant food in the world, as a share of what it holds when every plant is fully grown. Plant growth, under Environment, is how fast they grow back.">
+              <span class="k">Plant cover</span>
               <span class="v">{(snapshot ? Math.round(snapshot.plantFill * 100) : '-') + '%'}<em class={trend(history?.plantPercent).tone}>{trend(history?.plantPercent).arrow}</em></span>
               {#if history?.plantPercent}<div class="spark"><Sparkline values={history?.plantPercent} color="#4caf50" width={120} height={22} /></div>{/if}
             </div>
@@ -898,7 +948,7 @@
             <summary>More numbers</summary>
         <dl>
           <div><dt>Creatures</dt><dd>{count(snapshot?.population)}</dd></div>
-          <div><dt>Plants</dt><dd>{snapshot ? Math.round(snapshot.plantFill * 100) : '-'}%</dd></div>
+          <div><dt>Plant cover</dt><dd>{snapshot ? Math.round(snapshot.plantFill * 100) : '-'}%</dd></div>
           <div title="Creatures whose diet gene is above 0.5; drawn as pointed shapes">
             <dt>Meat-eaters</dt>
             <dd>{count(snapshot?.meatEaters)}</dd>
@@ -1419,7 +1469,7 @@
     right: 16px;
     z-index: 1;
     display: flex;
-    gap: 12px;
+    gap: 16px;
     padding: 8px 12px;
     background: rgba(0, 0, 0, 0.7);
     border: 1px solid var(--border);
@@ -1541,6 +1591,19 @@
     color: var(--text);
   }
 
+  .creature-species {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: -4px 0 8px;
+  }
+
+  .creature-species .swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
   .creature-stats {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1600,6 +1663,10 @@
   }
 
   .drawer-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--panel);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -1738,6 +1805,43 @@
 
 
 
+
+  /* Watch mode: only the map and the headline numbers. */
+  .watching header,
+  .watching .events,
+  .watching .rail,
+  .watching .resize-handle,
+  .watching aside,
+  .watching .map-legend,
+  .watching .floating-card,
+  .watching .center > :global(.strip) {
+    display: none;
+  }
+
+  .watching .stats-overlay {
+    gap: 22px;
+    padding: 10px 18px;
+    font-size: 17px;
+  }
+
+  .watching .stat-label {
+    font-size: 11px;
+  }
+
+  .leave-watch {
+    position: absolute;
+    left: 16px;
+    top: 16px;
+    z-index: 2;
+    opacity: 0.35;
+    background: rgba(0, 0, 0, 0.7);
+    transition: opacity 0.2s;
+  }
+
+  .leave-watch:hover,
+  .leave-watch:focus-visible {
+    opacity: 1;
+  }
 
   @media (max-width: 800px) {
     .main {

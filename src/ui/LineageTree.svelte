@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { speciesHue } from '../render/renderer';
+  import { speciesColor, speciesName } from './speciesColors';
   import type { TreeData } from '../worker/protocol';
 
   const HEIGHT = 280;
@@ -124,8 +124,13 @@
       let end = alive ? data.tick : data.deathTick[k]!;
       for (const kid of children[k]!) end = Math.max(end, data.birthTick[kid]!);
       ends[k] = end;
-      const hue = colorBySpecies ? speciesHue(data.species[k]!) : data.hue[k]!;
-      ctx.strokeStyle = `hsl(${hue * 360}, 70%, ${alive ? 62 : 42}%)`;
+      if (colorBySpecies) {
+        ctx.strokeStyle = speciesColor(data.species[k]!);
+        ctx.globalAlpha = alive ? 0.85 : 0.5;
+      } else {
+        ctx.strokeStyle = `hsl(${data.hue[k]! * 360}, 70%, ${alive ? 62 : 42}%)`;
+        ctx.globalAlpha = 0.85;
+      }
       ctx.beginPath();
       ctx.moveTo(x(data.birthTick[k]!), y(k));
       ctx.lineTo(x(end), y(k));
@@ -272,7 +277,7 @@
   <p class="readout">
     {#if hovered}
       {hovered.alive ? 'A living creature' : 'An ancestor'} born at tick {Math.round(hovered.born).toLocaleString()},
-      of species <b>{hovered.species}</b>{hovered.founder > 0 ? `, in the family of founder #${hovered.founder}` : ''}.
+      of <b>{speciesName(hovered.species)}</b>{hovered.founder > 0 ? `, in the family of founder #${hovered.founder}` : ''}.
       <b>{hovered.living.toLocaleString()}</b> living {hovered.living === 1 ? 'creature is' : 'creatures are'} on this
       branch.
     {:else}

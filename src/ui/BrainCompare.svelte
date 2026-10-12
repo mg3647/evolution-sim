@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { speciesHue } from '../render/renderer';
+  import { speciesColor } from './speciesColors';
   import { INPUT_COUNT, INPUT_LABELS, OUTPUT_COUNT, OUTPUT_LABELS } from '../sim/brain';
   import { HIDDEN_NODE, type BrainProfile } from '../sim/profile';
   import type { BrainView, ProfileGroup } from '../worker/protocol';
@@ -86,7 +86,7 @@
         {/each}
       </select>
       {#if side.group && side.group.speciesId > 0}
-        <span class="swatch" style="background: hsl({speciesHue(side.group.speciesId) * 360}, 70%, 60%)"></span>
+        <span class="swatch" style="background: {speciesColor(side.group.speciesId)}"></span>
       {/if}
     </div>
     {#if side.group && side.group.profile.count > 0}

@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { HistoryData, SpeciesView } from '../worker/protocol';
   import Sparkline from './Sparkline.svelte';
-  import { speciesColor } from './speciesColors';
+  import { speciesColor, speciesName } from './speciesColors';
 
   let {
     species,
@@ -47,13 +47,14 @@
       <button
         class="row"
         class:pinned={pinned === s.id}
-        title="Species {s.id}: eats {dietName(s.meanDiet)}, size {s.meanSize.toFixed(2)}, speed {s.meanSpeed.toFixed(2)}, first seen {(tick - s.bornTick).toLocaleString()} ticks ago"
+        title="{speciesName(s.id)}: eats {dietName(s.meanDiet)}, size {s.meanSize.toFixed(2)}, speed {s.meanSpeed.toFixed(2)}, first seen {(tick - s.bornTick).toLocaleString()} ticks ago"
         onmouseenter={() => onHover(s.id)}
         onfocus={() => onHover(s.id)}
         onblur={() => onHover(null)}
         onclick={() => onPin(s.id)}
       >
         <span class="swatch" style="background: {speciesColor(s.id)}"></span>
+        <span class="name">{speciesName(s.id)}</span>
         <span class="count">{s.count.toLocaleString()}</span>
         <span class="bar"><span style="width: {(s.count / most) * 100}%; background: {speciesColor(s.id)}"></span></span>
         <span class="spark">
@@ -97,7 +98,7 @@
 
   .row {
     display: grid;
-    grid-template-columns: 12px 3.2em 1fr 84px 3.4em;
+    grid-template-columns: 12px 6.2em 3.2em 1fr 64px 3.4em;
     align-items: center;
     gap: 8px;
     padding: 3px 4px;
@@ -127,6 +128,13 @@
     width: 10px;
     height: 10px;
     border-radius: 50%;
+  }
+
+  .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
   }
 
   .count {
