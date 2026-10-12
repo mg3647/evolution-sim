@@ -529,21 +529,27 @@ export function think(brain: Brain, decay = 0): void {
     const r = rate[n]!;
     activation[n] = r >= 1 ? target : activation[n]! + (target - activation[n]!) * r;
   }
-  // Learning: a link whose two ends are active together strengthens (or, if one
-  // end is negative, weakens), scaled by the Learn output (1 + 2 x its value, so
-  // an unwired Learn leaves it as it was and a negative one unlearns), and every
-  // live weight is pulled back toward the weight it was born with. The live
-  // weight never grows past the limit, but a weight already beyond it is left
-  // alone. Children start from the genes.
+  // Learning, by Oja's rule: a link whose two ends are active together
+  // strengthens (or, if one end is negative, weakens), and the busier the
+  // receiving neuron, the more of the link's weight it forgets, so a weight
+  // settles near the size its inputs support instead of running away. The
+  // Learn output scales both parts (1 + 2 x its value, so an unwired Learn
+  // leaves it as it was) and a negative one turns the strengthening around
+  // while the forgetting stays, so unlearning settles too. Every live weight is
+  // also pulled back toward the weight it was born with, and as a safety net
+  // never grows past the limit. Children start from the genes.
   const { plasticLinks, plasticRate, plasticBase } = brain;
   if (plasticLinks.length === 0) return;
   const modulation = 1 + 2 * activation[INPUT_COUNT + Output.Learn]!;
+  const forgetting = Math.abs(modulation);
   for (let p = 0; p < plasticLinks.length; p++) {
     const k = plasticLinks[p]!;
     const old = linkWeight[k]!;
+    const pre = activation[linkFrom[k]!]!;
+    const post = activation[linkTo[k]!]!;
     const next =
       old +
-      modulation * plasticRate[p]! * activation[linkFrom[k]!]! * activation[linkTo[k]!]! -
+      plasticRate[p]! * post * (modulation * pre - forgetting * post * old) -
       decay * (old - plasticBase[p]!);
     linkWeight[k] = Math.abs(next) > MAX_LIVE_WEIGHT && Math.abs(next) > Math.abs(old) ? old : next;
   }
