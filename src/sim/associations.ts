@@ -206,9 +206,46 @@ export interface BreedingSplit {
   withoutCount: number;
   /**
    * How sure the difference is: the gap in means over its standard error.
-   * Beyond 2 either way, chance alone would rarely give a gap this big.
+   * Beyond 2 either way, chance alone would rarely give a gap this big in one
+   * comparison; but many are made at once, so see `standsOut`.
    */
   z: number;
+  /**
+   * Whether the difference still stands out once allowing for how many
+   * comparisons were made together (Benjamini-Hochberg, at most FALSE_SHARE
+   * of those that stand out expected to be chance).
+   */
+  standsOut: boolean;
+}
+
+/** Share of the differences that stand out that may be chance (the false discovery rate). */
+export const FALSE_SHARE = 0.05;
+
+/** Chance of a gap at least this many standard errors either way, under the normal curve. */
+export function twoSidedP(z: number): number {
+  // Abramowitz and Stegun 7.1.26 for erfc, good to about 1e-7.
+  const x = Math.abs(z) / Math.SQRT2;
+  const t = 1 / (1 + 0.3275911 * x);
+  const poly = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
+  return Math.min(1, poly * Math.exp(-x * x));
+}
+
+/**
+ * Mark which of a family of comparisons stand out (Benjamini-Hochberg): sort
+ * by p, and keep every comparison up to the largest rank k whose p is at most
+ * k / n * FALSE_SHARE. Testing a thousand habits at the 1-in-20 level alone
+ * would call about fifty of them clear by chance.
+ */
+export function markStandouts(splits: BreedingSplit[]): void {
+  const n = splits.length;
+  const order = splits.map((s, k) => ({ p: twoSidedP(s.z), k })).sort((a, b) => a.p - b.p || a.k - b.k);
+  let keep = 0;
+  order.forEach((o, rank) => {
+    if (o.p <= ((rank + 1) / n) * FALSE_SHARE) keep = rank + 1;
+  });
+  order.forEach((o, rank) => {
+    splits[o.k]!.standsOut = rank < keep;
+  });
 }
 
 export interface BreedingLinks {
@@ -230,6 +267,8 @@ export const TRAITS = [
   'diet',
   'fur',
   'defense',
+  'investment',
+  'readiness',
   'mutationRate',
   'links',
   'hiddenNeurons',
@@ -287,7 +326,7 @@ function split(rates: number[], strata: Uint32Array, strataCount: number, inGrou
   const withRate = with_ / weights;
   const withoutRate = without / weights;
   const error = Math.sqrt(variance) / weights;
-  return { withRate, withoutRate, withCount: n1, withoutCount: n2, z: error > 0 ? (withRate - withoutRate) / error : 0 };
+  return { withRate, withoutRate, withCount: n1, withoutCount: n2, z: error > 0 ? (withRate - withoutRate) / error : 0, standsOut: false };
 }
 
 function traitValue(c: Creatures, i: number, trait: TraitName): number {
@@ -310,7 +349,8 @@ function traitValue(c: Creatures, i: number, trait: TraitName): number {
  * so old creatures are not favoured just for having had longer. Each
  * comparison is made within species (see split). These are associations
  * among the living, not proof of cause: a habit can ride along with another
- * that matters.
+ * that matters. Each split says whether it stands out once the number of
+ * comparisons is allowed for.
  */
 export function breedingLinks(c: Creatures, habits: readonly Habits[], minAge: number): BreedingLinks {
   const adults: number[] = [];
@@ -356,5 +396,8 @@ export function breedingLinks(c: Creatures, habits: readonly Habits[], minAge: n
     const s = above >= MIN_SIDE ? compare((k) => values[k]! > median) : compare((k) => values[k]! >= median);
     if (s) result.traits.push({ trait, median, ...s });
   }
+  // Habits and traits are two separate families of comparisons.
+  markStandouts(result.habits);
+  markStandouts(result.traits);
   return result;
 }

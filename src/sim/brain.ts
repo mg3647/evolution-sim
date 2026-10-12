@@ -195,8 +195,8 @@ export const INPUT_LABELS: string[] = [
 export const OUTPUT_LABELS: string[] = [
   'Turn',
   'Thrust',
-  'Reproduce',
-  'Attack',
+  'Breed',
+  'Bite',
   'Emit scent',
   'Call',
   'Give',
@@ -421,7 +421,7 @@ export function mutateBrain(
   const hiddenTau = parent.hiddenTau.slice();
 
   for (const link of links) {
-    if (rng.chance(config.weightResetChance)) link.weight = randomWeight(rng);
+    if (rng.chance(config.weightResetChance)) link.weight = randomWeight(rng) * config.weightResetScale;
     else if (rng.chance(config.weightChangeChance)) {
       link.weight += rng.gaussian() * mutationRate * config.weightChangeScale;
     }

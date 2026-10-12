@@ -32,6 +32,7 @@
     data,
     events = [],
     stacked = false,
+    max,
     height = DEFAULT_HEIGHT,
     syncKey,
   }: {
@@ -44,6 +45,8 @@
     events?: ChartEvent[];
     /** Draw the series as bands piled on top of one another, so the top edge is their total. */
     stacked?: boolean;
+    /** A fixed top for the left axis, such as 100 for shares that add up to 100%. */
+    max?: number;
     /** Height in pixels when not enlarged. */
     height?: number;
     /** Charts sharing a key share their pointer and their zoom. */
@@ -60,6 +63,12 @@
   let given: uPlot.AlignedData | null = null;
 
   /** Pile each series on the ones before it. */
+  /** A value as the readout shows it: whole numbers from 10 up ("54", not "53.728"), two figures below. */
+  function readout(value: number | null | undefined): string {
+    if (value === null || value === undefined || !Number.isFinite(value)) return '--';
+    return Math.abs(value) >= 10 ? Math.round(value).toLocaleString() : Number(value.toPrecision(2)).toLocaleString();
+  }
+
   function pile(input: uPlot.AlignedData): uPlot.AlignedData {
     const out: (number | null | undefined)[][] = [input[0] as number[]];
     const total = new Float64Array(input[0].length);
@@ -107,7 +116,13 @@
       {
         width: host.clientWidth,
         height: currentHeight(),
-        scales: { x: { time: false } },
+        scales: {
+          x: { time: false },
+          // Piled bands always start from zero, so a band's height is its share of the total.
+          ...(stacked || max !== undefined
+            ? { y: { range: (_u: uPlot, _min: number, top: number): uPlot.Range.MinMax => [0, max ?? (top > 0 ? top : 1)] } }
+            : {}),
+        },
         legend: { live: true },
         cursor: {
           drag: { x: true, y: false },
@@ -124,12 +139,10 @@
               ? {
                   fill: s.color + FILL_ALPHA,
                   // The readout gives the series' own value, not the height of the pile.
-                  value: (_u: uPlot, _piled: number | null, _series: number, index: number | null) => {
-                    const own = index === null ? null : (given?.[k + 1]?.[index] as number | null | undefined);
-                    return own === null || own === undefined ? '--' : Number(own.toPrecision(3)).toLocaleString();
-                  },
+                  value: (_u: uPlot, _piled: number | null, _series: number, index: number | null) =>
+                    readout(index === null ? null : (given?.[k + 1]?.[index] as number | null | undefined)),
                 }
-              : {}),
+              : { value: (_u: uPlot, own: number | null) => readout(own) }),
           })),
         ],
         // Each band is filled down to the one below it.

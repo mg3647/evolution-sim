@@ -1,6 +1,7 @@
 import { Application, Container, Graphics, Sprite, Texture } from 'pixi.js';
 import type { ToolKind } from '../sim/world';
 import { CREATURE_STRIDE, type Snapshot } from '../worker/protocol';
+import { speciesRgb } from './speciesPalette';
 
 const BACKGROUND_COLOR = 0x0b0f14;
 const GRID_COLOR = 0xffffff;
@@ -154,12 +155,13 @@ const FADED_ALPHA = 0.3;
 /** Smallest radius a creature is drawn at, in screen pixels. */
 const MIN_SCREEN_RADIUS = 2.5;
 
-/**
- * A hue for a species id. Successive ids land far apart on the colour wheel
- * (steps of the golden ratio), so neighbouring species are easy to tell apart.
- */
-export function speciesHue(id: number): number {
-  return (id * 0.618034) % 1;
+/** A colour with each channel scaled by `by` (below 1 darkens) and mixed toward white by `toWhite`. */
+function shade(rgb: number, by: number, toWhite = 0): number {
+  const channel = (shift: number) => {
+    const c = ((rgb >> shift) & 0xff) * by;
+    return Math.min(255, Math.round(c + (255 - c) * toWhite)) << shift;
+  };
+  return channel(16) | channel(8) | channel(0);
 }
 
 /** Convert hue, saturation and value in [0, 1] to a 0xRRGGBB colour. */
@@ -497,15 +499,15 @@ export class WorldRenderer {
       const y = Math.floor(i / cols) * h;
       const built = blocks[i] === 2 || blocks[i] === 4;
       const heavy = blocks[i]! >= 3;
-      const hue = speciesHue(blockSpecies[i]!);
-      const face = built ? hsvToRgb(hue, 0.5, 0.82) : BLOCK_FACE;
-      const lit = built ? hsvToRgb(hue, 0.3, 1) : BLOCK_LIT;
-      const shade = built ? hsvToRgb(hue, 0.6, 0.45) : BLOCK_SHADE;
-      g.rect(x, y, w, h).fill(shade);
+      const color = speciesRgb(blockSpecies[i]!);
+      const face = built ? shade(color, 0.85) : BLOCK_FACE;
+      const lit = built ? shade(color, 1, 0.45) : BLOCK_LIT;
+      const dark = built ? shade(color, 0.45) : BLOCK_SHADE;
+      g.rect(x, y, w, h).fill(dark);
       g.rect(x, y, w - edge, h - edge).fill(lit);
       g.rect(x + edge, y + edge, w - edge * 2, h - edge * 2).fill(face);
       // A heavy block has a dark inner plate, so it reads as something that needs two to move.
-      if (heavy) g.rect(x + edge * 2.2, y + edge * 2.2, w - edge * 4.4, h - edge * 4.4).fill(shade);
+      if (heavy) g.rect(x + edge * 2.2, y + edge * 2.2, w - edge * 4.4, h - edge * 4.4).fill(dark);
     }
   }
 
@@ -539,9 +541,13 @@ export class WorldRenderer {
       sprite.scale.set((Math.max(creatures[o + 4]!, minRadius) * 2) / CREATURE_TEXTURE_SIZE);
       // Hue is inherited, so relatives share a colour; hungry creatures are dimmer.
       const fed = Math.min(1, creatures[o + 3]! * 2);
-      const hue = this.colorBy === 'species' ? speciesHue(creatures[o + 8]!) : creatures[o + 5]!;
+      const bright = DIMMEST + (1 - DIMMEST) * fed;
       const picked = isPicked(o);
-      sprite.tint = picked ? hsvToRgb(hue, CREATURE_SATURATION, DIMMEST + (1 - DIMMEST) * fed) : FADED_COLOR;
+      sprite.tint = !picked
+        ? FADED_COLOR
+        : this.colorBy === 'species'
+          ? shade(speciesRgb(creatures[o + 8]!), bright)
+          : hsvToRgb(creatures[o + 5]!, CREATURE_SATURATION, bright);
       sprite.alpha = picked ? 1 : FADED_ALPHA;
     }
 

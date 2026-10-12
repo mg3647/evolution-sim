@@ -205,7 +205,7 @@ describe('fire and creatures', () => {
       y: 210,
       heading: 0,
       energy: 25,
-      genes: { size: 1, speed: 1, sensorRange: 1, diet: 0.2, hue: 0.5, fur: 0, defense: 0, mutationRate: 0.05 },
+      genes: { size: 1, speed: 1, sensorRange: 1, diet: 0.2, hue: 0.5, fur: 0, defense: 0, investment: 0.5, readiness: 0.8, mutationRate: 0.05 },
       brain: founderBrain(new Rng('b'), new Innovations(), cfg),
     });
     plants.fire[cellIndexAt(plants, 210 + cfg.senseRange, 210)] = 10;

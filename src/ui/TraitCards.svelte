@@ -12,6 +12,8 @@
     hint: string;
     /** The title of this gene's selection chart in the Lab, if it has one. */
     selection?: string;
+    /** Show the value as a percentage, with this after it. */
+    percent?: string;
   }
 
   export const TRAITS: Trait[] = [
@@ -21,6 +23,8 @@
     { id: 'diet', label: 'Diet', mean: 'meanDiet', spread: 'spreadDiet', color: '#e0566a', hint: '0 eats only plants, 1 only meat', selection: 'Diet (0 plants, 1 meat)' },
     { id: 'fur', label: 'Fur', mean: 'meanFur', spread: 'spreadFur', color: '#f2f2f2', hint: 'Thickness of coat, from 0 (none) to 1' },
     { id: 'defense', label: 'Defenses', mean: 'meanDefense', spread: 'spreadDefense', color: '#e8c468', hint: 'Spines or poison, from 0 (none) to 1' },
+    { id: 'investment', label: 'Gives each child', mean: 'meanInvestment', spread: 'spreadInvestment', color: '#7fd6a4', hint: 'Share of its energy a parent hands to each child', percent: '' },
+    { id: 'readiness', label: 'Breeds at', mean: 'meanReadiness', spread: 'spreadReadiness', color: '#9fc4e8', hint: 'How full its energy store must be before it can breed', percent: ' full' },
   ];
 </script>
 
@@ -95,9 +99,13 @@
           {/if}
         </span>
         {#if card.mean}
-          <span class="now">{card.now.toFixed(2)}<small> ±{card.spreadNow.toFixed(2)}</small></span>
+          {#if trait.percent !== undefined}
+            <span class="now">{Math.round(card.now * 100)}%{trait.percent}<small> ±{Math.round(card.spreadNow * 100)}</small></span>
+          {:else}
+            <span class="now">{card.now.toFixed(2)}<small> ±{card.spreadNow.toFixed(2)}</small></span>
+          {/if}
           <span class="spark"><Sparkline values={card.mean} spread={card.spread} color={trait.color} /></span>
-          <span class="change">{signed(card.change)} since the start</span>
+          <span class="change">{trait.percent !== undefined ? `${card.change >= 0 ? "+" : "−"}${Math.round(Math.abs(card.change) * 100)} points` : signed(card.change)} since the start</span>
         {:else}
           <span class="change">No history yet</span>
         {/if}

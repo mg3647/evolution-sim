@@ -3,7 +3,7 @@
    * A grid of body types: diet along the bottom, speed up the side. Each cell is coloured by the species
    * that has filled it most often over the run and fades when few creatures were ever there.
    */
-  import { speciesColor } from './speciesColors';
+  import { speciesColor, speciesName } from './speciesColors';
 
   let {
     dietBins,
@@ -46,7 +46,7 @@
 <div class="axis"><span>Plant-eaters</span><span>Meat-eaters</span></div>
 <p class="readout">
   {#if cell && cell.samples > 0}
-    {cell.species === 0 ? 'The smaller species' : `Species ${cell.species}`} filled this type of creature{' '}
+    {cell.species === 0 ? 'The smaller species' : speciesName(cell.species)} filled this type of creature{' '}
     <b>{Math.round(cell.share * 100)}%</b> of the time. Speed runs from slow at the bottom to fast at the top.
   {:else}
     {filled} of {cells.length} kinds of creature (diet by speed) have been seen. Colour is the species that filled

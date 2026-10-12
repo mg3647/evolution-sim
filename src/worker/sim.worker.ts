@@ -134,6 +134,8 @@ function inspect(world: World, i: number): Inspection {
     hue: c.hue[i]!,
     fur: c.fur[i]!,
     defense: c.defense[i]!,
+    investment: c.investment[i]!,
+    readiness: c.readiness[i]!,
     held: c.held[i]!,
     heldEnergy: c.heldEnergy[i]!,
     temperature,
@@ -389,6 +391,8 @@ function sendHistory(now: number): void {
     meanDiet: h.meanDiet.slice(0, h.count),
     meanFur: h.meanFur.slice(0, h.count),
     meanDefense: h.meanDefense.slice(0, h.count),
+    meanInvestment: h.meanInvestment.slice(0, h.count),
+    meanReadiness: h.meanReadiness.slice(0, h.count),
     toolHolders: h.toolHolders.slice(0, h.count),
     foodHolders: h.foodHolders.slice(0, h.count),
     meatEaters: h.meatEaters.slice(0, h.count),
@@ -406,6 +410,8 @@ function sendHistory(now: number): void {
     spreadDiet: h.spreadDiet.slice(0, h.count),
     spreadFur: h.spreadFur.slice(0, h.count),
     spreadDefense: h.spreadDefense.slice(0, h.count),
+    spreadInvestment: h.spreadInvestment.slice(0, h.count),
+    spreadReadiness: h.spreadReadiness.slice(0, h.count),
     deathsStarved: h.deathsStarved.slice(0, h.count),
     deathsOldAge: h.deathsOldAge.slice(0, h.count),
     deathsKilled: h.deathsKilled.slice(0, h.count),
@@ -581,6 +587,8 @@ function sendLab(): void {
     meanFur: 0,
     meanDefense: 0,
     meanDiet: 0,
+    meanInvestment: 0,
+    meanReadiness: 0,
   }));
   for (let i = 0; i < c.count; i++) {
     const biome = biomes[p.biome[cellIndexAt(p, c.x[i]!, c.y[i]!)]!]!;
@@ -590,6 +598,8 @@ function sendLab(): void {
     biome.meanFur += c.fur[i]!;
     biome.meanDefense += c.defense[i]!;
     biome.meanDiet += c.diet[i]!;
+    biome.meanInvestment += c.investment[i]!;
+    biome.meanReadiness += c.readiness[i]!;
   }
   for (const biome of biomes) {
     const count = Math.max(1, biome.count);
@@ -598,6 +608,8 @@ function sendLab(): void {
     biome.meanFur /= count;
     biome.meanDefense /= count;
     biome.meanDiet /= count;
+    biome.meanInvestment /= count;
+    biome.meanReadiness /= count;
   }
   const dietBins = new Array<number>(DIET_BINS).fill(0);
   for (let i = 0; i < c.count; i++) dietBins[Math.min(DIET_BINS - 1, Math.floor(c.diet[i]! * DIET_BINS))]!++;
@@ -722,7 +734,10 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
     noteIntervention('clearWalls');
     clearWorldWalls(runner.world);
   } else if (message.type === 'setRandomEvents') {
-    noteIntervention('randomEvents', String(message.enabled));
+    // Only a real change counts, and setting up a new world (as a preset does) is not a change by hand.
+    if (runner.world.environment.randomEvents !== message.enabled && runner.world.tick > 0) {
+      noteIntervention('randomEvents', String(message.enabled));
+    }
     runner.world.environment.randomEvents = message.enabled;
   } else if (message.type === 'setRendering') {
     rendering = message.enabled;
@@ -769,8 +784,11 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
       // A loaded world carries no record of what was done to it before, so the report says so.
       interventions = [{ tick: runner.world.tick, kind: 'loadedSave' }];
       worldReplaced();
+      post({ type: 'loaded', config: { ...runner.world.config } });
     } catch (error) {
-      const reason = error instanceof SyntaxError ? 'This file is not a saved world.' : (error as Error).message;
+      // A file that is not JSON, or is JSON of some other shape, fails before any of the save's own checks.
+      const reason =
+        error instanceof SyntaxError || error instanceof TypeError ? 'This file is not a saved world.' : (error as Error).message;
       post({ type: 'error', message: `Could not load: ${reason}` });
       return;
     }

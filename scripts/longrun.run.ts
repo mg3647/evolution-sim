@@ -27,9 +27,9 @@ import { brainProfile } from '../src/sim/profile';
 import { Held } from '../src/sim/creatures';
 import { daylightAt } from '../src/sim/environment';
 import { maxEnergyFor, upkeepFor } from '../src/sim/genome';
-import { SURVIVAL_AGE } from '../src/sim/wiring';
 import { cellIndexAt, groundHue, visibility } from '../src/sim/plants';
 import { createWorld, step } from '../src/sim/world';
+import { functionalHidden, Locality, type LocalitySummary } from './locality';
 
 const seeds = (process.env.SEEDS ?? 'genesis,second,third').split(',');
 const ticks = Number(process.env.TICKS ?? 200000);
@@ -91,7 +91,7 @@ interface Summary {
   generation: { mean: number; max: number };
   /** Brain changes added by mutation per birth of one parent, as counted and as the settings should give, for links and neurons. */
   structural: { links: number; neurons: number; expectedLinks: number; expectedNeurons: number };
-  /** Of links first carried at least 20 samples before the end: share still carried by anyone, and share carried with a weight beyond 0.3. */
+  /** Of links first carried at least `wiringSurvivalTicks` before the end: share still carried by anyone, and share carried with a weight beyond 0.3. */
   linksStillCarried: number;
   linksStillStrong: number;
   /** Mean enabled links per creature, their energy cost as a share of one body's upkeep, and the share of all links that are switched off. */
@@ -155,7 +155,54 @@ interface Summary {
    * and those creatures' mean fur, size, speed and diet.
    */
   biomes: { land: number; share: number; occupied: number; fur: number; size: number; speed: number; diet: number }[];
+  /** Local adaptation by birthplace, and how much children behave like their parents. */
+  locality: LocalitySummary;
+  /** At the end: hidden neurons per brain, and those whose removal changes what the brain does. */
+  hiddenNeurons: { hidden: number; functional: number };
   ticksPerSecond: number;
+  /** The investment and readiness genes; see lifeHistoryOf. */
+  lifeHistory: LifeHistory;
+}
+
+interface GeneSpread {
+  mean: number;
+  sd: number;
+}
+
+/**
+ * The life-history genes: means and spreads at the end (and of their product,
+ * the share of a full store a child is given), their means at each quarter of
+ * the run, by diet and in the biggest species; and over the measured period,
+ * the share of deaths before breeding age and failed tries to breed per birth.
+ */
+interface LifeHistory {
+  investment: GeneSpread;
+  readiness: GeneSpread;
+  product: GeneSpread;
+  quarters: { tick: number; investment: number; readiness: number }[];
+  byDiet: { plants: { n: number; investment: number; readiness: number }; meat: { n: number; investment: number; readiness: number } };
+  bySpecies: { id: number; n: number; investment: number; readiness: number }[];
+  juvenileDeathShare: number;
+  tooSmallPerBirth: number;
+}
+
+function spreadOfValues(values: number[]): GeneSpread {
+  const n = Math.max(1, values.length);
+  const mean = values.reduce((a, b) => a + b, 0) / n;
+  return { mean, sd: Math.sqrt(values.reduce((a, b) => a + (b - mean) * (b - mean), 0) / n) };
+}
+
+function meanGenes(c: ReturnType<typeof createWorld>['creatures'], pick: (i: number) => boolean) {
+  let n = 0;
+  let investment = 0;
+  let readiness = 0;
+  for (let i = 0; i < c.count; i++) {
+    if (!pick(i)) continue;
+    n++;
+    investment += c.investment[i]!;
+    readiness += c.readiness[i]!;
+  }
+  return { n, investment: investment / Math.max(1, n), readiness: readiness / Math.max(1, n) };
 }
 
 function run(seed: string): Summary {
@@ -194,6 +241,7 @@ function run(seed: string): Summary {
   const biomeSpeed = zero();
   const biomeDiet = zero();
   const started = performance.now();
+  const locality = new Locality(world);
 
   let callerSum = 0;
   let dayActivity = 0;
@@ -204,9 +252,12 @@ function run(seed: string): Summary {
   let deathsBefore = { ...world.deaths };
   let reseededBefore = 0;
   let firesBefore = { ...world.fires };
+  let lifeBefore = { ...world.lifeHistory };
+  const quarters: LifeHistory['quarters'] = [];
   for (let tick = 1; tick <= ticks; tick++) {
     if (tick === changeAt) Object.assign(world.config, change);
     step(world);
+    locality.afterStep(tick, tick > from);
     if (tick === from) {
       deathsBefore = { ...world.deaths };
       socialBefore = { ...world.social };
@@ -216,6 +267,11 @@ function run(seed: string): Summary {
       matingBefore = { ...world.mating };
       blocksBefore = { ...world.blockTally };
       carryBefore = { ...world.carry };
+      lifeBefore = { ...world.lifeHistory };
+    }
+    if (tick % Math.max(1, Math.floor(ticks / 4)) === 0) {
+      const m = meanGenes(c, () => true);
+      quarters.push({ tick, investment: m.investment, readiness: m.readiness });
     }
     if (tick > from) {
       creatureTicks += c.count;
@@ -238,6 +294,7 @@ function run(seed: string): Summary {
     }
     if (tick % SAMPLE !== 0 || tick <= from) continue;
     samples++;
+    locality.sample(SAMPLE);
     popSum += c.count;
     popMin = Math.min(popMin, c.count);
     popMax = Math.max(popMax, c.count);
@@ -319,6 +376,7 @@ function run(seed: string): Summary {
     starvedShare: deaths > 0 ? d.starved / deaths : 0,
     starvedOrTemperatureShare: deaths > 0 ? (d.starved + d.temperature) / deaths : 0,
     abioticShare: deaths > 0 ? (d.thirst + d.temperature + d.disaster) / deaths : 0,
+    lifeHistory: lifeHistoryOf(world, quarters, deaths, lifeBefore, world.births - birthsBefore),
     ...endOfRun(world),
     firesPerTenThousand: ((world.fires.started - firesBefore.started) * 10000) / Math.max(1, ticks - from),
     burnedPerTenThousand:
@@ -384,6 +442,8 @@ function run(seed: string): Summary {
       speed: biomeSpeed[biome]! / Math.max(1, count),
       diet: biomeDiet[biome]! / Math.max(1, count),
     })),
+    locality: locality.summary(),
+    hiddenNeurons: functionalHidden(world),
     ticksPerSecond: (ticks * 1000) / (performance.now() - started),
   };
 }
@@ -432,6 +492,30 @@ function speciesLearning(world: ReturnType<typeof createWorld>): Summary['specie
 }
 
 /** Measures that are only meaningful at the end of a run. */
+function lifeHistoryOf(
+  world: ReturnType<typeof createWorld>,
+  quarters: LifeHistory['quarters'],
+  deaths: number,
+  before: { tooSmall: number; juvenileDeaths: number },
+  births: number,
+): LifeHistory {
+  const c = world.creatures;
+  const all = Array.from({ length: c.count }, (_, i) => i);
+  const sizes = new Map<number, number>();
+  for (const i of all) sizes.set(c.species[i]!, (sizes.get(c.species[i]!) ?? 0) + 1);
+  const biggest = [...sizes.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
+  return {
+    investment: spreadOfValues(all.map((i) => c.investment[i]!)),
+    readiness: spreadOfValues(all.map((i) => c.readiness[i]!)),
+    product: spreadOfValues(all.map((i) => c.investment[i]! * c.readiness[i]!)),
+    quarters,
+    byDiet: { plants: meanGenes(c, (i) => c.diet[i]! <= 0.5), meat: meanGenes(c, (i) => c.diet[i]! > 0.5) },
+    bySpecies: biggest.map(([id]) => ({ id, ...meanGenes(c, (i) => c.species[i] === id) })),
+    juvenileDeathShare: (world.lifeHistory.juvenileDeaths - before.juvenileDeaths) / Math.max(1, deaths),
+    tooSmallPerBirth: (world.lifeHistory.tooSmall - before.tooSmall) / Math.max(1, births),
+  };
+}
+
 function endOfRun(world: ReturnType<typeof createWorld>) {
   const c = world.creatures;
   let generationSum = 0;
@@ -460,7 +544,7 @@ function endOfRun(world: ReturnType<typeof createWorld>) {
   let kept = 0;
   let stronger = 0;
   for (const [id, at] of world.wiring.realFirst) {
-    if (at > 1 && world.wiring.samples - at >= SURVIVAL_AGE) {
+    if (at > world.wiring.startTick && world.tick - at >= world.config.wiringSurvivalTicks) {
       old++;
       if (carried.has(id)) kept++;
       if (strong.has(id)) stronger++;
@@ -526,6 +610,18 @@ it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
         `tps=${Math.round(s.ticksPerSecond)}`,
       ].join(' '),
     );
+    const l = s.lifeHistory;
+    const g = (x: GeneSpread) => `${x.mean.toFixed(3)}±${x.sd.toFixed(3)}`;
+    const m = (x: { n: number; investment: number; readiness: number }) => `n=${x.n} inv=${x.investment.toFixed(3)} ready=${x.readiness.toFixed(3)}`;
+    console.log(
+      [
+        `  lifeHistory investment=${g(l.investment)} readiness=${g(l.readiness)} product=${g(l.product)}`,
+        `juvenileDeaths=${percent(l.juvenileDeathShare)} tooSmall/birth=${l.tooSmallPerBirth.toFixed(2)}`,
+        `quarters=${l.quarters.map((q) => `t${q.tick}:${q.investment.toFixed(3)}/${q.readiness.toFixed(3)}`).join(',')}`,
+        `plantEaters(${m(l.byDiet.plants)}) meatEaters(${m(l.byDiet.meat)})`,
+        `species=${l.bySpecies.map((x) => `[${x.id} ${m(x)}]`).join(' ')}`,
+      ].join(' '),
+    );
     console.log(
       'RESULT ' +
         JSON.stringify({
@@ -558,6 +654,11 @@ it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
           linkCost: s.linkCostShare,
           disabled: s.disabledShare,
           reseeded: s.reseeded,
+          recurrent: s.recurrentShare,
+          slowNeurons: s.slowNeuronShare,
+          hiddenNeurons: s.hiddenNeurons.hidden,
+          functionalHidden: s.hiddenNeurons.functional,
+          ...s.locality,
         }),
     );
     console.log(
@@ -568,6 +669,13 @@ it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
     );
     console.log(
       `    wiring: links=${s.wiring.live.toFixed(0)} shadow=${s.wiring.shadowLive.toFixed(0)} activity real/shadow=${s.wiring.activity.toFixed(1)}/${s.wiring.shadowActivity.toFixed(1)} newLinksKept real/shadow=${percent(s.wiring.survival)}/${percent(s.wiring.shadowSurvival)}`,
+    );
+    const l = s.locality;
+    console.log(
+      `    locality: residency=${percent(l.residency)} (by chance ${percent(l.residencyByChance)}) furByBirthBiome=${l.furByBirth.toFixed(3)} sizeByBirthBiome=${l.sizeByBirth.toFixed(3)} furVsBirthTemp r=${l.furTemperatureR.toFixed(3)} fur tundra/desert-born=${l.tundraFur.toFixed(2)}/${l.desertFur.toFixed(2)} climateHomeGap=${percent(l.climateHomeGap)} breedingHomeAdvantage=${l.homeAdvantage.toFixed(2)}`,
+    );
+    console.log(
+      `    inheritance: childParentGap=${l.childParentGap.toFixed(3)} (both parents ${l.childParentsMeanGap.toFixed(3)}) sameSpeciesGap=${l.sameSpeciesGap.toFixed(3)} actionsAgree child/species=${percent(l.childParentAgree)}/${percent(l.sameSpeciesAgree)} probes=${l.probes} mutationRate=${l.mutationRate.toFixed(3)} hidden=${s.hiddenNeurons.hidden.toFixed(2)} functionalHidden=${s.hiddenNeurons.functional.toFixed(2)}`,
     );
     for (const sp of s.speciesLearning) {
       console.log(
@@ -594,6 +702,15 @@ it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
       ['brainsWithLoop', (s) => s.recurrentShare, percent],
       ['newLinksKept real', (s) => s.wiring.survival, percent],
       ['newLinksKept shadow', (s) => s.wiring.shadowSurvival, percent],
+      ['residency', (s) => s.locality.residency, percent],
+      ['furVsBirthTemp r', (s) => s.locality.furTemperatureR, (x) => x.toFixed(3)],
+      ['climateHomeGap', (s) => s.locality.climateHomeGap, percent],
+      ['breedingHomeAdvantage', (s) => s.locality.homeAdvantage, (x) => x.toFixed(2)],
+      ['childParentGap', (s) => s.locality.childParentGap, (x) => x.toFixed(3)],
+      ['sameSpeciesGap', (s) => s.locality.sameSpeciesGap, (x) => x.toFixed(3)],
+      ['mutationRate', (s) => s.locality.mutationRate, (x) => x.toFixed(3)],
+      ['hiddenNeurons', (s) => s.hiddenNeurons.hidden, (x) => x.toFixed(2)],
+      ['functionalHidden', (s) => s.hiddenNeurons.functional, (x) => x.toFixed(2)],
     ];
     for (const [base, list] of runs) {
       console.log(`${base}: mean (spread = standard deviation) over ${list.length} runs`);

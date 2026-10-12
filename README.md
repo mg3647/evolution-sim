@@ -18,7 +18,9 @@ seasons and the hour: being too hot or too cold costs energy, big bodies and
 fur hold heat in, and creatures can feel the temperature. Heat and wetness
 divide the 4,000 by 4,000 map into five biomes (grassland, forest, rainforest,
 desert, tundra), each with a perk and a drawback. A defense gene (spines or
-poison) hurts whatever bites its owner, at a cost in energy. Branches lie in
+poison) hurts whatever bites its owner, at a cost in energy. How much a parent
+gives each child and how full it must be before it breeds are genes too, so
+lineages can evolve many thinly fed young or few well-fed ones. Branches lie in
 forests and stones in deserts; lightning starts wildfires in hot weather, which
 spread through plants, hurt what stands in them, warm the land around and
 leave ash where plants regrow faster. Creatures can pick up and hold one thing:
@@ -34,7 +36,10 @@ can trigger droughts, ice ages and food booms, and use hand tools to place
 meteors and plague, draw walls, and make land fertile or barren. Creatures can
 leave and smell scent. You can inspect any creature's brain wiring, see the
 family tree and species of the living population, change any setting while
-the world runs, pick a preset, and save and load a world. The Lab button opens
+the world runs, pick a preset, and save and load a world. Species get short
+made-up names ("Noxora") and colours chosen to stay apart for colour-blind
+viewers, the same in every view. Watch (or the F key) hides the panels and lets
+the world fill the screen with only the headline numbers. The Lab button opens
 a full-screen analysis page: deaths by cause, a stream of species, the diet
 gene's distribution, a density map with a time slider, behaviour, life
 histories, food flow, selection at work, gene diversity, the most successful

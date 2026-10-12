@@ -153,6 +153,18 @@ describe('mutateBrain', () => {
     expect(child.links.some((link, k) => link.weight !== parent.links[k]!.weight)).toBe(true);
   });
 
+  it('resets a weight to the spread the reset scale sets', () => {
+    const innovations = new Innovations();
+    const rng = new Rng('reset');
+    const parent = founderBrain(rng, innovations, { ...config, founderLinks: 40 });
+    const spread = (scale: number) => {
+      const child = mutateBrain(parent, 0.1, new Rng('r'), innovations, only({ weightResetChance: 1, weightResetScale: scale }));
+      return Math.sqrt(child.links.reduce((sum, link) => sum + link.weight ** 2, 0) / child.links.length);
+    };
+    expect(spread(1)).toBeGreaterThan(0.5);
+    expect(spread(0.1)).toBeCloseTo(spread(1) * 0.1, 5);
+  });
+
   it('starts the child with a blank mind', () => {
     const innovations = new Innovations();
     const parent = founderBrain(new Rng('p'), innovations, config);

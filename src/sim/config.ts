@@ -78,6 +78,12 @@ export interface SimConfig {
    */
   socialSenses: boolean;
 
+  /**
+   * Whether creatures take their turns in a fresh random order each tick.
+   * Off, they go in order of birth, so older creatures bite and eat first.
+   */
+  shuffleActOrder: boolean;
+
   /** Energy per tick for each hidden neuron and each enabled link. */
   brainNeuronCost: number;
   brainLinkCost: number;
@@ -88,8 +94,9 @@ export interface SimConfig {
   /** Per birth: chance that each link's weight shifts, and how far relative to the mutation rate. */
   weightChangeChance: number;
   weightChangeScale: number;
-  /** Per birth: chance that each link's weight is replaced outright. */
+  /** Per birth: chance that each link's weight is replaced outright, and the spread of its new weight. */
   weightResetChance: number;
+  weightResetScale: number;
   /**
    * Links added by mutation start with a weight of this standard deviation
    * (founders' links always use 1). Small makes a new link nearly neutral, to
@@ -158,10 +165,24 @@ export interface SimConfig {
   /** Meat in a cell that reads as 1 to the senses and draws at full colour. */
   meatScale: number;
 
-  /** A creature reproduces when its energy reaches this fraction of its maximum. */
+  /**
+   * Founders' readiness gene: a creature can breed once its energy reaches
+   * this fraction of its maximum. Their descendants evolve their own.
+   */
   reproduceThreshold: number;
-  /** Fraction of the parent's energy handed to the child. */
+  /** Founders' investment gene: the fraction of a parent's energy handed to a child. Descendants evolve their own. */
   offspringShare: number;
+  /** Limits of the investment gene. */
+  minInvestment: number;
+  maxInvestment: number;
+  /** Limits of the readiness gene. */
+  minReadiness: number;
+  maxReadiness: number;
+  /**
+   * Whether investment and readiness evolve. Off, everyone keeps the two
+   * settings above: a control for telling selection from drift.
+   */
+  lifeHistoryMutates: boolean;
   /** Fraction of the handed-over energy lost as heat, on top of building the child's body. */
   birthCost: number;
   /** Creatures younger than this many ticks cannot reproduce. */
@@ -277,6 +298,8 @@ export interface SimConfig {
   statsInterval: number;
   /** Number of history samples kept. */
   statsCapacity: number;
+  /** How old, in ticks, a new brain link must be before the Lab judges whether it lasted. */
+  wiringSurvivalTicks: number;
 
   /**
    * How much a creature the colour of the ground under it is hidden: the share
@@ -431,6 +454,7 @@ export const defaultConfig: SimConfig = {
   giveRate: 0.5,
   giveReserve: 0.25,
   socialSenses: true,
+  shuffleActOrder: false,
 
   brainNeuronCost: 0.002,
   brainLinkCost: 0.0005,
@@ -440,6 +464,7 @@ export const defaultConfig: SimConfig = {
   weightChangeChance: 0.5,
   weightChangeScale: 4,
   weightResetChance: 0.02,
+  weightResetScale: 1,
   newLinkWeightScale: 0.1,
   addLinkChance: 0.3,
   addNeuronChance: 0.06,
@@ -471,6 +496,11 @@ export const defaultConfig: SimConfig = {
 
   reproduceThreshold: 0.8,
   offspringShare: 0.5,
+  minInvestment: 0.1,
+  maxInvestment: 0.9,
+  minReadiness: 0.3,
+  maxReadiness: 0.95,
+  lifeHistoryMutates: true,
   birthCost: 0.25,
   minReproduceAge: 150,
   reproductionMode: 0,
@@ -532,6 +562,7 @@ export const defaultConfig: SimConfig = {
 
   statsInterval: 30,
   statsCapacity: 1000,
+  wiringSurvivalTicks: 600,
 
   camouflage: 0.7,
 
