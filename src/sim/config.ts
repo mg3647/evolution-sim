@@ -277,6 +277,8 @@ export interface SimConfig {
   statsInterval: number;
   /** Number of history samples kept. */
   statsCapacity: number;
+  /** How old, in ticks, a new brain link must be before the Lab judges whether it lasted. */
+  wiringSurvivalTicks: number;
 
   /**
    * How much a creature the colour of the ground under it is hidden: the share
@@ -532,6 +534,7 @@ export const defaultConfig: SimConfig = {
 
   statsInterval: 30,
   statsCapacity: 1000,
+  wiringSurvivalTicks: 600,
 
   camouflage: 0.7,
 

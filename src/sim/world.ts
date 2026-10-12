@@ -1190,7 +1190,7 @@ function sampleHistory(world: World): void {
   let built = 0;
   for (let cell = 0; cell < world.plants.blockBuilt.length; cell++) built += world.plants.blockBuilt[cell]!;
 
-  const wiring = sampleWiring(world.wiring, creatures);
+  const wiring = sampleWiring(world.wiring, creatures, world.tick, world.config.wiringSurvivalTicks);
   recordSample(world.history, {
     deathsStarved: perThousand(deaths.starved, then.starved),
     deathsOldAge: perThousand(deaths.oldAge, then.oldAge),
@@ -1276,85 +1276,5 @@ export function totalEnergy(world: World): number {
   );
 }
 
-function hashBytes(h: number, bytes: Uint8Array): number {
-  for (let i = 0; i < bytes.length; i++) {
-    h ^= bytes[i]!;
-    h = Math.imul(h, 16777619);
-  }
-  return h;
-}
-
-function bytesOf(
-  array: Uint8Array | Uint16Array | Uint32Array | Int32Array | Float32Array | Float64Array,
-  count = array.length,
-): Uint8Array {
-  return new Uint8Array(array.buffer, array.byteOffset, count * array.BYTES_PER_ELEMENT);
-}
-
-/**
- * Hash of the full world state (FNV-1a over its bytes). Two worlds with the
- * same hash are, for testing purposes, in the same state.
- */
-export function hashWorld(world: World): number {
-  const { creatures: c, plants } = world;
-  const s = world.rng.getState();
-  const header = [world.tick, s.a, s.b, s.c, s.d, c.count, c.nextId, ...world.innovations.counts()];
-  let h = 2166136261;
-  h = hashBytes(h, bytesOf(new Uint32Array(header)));
-  h = hashBytes(h, bytesOf(plants.energy));
-  h = hashBytes(h, bytesOf(plants.meat));
-  h = hashBytes(h, bytesOf(plants.capacity));
-  h = hashBytes(h, bytesOf(plants.scent));
-  h = hashBytes(h, plants.walls);
-  h = hashBytes(h, plants.blocks);
-  h = hashBytes(h, bytesOf(plants.blockSpecies));
-  h = hashBytes(h, plants.blockBuilt);
-  h = hashBytes(h, bytesOf(plants.store));
-  h = hashBytes(h, plants.branches);
-  h = hashBytes(h, plants.stones);
-  h = hashBytes(h, bytesOf(plants.fire));
-  h = hashBytes(h, bytesOf(plants.ash));
-  for (const field of [
-    c.id,
-    c.parentId,
-    c.generation,
-    c.founder,
-    c.species,
-    c.x,
-    c.y,
-    c.heading,
-    c.energy,
-    c.age,
-    c.children,
-    c.health,
-    c.hydration,
-    c.pain,
-    c.sick,
-    c.calling,
-    c.held,
-    c.heldEnergy,
-    c.size,
-    c.speed,
-    c.sensorRange,
-    c.diet,
-    c.hue,
-    c.fur,
-    c.defense,
-    c.mutationRate,
-  ]) {
-    h = hashBytes(h, bytesOf(field, c.count));
-  }
-  for (let i = 0; i < c.count; i++) {
-    const brain = c.brain[i]!;
-    h = hashBytes(h, bytesOf(new Uint32Array(brain.links.map((link) => link.innovation * 2 + +link.enabled))));
-    h = hashBytes(h, bytesOf(new Float32Array(brain.links.map((link) => link.weight))));
-    h = hashBytes(h, bytesOf(brain.linkFrom));
-    h = hashBytes(h, bytesOf(brain.linkTo));
-    h = hashBytes(h, bytesOf(brain.activation));
-    h = hashBytes(h, bytesOf(new Float32Array(brain.hiddenTau)));
-    h = hashBytes(h, bytesOf(brain.linkWeight));
-    h = hashBytes(h, bytesOf(brain.plasticRate));
-    h = hashBytes(h, bytesOf(new Uint32Array(c.shadow[i]!)));
-  }
-  return h >>> 0;
-}
+// The world's fingerprint is taken over its save, so it covers everything a save holds.
+export { hashWorld } from './serialize';

@@ -27,7 +27,6 @@ import { brainProfile } from '../src/sim/profile';
 import { Held } from '../src/sim/creatures';
 import { daylightAt } from '../src/sim/environment';
 import { maxEnergyFor, upkeepFor } from '../src/sim/genome';
-import { SURVIVAL_AGE } from '../src/sim/wiring';
 import { cellIndexAt, groundHue, visibility } from '../src/sim/plants';
 import { createWorld, step } from '../src/sim/world';
 
@@ -91,7 +90,7 @@ interface Summary {
   generation: { mean: number; max: number };
   /** Brain changes added by mutation per birth of one parent, as counted and as the settings should give, for links and neurons. */
   structural: { links: number; neurons: number; expectedLinks: number; expectedNeurons: number };
-  /** Of links first carried at least 20 samples before the end: share still carried by anyone, and share carried with a weight beyond 0.3. */
+  /** Of links first carried at least `wiringSurvivalTicks` before the end: share still carried by anyone, and share carried with a weight beyond 0.3. */
   linksStillCarried: number;
   linksStillStrong: number;
   /** Mean enabled links per creature, their energy cost as a share of one body's upkeep, and the share of all links that are switched off. */
@@ -460,7 +459,7 @@ function endOfRun(world: ReturnType<typeof createWorld>) {
   let kept = 0;
   let stronger = 0;
   for (const [id, at] of world.wiring.realFirst) {
-    if (at > 1 && world.wiring.samples - at >= SURVIVAL_AGE) {
+    if (at > world.wiring.startTick && world.tick - at >= world.config.wiringSurvivalTicks) {
       old++;
       if (carried.has(id)) kept++;
       if (strong.has(id)) stronger++;
