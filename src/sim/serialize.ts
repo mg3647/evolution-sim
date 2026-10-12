@@ -20,13 +20,15 @@ import type { World } from './world';
  */
 
 /** Bumped whenever the saved layout changes. */
-export const SAVE_VERSION = 17;
+export const SAVE_VERSION = 18;
 /**
  * Oldest save this version still opens. Saves from 14 on load with the newer
  * fields at their neutral values (settings added since take their defaults,
  * neurons answer at once, links do not learn, nothing is displayed, eating is
  * on, mating is off), so they play as they did before. Brains from before 17
- * are renumbered to make room for the new senses and actions.
+ * are renumbered to make room for the new senses and actions. Saves from before
+ 18 have no heavy-block grips under way, and their wiring tallies are moved
+ from sample numbers to ticks.
  */
 export const OLDEST_LOADABLE_VERSION = 14;
 
@@ -126,6 +128,48 @@ function renumberBrains(saved: SavedWorld): SavedWorld {
   };
 }
 
+/** Where a save from before version 18 kept its wiring tallies: the sample at which each link was first carried. */
+function wiringToTicks(saved: SavedWorld): SavedWorld {
+  const shadow = saved.shadow;
+  if (!shadow) return saved;
+  const tickOf = sampleTicks(saved);
+  const toTick = (firsts: [number, number][]) => firsts.map(([id, sample]) => [id, tickOf(sample)] as [number, number]);
+  return {
+    ...saved,
+    shadow: { ...shadow, realFirst: toTick(shadow.realFirst), shadowFirst: toTick(shadow.shadowFirst), startTick: tickOf(1) },
+  };
+}
+
+/**
+ * The tick each wiring sample of an older save was taken at. Samples are taken
+ * with the history, starting at tick 0, and their spacing doubles each time the
+ * history fills, so the ticks are replayed from the start. If the replay does
+ * not end where the save did (a world first loaded from a save made before the
+ * tallies existed), samples are instead spaced back from the save's tick at its
+ * last spacing.
+ */
+function sampleTicks(saved: SavedWorld): (sample: number) => number {
+  const samples = saved.shadow!.samples;
+  const config = { ...defaultConfig, ...saved.config };
+  const ticks = [0, 0];
+  let interval = config.statsInterval;
+  let count = 1;
+  for (let k = 2; k <= samples; k++) {
+    const previous = ticks[k - 1]!;
+    // The next sample comes at the next multiple of the spacing; the history then halves if it is full.
+    ticks.push((Math.floor(previous / interval) + 1) * interval);
+    if (count === config.statsCapacity) {
+      count = Math.ceil(count / 2);
+      interval *= 2;
+    }
+    count++;
+  }
+  const replayed = interval === saved.history.interval && count === saved.history.count && ticks[samples]! <= saved.tick;
+  if (replayed) return (sample) => ticks[sample] ?? 0;
+  const last = Math.floor(saved.tick / saved.history.interval) * saved.history.interval;
+  return (sample) => Math.max(0, last - (samples - sample) * saved.history.interval);
+}
+
 const FIELD_ARRAYS = ['fertility', 'capacity', 'energy', 'meat', 'scent', 'walls', 'water', 'temperature', 'branches', 'stones', 'fire', 'ash', 'store', 'blocks', 'blockSpecies', 'blockBuilt'] as const;
 
 interface SavedBrain {
@@ -143,7 +187,12 @@ export interface SavedWorld {
   config: SimConfig;
   tick: number;
   rng: RngState;
-  field: Record<(typeof FIELD_ARRAYS)[number], number[]> & { blockHeavy?: number[] };
+  field: Record<(typeof FIELD_ARRAYS)[number], number[]> & {
+    blockHeavy?: number[];
+    /** Pushes on heavy blocks under way; absent in saves from before 18. */
+    heavyGripTick?: number[];
+    heavyGripper?: number[];
+  };
   plantCapacityTotal: number;
   creatures: { count: number; nextId: number; brains: SavedBrain[] } & Record<
     (typeof CREATURE_FIELDS)[number],
@@ -159,6 +208,8 @@ export interface SavedWorld {
     realFirst: [number, number][];
     shadowFirst: [number, number][];
     samples: number;
+    /** Absent in saves from before 18, when `realFirst` and `shadowFirst` held sample numbers rather than ticks. */
+    startTick?: number;
   };
   ledger: EnergyLedger;
   history: { interval: number; count: number } & Record<(typeof HISTORY_SERIES)[number], number[]>;
@@ -198,6 +249,8 @@ export function saveWorld(world: World): SavedWorld {
   const field = {} as SavedWorld['field'];
   for (const name of FIELD_ARRAYS) field[name] = Array.from(plants[name]);
   field.blockHeavy = Array.from(plants.blockHeavy);
+  field.heavyGripTick = Array.from(plants.heavyGripTick);
+  field.heavyGripper = Array.from(plants.heavyGripper);
 
   const creatures = { count: c.count, nextId: c.nextId, brains: [] } as unknown as SavedWorld['creatures'];
   for (const name of CREATURE_FIELDS) creatures[name] = Array.from(c[name].subarray(0, c.count));
@@ -229,6 +282,7 @@ export function saveWorld(world: World): SavedWorld {
       realFirst: [...world.wiring.realFirst],
       shadowFirst: [...world.wiring.shadowFirst],
       samples: world.wiring.samples,
+      startTick: world.wiring.startTick,
     },
     ledger: { ...world.ledger },
     history: savedHistory,
@@ -266,7 +320,9 @@ export function saveWorld(world: World): SavedWorld {
 
 /** Rebuild a world from saved data. Throws if the data is not a save this version can read. */
 export function loadWorld(savedWorld: SavedWorld): World {
-  const saved = savedWorld && savedWorld.version >= OLDEST_LOADABLE_VERSION && savedWorld.version < SAVE_VERSION ? renumberBrains(savedWorld) : savedWorld;
+  let saved = savedWorld;
+  if (saved && saved.version >= OLDEST_LOADABLE_VERSION && saved.version < 17) saved = renumberBrains(saved);
+  if (saved && saved.version >= OLDEST_LOADABLE_VERSION && saved.version < 18) saved = wiringToTicks(saved);
   if (!saved || typeof saved !== 'object' || !(saved.version >= OLDEST_LOADABLE_VERSION && saved.version <= SAVE_VERSION)) {
     throw new Error(
       `This file is not a saved world this version can read (expected save version ${SAVE_VERSION}).`,
@@ -297,8 +353,9 @@ export function loadWorld(savedWorld: SavedWorld): World {
     blockBuilt: new Uint8Array(saved.field.blockBuilt),
     // Saves from before heavy blocks have none.
     blockHeavy: new Uint8Array(saved.field.blockHeavy ?? new Array<number>(cells).fill(0)),
-    heavyGripTick: new Int32Array(cells),
-    heavyGripper: new Int32Array(cells),
+    // Saves from before 18 have no pushes under way.
+    heavyGripTick: saved.field.heavyGripTick ? new Int32Array(saved.field.heavyGripTick) : new Int32Array(cells),
+    heavyGripper: saved.field.heavyGripper ? new Int32Array(saved.field.heavyGripper) : new Int32Array(cells),
     blockCount: 0,
     nearBlocks: new Uint8Array(cells),
     store: new Float64Array(saved.field.store),
@@ -369,6 +426,7 @@ export function loadWorld(savedWorld: SavedWorld): World {
       realFirst: new Map(saved.shadow?.realFirst),
       shadowFirst: new Map(saved.shadow?.shadowFirst),
       samples: saved.shadow?.samples ?? 0,
+      startTick: saved.shadow?.startTick ?? 0,
     },
     hash,
     // What is heard is rebuilt each tick from who called, so only the flags are saved.
@@ -410,4 +468,20 @@ export function loadWorld(savedWorld: SavedWorld): World {
       species: saved.species.species.map((record) => ({ ...record })),
     },
   };
+}
+
+/**
+ * Hash of the full world state (FNV-1a over its save). Two worlds with the
+ * same hash are, for testing purposes, in the same state. Taken over the save,
+ * so it covers every saved field and a field left out of saves shows up as a
+ * loaded world drifting from the original.
+ */
+export function hashWorld(world: World): number {
+  const text = JSON.stringify(saveWorld(world));
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
 }

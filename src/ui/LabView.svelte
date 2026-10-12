@@ -539,7 +539,7 @@
         Every brain link keeps a running count of how many samples it has been in the population. A link can last
         a long time by chance alone, so a neutral shadow runs alongside: a copy of the population with the same
         births and deaths, but where nothing is favoured. The survival chart takes every link that first appeared
-        at least 20 samples ago and shows how many are still carried. Above the shadow, selection is keeping new
+        at least 600 ticks ago and shows how many are still carried. Above the shadow, selection is keeping new
         wiring that chance would lose; below it, selection is purging new wiring.
       </p></details>
       <div class="charts">

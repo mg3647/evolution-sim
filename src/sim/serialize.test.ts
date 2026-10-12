@@ -180,6 +180,48 @@ describe('save and load', () => {
     expect(totalEnergy(copy)).toBeCloseTo(expectedEnergy(copy.ledger), 6);
   });
 
+  it('keeps a push on a heavy block that is under way', () => {
+    const world = run(createWorld(smallConfig), 100);
+    const cell = 5;
+    world.plants.heavyGripTick[cell] = world.tick + 1;
+    world.plants.heavyGripper[cell] = world.creatures.id[0]!;
+    const copy = roundTrip(world);
+    expect(copy.plants.heavyGripTick[cell]).toBe(world.tick + 1);
+    expect(copy.plants.heavyGripper[cell]).toBe(world.creatures.id[0]);
+    expect(hashWorld(copy)).toBe(hashWorld(world));
+    // The fingerprint notices a lost push, so a save that dropped it would fail the tests above.
+    copy.plants.heavyGripTick[cell] = 0;
+    expect(hashWorld(copy)).not.toBe(hashWorld(world));
+  });
+
+  it.each([
+    ['one spacing', 1000],
+    ['spacings that doubled', 8],
+  ])('opens a version 17 save with its wiring tallies moved to ticks (%s)', (_name, statsCapacity) => {
+    // Version 17 kept the sample number at which each link was first carried; note which tick each sample was.
+    const world = createWorld({ ...smallConfig, statsCapacity });
+    const sampleAt = new Map<number, number>([[world.tick, 1]]);
+    for (let t = 0; t < 900; t++) {
+      step(world);
+      if (world.wiring.samples > sampleAt.size) sampleAt.set(world.tick, world.wiring.samples);
+    }
+    if (statsCapacity < 1000) expect(world.history.interval).toBeGreaterThan(smallConfig.statsInterval);
+    const saved = JSON.parse(JSON.stringify(saveWorld(world))) as SavedWorld;
+    saved.version = 17;
+    delete saved.field.heavyGripTick;
+    delete saved.field.heavyGripper;
+    const shadow = saved.shadow!;
+    delete shadow.startTick;
+    shadow.realFirst = shadow.realFirst.map(([id, tick]) => [id, sampleAt.get(tick)!]);
+    shadow.shadowFirst = shadow.shadowFirst.map(([id, tick]) => [id, sampleAt.get(tick)!]);
+    const copy = loadWorld(saved);
+    expect(copy.wiring.realFirst).toEqual(world.wiring.realFirst);
+    expect(copy.wiring.shadowFirst).toEqual(world.wiring.shadowFirst);
+    expect(copy.wiring.startTick).toBe(0);
+    expect(Array.from(copy.plants.heavyGripTick).every((tick) => tick === 0)).toBe(true);
+    run(copy, 100);
+  });
+
   it('refuses files it cannot read', () => {
     const saved = saveWorld(createWorld(smallConfig));
     expect(() => loadWorld({ ...saved, version: SAVE_VERSION + 1 })).toThrow(/save version/);

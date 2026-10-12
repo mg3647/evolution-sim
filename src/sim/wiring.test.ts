@@ -3,10 +3,11 @@ import { compileBrain } from './brain';
 import { defaultConfig, type SimConfig } from './config';
 import { createCreatures, spawnCreature } from './creatures';
 import { loadWorld, saveWorld } from './serialize';
-import { createWiringTally, sampleWiring, SURVIVAL_AGE } from './wiring';
+import { createWiringTally, sampleWiring, } from './wiring';
 import { createWorld, hashWorld, step } from './world';
 
 const genes = { size: 1, speed: 1, sensorRange: 1, diet: 0, hue: 0, fur: 0, defense: 0, mutationRate: 0.1 };
+const WINDOW = 600;
 const link = (innovation: number) => ({ innovation, from: 0, to: 80, weight: 1, enabled: true });
 
 function population(brains: number[][], shadows: number[][]) {
@@ -29,10 +30,10 @@ describe('evolutionary activity', () => {
   it('gives one unit of activity per sample to every link someone carries', () => {
     const tally = createWiringTally();
     const c = population([[1, 2], [2, 3]], [[1], [1]]);
-    const first = sampleWiring(tally, c);
+    const first = sampleWiring(tally, c, 0, WINDOW);
     expect(first.live).toBe(3);
     expect(first.shadowLive).toBe(1);
-    sampleWiring(tally, c);
+    sampleWiring(tally, c, 30, WINDOW);
     expect(tally.real.get(2)).toBe(2);
     expect(tally.shadow.get(1)).toBe(2);
     expect(tally.real.get(9)).toBeUndefined();
@@ -41,16 +42,31 @@ describe('evolutionary activity', () => {
   it('compares how many links first seen long ago are still carried, real against shadow', () => {
     const tally = createWiringTally();
     // The first sample holds the founders. Then one new real link and one new shadow link appear.
-    sampleWiring(tally, population([[1]], [[1]]));
-    let stats = sampleWiring(tally, population([[1, 2], [1, 3]], [[1, 8], [1]]));
+    sampleWiring(tally, population([[1]], [[1]]), 0, WINDOW);
+    let stats = sampleWiring(tally, population([[1, 2], [1, 3]], [[1, 8], [1]]), 30, WINDOW);
     expect(stats.survival).toBe(0);
-    // Too young to judge until SURVIVAL_AGE samples have passed.
-    for (let k = 0; k < SURVIVAL_AGE - 1; k++) stats = sampleWiring(tally, population([[1, 2], [1, 3]], [[1, 8], [1]]));
+    // Too young to judge until WINDOW ticks have passed.
+    stats = sampleWiring(tally, population([[1, 2], [1, 3]], [[1, 8], [1]]), 30 + WINDOW - 1, WINDOW);
     expect(stats.survival).toBe(0);
     // Link 2 and 3 both survive; the shadow's link 8 is lost at the end.
-    stats = sampleWiring(tally, population([[1, 2], [1, 3]], [[1], [1]]));
+    stats = sampleWiring(tally, population([[1, 2], [1, 3]], [[1], [1]]), 30 + WINDOW, WINDOW);
     expect(stats.survival).toBe(1);
     expect(stats.shadowSurvival).toBe(0);
+  });
+
+  it('judges links after the same number of ticks however far apart the samples are', () => {
+    const judged = (spacing: number) => {
+      const tally = createWiringTally();
+      sampleWiring(tally, population([[1]], [[1]]), 0, WINDOW);
+      let stats = sampleWiring(tally, population([[1, 2]], [[1]]), spacing, WINDOW);
+      for (let tick = 2 * spacing; tick <= spacing + WINDOW; tick += spacing) stats = sampleWiring(tally, population([[1, 2]], [[1]]), tick, WINDOW);
+      return { stats, samples: tally.samples };
+    };
+    const close = judged(30);
+    const apart = judged(60);
+    expect(close.stats.survival).toBe(1);
+    expect(apart.stats.survival).toBe(1);
+    expect(apart.samples).toBeLessThan(close.samples);
   });
 });
 
