@@ -29,6 +29,7 @@ import { daylightAt } from '../src/sim/environment';
 import { maxEnergyFor, upkeepFor } from '../src/sim/genome';
 import { cellIndexAt, groundHue, visibility } from '../src/sim/plants';
 import { createWorld, step } from '../src/sim/world';
+import { functionalHidden, Locality, type LocalitySummary } from './locality';
 
 const seeds = (process.env.SEEDS ?? 'genesis,second,third').split(',');
 const ticks = Number(process.env.TICKS ?? 200000);
@@ -154,6 +155,10 @@ interface Summary {
    * and those creatures' mean fur, size, speed and diet.
    */
   biomes: { land: number; share: number; occupied: number; fur: number; size: number; speed: number; diet: number }[];
+  /** Local adaptation by birthplace, and how much children behave like their parents. */
+  locality: LocalitySummary;
+  /** At the end: hidden neurons per brain, and those whose removal changes what the brain does. */
+  hiddenNeurons: { hidden: number; functional: number };
   ticksPerSecond: number;
   /** The investment and readiness genes; see lifeHistoryOf. */
   lifeHistory: LifeHistory;
@@ -236,6 +241,7 @@ function run(seed: string): Summary {
   const biomeSpeed = zero();
   const biomeDiet = zero();
   const started = performance.now();
+  const locality = new Locality(world);
 
   let callerSum = 0;
   let dayActivity = 0;
@@ -251,6 +257,7 @@ function run(seed: string): Summary {
   for (let tick = 1; tick <= ticks; tick++) {
     if (tick === changeAt) Object.assign(world.config, change);
     step(world);
+    locality.afterStep(tick, tick > from);
     if (tick === from) {
       deathsBefore = { ...world.deaths };
       socialBefore = { ...world.social };
@@ -287,6 +294,7 @@ function run(seed: string): Summary {
     }
     if (tick % SAMPLE !== 0 || tick <= from) continue;
     samples++;
+    locality.sample(SAMPLE);
     popSum += c.count;
     popMin = Math.min(popMin, c.count);
     popMax = Math.max(popMax, c.count);
@@ -434,6 +442,8 @@ function run(seed: string): Summary {
       speed: biomeSpeed[biome]! / Math.max(1, count),
       diet: biomeDiet[biome]! / Math.max(1, count),
     })),
+    locality: locality.summary(),
+    hiddenNeurons: functionalHidden(world),
     ticksPerSecond: (ticks * 1000) / (performance.now() - started),
   };
 }
@@ -644,6 +654,11 @@ it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
           linkCost: s.linkCostShare,
           disabled: s.disabledShare,
           reseeded: s.reseeded,
+          recurrent: s.recurrentShare,
+          slowNeurons: s.slowNeuronShare,
+          hiddenNeurons: s.hiddenNeurons.hidden,
+          functionalHidden: s.hiddenNeurons.functional,
+          ...s.locality,
         }),
     );
     console.log(
@@ -654,6 +669,13 @@ it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
     );
     console.log(
       `    wiring: links=${s.wiring.live.toFixed(0)} shadow=${s.wiring.shadowLive.toFixed(0)} activity real/shadow=${s.wiring.activity.toFixed(1)}/${s.wiring.shadowActivity.toFixed(1)} newLinksKept real/shadow=${percent(s.wiring.survival)}/${percent(s.wiring.shadowSurvival)}`,
+    );
+    const l = s.locality;
+    console.log(
+      `    locality: residency=${percent(l.residency)} (by chance ${percent(l.residencyByChance)}) furByBirthBiome=${l.furByBirth.toFixed(3)} sizeByBirthBiome=${l.sizeByBirth.toFixed(3)} furVsBirthTemp r=${l.furTemperatureR.toFixed(3)} fur tundra/desert-born=${l.tundraFur.toFixed(2)}/${l.desertFur.toFixed(2)} climateHomeGap=${percent(l.climateHomeGap)} breedingHomeAdvantage=${l.homeAdvantage.toFixed(2)}`,
+    );
+    console.log(
+      `    inheritance: childParentGap=${l.childParentGap.toFixed(3)} (both parents ${l.childParentsMeanGap.toFixed(3)}) sameSpeciesGap=${l.sameSpeciesGap.toFixed(3)} actionsAgree child/species=${percent(l.childParentAgree)}/${percent(l.sameSpeciesAgree)} probes=${l.probes} mutationRate=${l.mutationRate.toFixed(3)} hidden=${s.hiddenNeurons.hidden.toFixed(2)} functionalHidden=${s.hiddenNeurons.functional.toFixed(2)}`,
     );
     for (const sp of s.speciesLearning) {
       console.log(
@@ -680,6 +702,15 @@ it(`runs ${seeds.length} seeds for ${ticks} ticks`, () => {
       ['brainsWithLoop', (s) => s.recurrentShare, percent],
       ['newLinksKept real', (s) => s.wiring.survival, percent],
       ['newLinksKept shadow', (s) => s.wiring.shadowSurvival, percent],
+      ['residency', (s) => s.locality.residency, percent],
+      ['furVsBirthTemp r', (s) => s.locality.furTemperatureR, (x) => x.toFixed(3)],
+      ['climateHomeGap', (s) => s.locality.climateHomeGap, percent],
+      ['breedingHomeAdvantage', (s) => s.locality.homeAdvantage, (x) => x.toFixed(2)],
+      ['childParentGap', (s) => s.locality.childParentGap, (x) => x.toFixed(3)],
+      ['sameSpeciesGap', (s) => s.locality.sameSpeciesGap, (x) => x.toFixed(3)],
+      ['mutationRate', (s) => s.locality.mutationRate, (x) => x.toFixed(3)],
+      ['hiddenNeurons', (s) => s.hiddenNeurons.hidden, (x) => x.toFixed(2)],
+      ['functionalHidden', (s) => s.hiddenNeurons.functional, (x) => x.toFixed(2)],
     ];
     for (const [base, list] of runs) {
       console.log(`${base}: mean (spread = standard deviation) over ${list.length} runs`);

@@ -421,7 +421,7 @@ export function mutateBrain(
   const hiddenTau = parent.hiddenTau.slice();
 
   for (const link of links) {
-    if (rng.chance(config.weightResetChance)) link.weight = randomWeight(rng);
+    if (rng.chance(config.weightResetChance)) link.weight = randomWeight(rng) * config.weightResetScale;
     else if (rng.chance(config.weightChangeChance)) {
       link.weight += rng.gaussian() * mutationRate * config.weightChangeScale;
     }
