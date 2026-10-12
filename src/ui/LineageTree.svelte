@@ -302,7 +302,7 @@
 
 <style>
   h2 {
-    margin: 0 0 4px;
+    margin: 16px 0 4px;
     font-size: 12px;
     font-weight: 600;
     color: var(--muted);

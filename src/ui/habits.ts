@@ -30,15 +30,15 @@ export function actionWord(output: number, effect: number): string {
 }
 
 /**
- * "Plants ahead → speed up", or without a sign, "Plants ahead → Thrust". With a
- * sign, a two-way sense is named by its upper side ("Stone ahead → speed up"),
- * since that is the side the effect is for; see habitOpposite for the other.
+ * "Plants ahead → speed up", or without a sign, "Plants ahead → Thrust". A
+ * two-way sense is named by its upper side ("Stone ahead → speed up"), the side
+ * a habit's effect is measured for; see habitOpposite for the other.
  */
 export function habitLabel(pathway: number, effect?: number): string {
   const input = pathwayInput(pathway);
   const output = pathwayOutput(pathway);
-  if (effect === undefined) return `${INPUT_LABELS[input]} → ${OUTPUT_LABELS[output]}`;
-  return `${senseSides(input)?.[0] ?? INPUT_LABELS[input]} → ${actionWord(output, effect)}`;
+  const sense = senseSides(input)?.[0] ?? INPUT_LABELS[input];
+  return `${sense} → ${effect === undefined ? OUTPUT_LABELS[output] : actionWord(output, effect)}`;
 }
 
 /** For a two-way sense, what the habit does on the other side ("Branch ahead → slow down"); otherwise null. */

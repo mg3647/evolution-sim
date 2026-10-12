@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import type uPlot from 'uplot';
   import { BIOME_GROUND, RESOURCE_KINDS, resourcesIn, WorldRenderer, type ResourceKind } from '../render/renderer';
+  import { assignSpeciesColors, resetSpeciesColors } from '../render/speciesPalette';
   import { BIOME_LABELS } from '../sim/biomes';
   import { defaultConfig, type SimConfig } from '../sim/config';
   import { presetConfig, RESTART_KEYS, WILDFIRE_LEVELS, wildfireLevel, type Preset } from '../sim/presets';
@@ -287,6 +288,9 @@
       renderer = r;
       client = new SimClient({
         onSnapshot: (s) => {
+          // A world that went back in time is a new or loaded one: its species ids mean other species.
+          if (s.tick < (snapshot?.tick ?? 0)) resetSpeciesColors();
+          assignSpeciesColors(s.species.map((sp) => sp.id));
           snapshot = s;
           if (adoptLoadedSettings) {
             adoptLoadedSettings = false;
@@ -673,15 +677,15 @@
       {#if snapshot?.selected && activeTab !== 'creature'}
         <div class="floating-card">
           <div class="creature-info">
-            <div class="creature-name">Creature #{snapshot.selected.id}</div>
+            <div class="creature-name">Creature {snapshot.selected.id}</div>
             <div class="creature-species">
               <span class="swatch" style="background: {speciesColor(snapshot.selected.species)}"></span>{speciesName(snapshot.selected.species)}
             </div>
             <div class="creature-stats">
-              <div><span class="label">Gen:</span> <span>{snapshot.selected.generation}</span></div>
-              <div><span class="label">Age:</span> <span>{snapshot.selected.age}</span></div>
-              <div><span class="label">Energy:</span> <span>{Math.round((snapshot.selected.energy / snapshot.selected.maxEnergy) * 100)}%</span></div>
-              <div><span class="label">Health:</span> <span>{Math.round(snapshot.selected.health * 100)}%</span></div>
+              <div><span class="label">Generation</span> <span>{snapshot.selected.generation}</span></div>
+              <div><span class="label">Age</span> <span>{snapshot.selected.age.toLocaleString()}</span></div>
+              <div><span class="label">Energy</span> <span>{Math.round((snapshot.selected.energy / snapshot.selected.maxEnergy) * 100)}%</span></div>
+              <div><span class="label">Health</span> <span>{Math.round(snapshot.selected.health * 100)}%</span></div>
             </div>
           </div>
         </div>
@@ -857,7 +861,7 @@
       </div>
 
       {#if watching}
-        <button class="leave-watch" onclick={() => setWatching(false)} title="Bring back the panels (F or Esc)">Leave Watch · F</button>
+        <button class="leave-watch" onclick={() => setWatching(false)} title="Bring back the panels (F or Esc)">Leave Watch</button>
       {/if}
     </div>
 
@@ -1208,6 +1212,7 @@
   .center {
     flex: 1;
     min-width: 0;
+    min-height: 0;
     display: flex;
     flex-direction: column;
   }
@@ -1751,7 +1756,7 @@
   }
 
   .habits-spreading {
-    margin-top: 12px;
+    margin: 16px 0;
   }
 
   .habits-spreading h2 {
@@ -1819,6 +1824,9 @@
   }
 
   .watching .stats-overlay {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
     gap: 22px;
     padding: 10px 18px;
     font-size: 17px;
@@ -1841,6 +1849,27 @@
   .leave-watch:hover,
   .leave-watch:focus-visible {
     opacity: 1;
+  }
+
+  /* On a phone, Watch keeps the numbers on screen and the way out at the bottom. */
+  @media (max-width: 600px) {
+    .watching .stats-overlay {
+      top: 8px;
+      max-width: calc(100% - 16px);
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 6px 14px;
+      padding: 6px 10px;
+      font-size: 14px;
+    }
+
+    .leave-watch {
+      top: auto;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      opacity: 0.8;
+    }
   }
 
   @media (max-width: 800px) {

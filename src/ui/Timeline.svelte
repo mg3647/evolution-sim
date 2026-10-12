@@ -174,7 +174,7 @@
   <div class="legend">
     <span class="title">Run so far · {year(tick)} ticks</span>
     <span><i class="line"></i>population</span>
-    <span><i class="dot" style="background:#6db3ff"></i>new species</span>
+    <span><i class="dot rainbow"></i>new species, in its colour</span>
     <span><i class="x">✕</i>species gone</span>
     <span><i class="tri"></i>big die-off</span>
     <span><i class="dia"></i>event</span>
@@ -243,6 +243,10 @@
     height: 8px;
     margin-right: 4px;
     border-radius: 50%;
+  }
+
+  .rainbow {
+    background: conic-gradient(#e69f00, #56b4e9, #f0e442, #cc79a7, #1fc08f, #e69f00);
   }
 
   .x {

@@ -733,6 +733,7 @@
   }
 
   .card {
+    align-self: start;
     min-width: 0;
     padding: 14px;
     background: var(--panel);
