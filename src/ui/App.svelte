@@ -147,8 +147,6 @@
   /** The settings in force. Restart-only ones take effect at the next restart. */
   let settings = $state<SimConfig>(remembered);
   $effect(() => rememberSettings({ ...settings, seed }));
-  /** Set when a world is loaded from a file, so the settings follow the file's. */
-  let adoptLoadedSettings = false;
   let showScent = $state(false);
   let showTemperature = $state(false);
   let showResources = $state(false);
@@ -292,11 +290,6 @@
           if (s.tick < (snapshot?.tick ?? 0)) resetSpeciesColors();
           assignSpeciesColors(s.species.map((sp) => sp.id));
           snapshot = s;
-          if (adoptLoadedSettings) {
-            adoptLoadedSettings = false;
-            settings = { ...s.config };
-            seed = s.config.seed;
-          }
           r.update(s);
           const picked = s.selected?.id ?? 0;
           if (picked !== 0 && picked !== shownCreature) activeTab = 'creature';
@@ -309,10 +302,13 @@
         onLab: (data) => (lab = data),
         onSaved: download,
         onReport: (json, fileName, summary) => (report = { json, fileName, summary }),
-        onError: (message) => {
-          adoptLoadedSettings = false;
-          errorMessage = message;
+        // The settings follow a loaded file's, once the worker has the new world.
+        onLoaded: (config) => {
+          settings = { ...config };
+          seed = config.seed;
+          forgetHighlights();
         },
+        onError: (message) => (errorMessage = message),
       });
       client.init({ ...settings, seed });
       r.onPick = (x, y, radius) => client?.pick(x, y, radius);
@@ -352,12 +348,25 @@
     else client?.play();
   }
 
+  /** Whether to go ahead with replacing the world: asks first once the run is long enough to miss. */
+  function confirmRestart(): boolean {
+    const tick = snapshot?.tick ?? 0;
+    return (
+      tick <= 3000 ||
+      confirm(`Restart? This world is ${count(tick)} ticks old and the run so far will be lost. Use Save first to keep it.`)
+    );
+  }
+
+  /** Species and family picks name ids that a new world reuses for unrelated creatures. */
+  function forgetHighlights() {
+    pinnedSpecies = null;
+    hoveredSpecies = null;
+    pickedBranch = null;
+  }
+
   function restart(event: SubmitEvent) {
     event.preventDefault();
-    if ((snapshot?.tick ?? 0) > 3000 && !confirm(`Restart? This world is ${count(snapshot?.tick)} ticks old and the run so far will be lost. Use Save first to keep it.`)) {
-      return;
-    }
-    client?.init({ ...settings, seed });
+    restartWorld();
   }
 
   function changeSetting(key: keyof SimConfig, value: number) {
@@ -366,6 +375,8 @@
   }
 
   function restartWorld() {
+    if (!confirmRestart()) return;
+    forgetHighlights();
     client?.init({ ...settings, seed });
   }
 
@@ -386,6 +397,8 @@
   }
 
   function applyPreset(preset: Preset) {
+    if (!confirmRestart()) return;
+    forgetHighlights();
     settings = presetConfig(preset, seed);
     client?.init({ ...settings });
     client?.setRandomEvents(settings.randomEvents);
@@ -421,7 +434,8 @@
     link.href = url;
     link.download = fileName;
     link.click();
-    URL.revokeObjectURL(url);
+    // Freed a little later: some browsers start the download only after click() returns.
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
   }
 
   async function loadFile() {
@@ -429,7 +443,6 @@
     fileInput.value = '';
     if (!file) return;
     errorMessage = '';
-    adoptLoadedSettings = true;
     client?.load(await file.text());
   }
 
@@ -480,7 +493,11 @@
       {#each SPEEDS as option (option.label)}
         <button
           class:active={snapshot?.speed === option.value}
-          onclick={() => client?.setSpeed(option.value)}
+          onclick={() => {
+            client?.setSpeed(option.value);
+            // Picking a speed means "run at this speed", so a paused world starts.
+            if (!snapshot?.running) client?.play();
+          }}
           disabled={!snapshot}
         >
           {option.label}
@@ -693,8 +710,10 @@
 
       {#if !welcomeSeen && snapshot && snapshot.tick === 0}
         <div class="welcome">
-          <b>Welcome.</b> Press <b>Play</b> to start the world. Click any creature to look inside its brain. Pick a
-          tool on the left to change the world by hand.
+          <p>
+            <b>Welcome.</b> Press <b>Play</b> to start the world. Click any creature to look inside its brain. Pick a
+            tool on the left to change the world by hand.
+          </p>
           <button onclick={dismissWelcome}>Got it</button>
         </div>
       {/if}
@@ -1084,6 +1103,7 @@
             syncKey="panel"
             events={chartEvents}
             stacked
+            max={100}
             title="Diet"
             note="The share of creatures that digest plants better (drawn as discs) and the share that digest meat better (drawn as pointed shapes). Together they are everyone."
             series={DIET_SERIES}
@@ -1272,6 +1292,10 @@
     border-radius: 6px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
     white-space: nowrap;
+  }
+
+  .welcome p {
+    margin: 0;
   }
 
   .welcome {
