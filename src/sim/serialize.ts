@@ -267,6 +267,9 @@ export function saveWorld(world: World): SavedWorld {
 /** Rebuild a world from saved data. Throws if the data is not a save this version can read. */
 export function loadWorld(savedWorld: SavedWorld): World {
   const saved = savedWorld && savedWorld.version >= OLDEST_LOADABLE_VERSION && savedWorld.version < SAVE_VERSION ? renumberBrains(savedWorld) : savedWorld;
+  if (saved && typeof saved === 'object' && saved.version > SAVE_VERSION) {
+    throw new Error('This world was saved by a newer version of the sim. Reload the page to get the latest version, then load it again.');
+  }
   if (!saved || typeof saved !== 'object' || !(saved.version >= OLDEST_LOADABLE_VERSION && saved.version <= SAVE_VERSION)) {
     throw new Error(
       `This file is not a saved world this version can read (expected save version ${SAVE_VERSION}).`,

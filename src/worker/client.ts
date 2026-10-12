@@ -13,6 +13,8 @@ export interface SimClientHandlers {
   onSaved: (json: string, tick: number, seed: string) => void;
   /** A run report is ready: the file as JSON text, the name to give it, and a short summary. */
   onReport: (json: string, fileName: string, summary: ReportSummary) => void;
+  /** A saved world was loaded; its settings are now the ones in force. */
+  onLoaded: (config: SimConfig) => void;
   onError: (message: string) => void;
 }
 
@@ -31,6 +33,7 @@ export class SimClient {
       else if (message.type === 'lab') handlers.onLab(message.lab);
       else if (message.type === 'saved') handlers.onSaved(message.json, message.tick, message.seed);
       else if (message.type === 'report') handlers.onReport(message.json, message.fileName, message.summary);
+      else if (message.type === 'loaded') handlers.onLoaded(message.config);
       else handlers.onError(message.message);
     };
   }
