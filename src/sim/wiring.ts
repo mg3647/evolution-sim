@@ -11,8 +11,8 @@ import type { Creatures } from './creatures';
  * links last by drift. So a neutral shadow runs beside the real population.
  * Every creature carries, besides its real brain, a shadow list of link ids
  * with the same births and deaths, but a newborn's shadow copies a random
- * living creature's instead of its parent's, plus whatever links its real
- * brain gained. The shadow has no way to be favoured, so how long its links
+ * living creature's old enough to breed instead of its parent's, plus whatever
+ * links its real brain gained. The shadow has no way to be favoured, so how long its links
  * last is what drift alone produces. Real links that last longer than shadow
  * links of the same age are evidence that selection keeps them; shorter, that
  * selection purges new wiring.
@@ -37,6 +37,19 @@ export function createWiringTally(): WiringTally {
  * lasting is judged once it is at least this many samples old.
  */
 export const SURVIVAL_AGE = 20;
+
+/**
+ * Count the links of a creature brought in from outside (a reseeded founder)
+ * as present from the start, really and in the shadow, so they are not judged
+ * as new wiring: they were not made by mutation, and naive founders mostly die.
+ * Links already seen keep their first sample.
+ */
+export function markFounding(tally: WiringTally, brain: { links: readonly { innovation: number }[] }): void {
+  for (const link of brain.links) {
+    if (!tally.realFirst.has(link.innovation)) tally.realFirst.set(link.innovation, 1);
+    if (!tally.shadowFirst.has(link.innovation)) tally.shadowFirst.set(link.innovation, 1);
+  }
+}
 
 export interface WiringStats {
   /** Different links carried right now, really and in the shadow. */

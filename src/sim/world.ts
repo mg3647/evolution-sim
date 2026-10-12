@@ -103,7 +103,7 @@ import { Senses } from './senses';
 import { buildSound, createSoundField, type SoundField } from './sound';
 import { SpatialHash } from './spatialHash';
 import { classifySpecies, createSpeciesState, type SpeciesState } from './species';
-import { createWiringTally, sampleWiring, type WiringTally } from './wiring';
+import { createWiringTally, markFounding, sampleWiring, type WiringTally } from './wiring';
 import { createHistory, meanOf, recordBehaviour, recordDensity, recordSample, spreadOf, type History } from './stats';
 
 export interface World {
@@ -713,6 +713,8 @@ export function step(world: World): void {
   while (creatures.count < config.minPopulation) {
     ledger.seedIn += spawnFounder(world, 0);
     world.reseeded++;
+    // Wiring brought in from outside is not an innovation of this world's evolution.
+    markFounding(world.wiring, world.creatures.brain[creatures.count - 1]!);
   }
 
   if (world.tick % config.speciesInterval === 0) {
@@ -1081,10 +1083,28 @@ function bear(world: World, carrier: number, other: number, offered: number): nu
 /**
  * The neutral shadow of a newborn: a copy of a random living creature's
  * shadow, plus the links its brain gained that its parents' did not have.
+ *
+ * The donor is drawn only from creatures old enough to breed. A real link can
+ * only be passed on once its carrier has reached breeding age, so a donor
+ * drawn from everyone, newborns included, would let shadow links spread from
+ * creatures that never live to breed and outlast real links with no selection
+ * at all.
  */
 function shadowFor(world: World, parents: number[], brain: Brain): number[] {
-  const { creatures } = world;
-  const chosen = creatures.shadow[world.shadowRng.int(0, creatures.count)]!;
+  const { creatures, config } = world;
+  let adults = 0;
+  for (let i = 0; i < creatures.count; i++) if (creatures.age[i]! >= config.minReproduceAge) adults++;
+  let donor = parents[0]!;
+  if (adults > 0) {
+    let pick = world.shadowRng.int(0, adults);
+    for (let i = 0; i < creatures.count; i++) {
+      if (creatures.age[i]! >= config.minReproduceAge && pick-- === 0) {
+        donor = i;
+        break;
+      }
+    }
+  }
+  const chosen = creatures.shadow[donor]!;
   // Links either parent had are inherited, not new, so crossover does not pass for innovation.
   const had = new Set(parents.flatMap((parent) => creatures.brain[parent]!.links.map((link) => link.innovation)));
   const shadow = chosen.slice();
@@ -1095,7 +1115,8 @@ function shadowFor(world: World, parents: number[], brain: Brain): number[] {
       held.add(link.innovation);
     }
   }
-  return shadow;
+  // A real brain stops gaining links at the cap, so the shadow drops its oldest to stay within it too.
+  return shadow.length > config.maxLinks ? shadow.slice(shadow.length - config.maxLinks) : shadow;
 }
 
 function sampleHistory(world: World): void {
