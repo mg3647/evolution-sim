@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { wrap, wrappedDelta } from './geometry';
+import { Rng } from './rng';
+import { wrap, wrapNear, wrappedDelta } from './geometry';
 
 describe('wrapping', () => {
   it('wraps coordinates into [0, size)', () => {
@@ -15,5 +16,19 @@ describe('wrapping', () => {
     expect(wrappedDelta(30, 10, 100)).toBe(-20);
     expect(wrappedDelta(95, 5, 100)).toBe(10);
     expect(wrappedDelta(5, 95, 100)).toBe(-10);
+  });
+
+  it('wraps a nearby point exactly as the division it replaces', () => {
+    const rng = new Rng('wrap-near');
+    for (const size of [4000, 3000, 123.4]) {
+      for (let k = 0; k < 20000; k++) {
+        const value = rng.range(-2 * size, 3 * size);
+        expect(wrapNear(value, size)).toBe(value - Math.floor(value / size) * size);
+      }
+      // Adding 0 makes -0 and 0 the same, as they are to an array index.
+      for (const value of [0, -0, size, -size, 2 * size, -2 * size, size - 1e-9, -1e-9]) {
+        expect(wrapNear(value, size) + 0).toBe(value - Math.floor(value / size) * size + 0);
+      }
+    }
   });
 });

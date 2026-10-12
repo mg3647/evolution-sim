@@ -22,12 +22,26 @@ export type ToWorker =
   | { type: 'setRandomEvents'; enabled: boolean }
   /** With drawing off, snapshots carry numbers only, sent less often. */
   | { type: 'setRendering'; enabled: boolean }
+  /** The page has drawn the last snapshot and is ready for the next. */
+  | { type: 'drawn' }
+  /** Which parts of the page are open, so the worker skips numbers nobody is looking at. */
+  | { type: 'setViews'; views: OpenViews }
   /** Change settings in the running world. Settings that only matter at creation are ignored. */
   | { type: 'setConfig'; changes: Partial<SimConfig> }
   | { type: 'save' }
   /** Build a run report, with what the person wrote about the run. */
   | { type: 'report'; question: string; notes: string; appVersion: string }
   | { type: 'load'; json: string };
+
+/** The parts of the page that show numbers worked out apart from the snapshot. */
+export interface OpenViews {
+  /** The Lab: brain profiles, habits, founders, biomes and more. */
+  lab: boolean;
+  /** The Evolution tab: the family tree and habits spreading. */
+  evolution: boolean;
+  /** The Creature tab: the selected creature beside its group's brain profile. */
+  creature: boolean;
+}
 
 /** What the report dialog shows before anything is sent. */
 export interface ReportSummary {
@@ -178,7 +192,8 @@ export interface Snapshot {
   meat: Uint8Array;
   // Per cell: scent as 0..255 of the level that reads as 1 to the senses.
   scent: Uint8Array;
-  // Per cell: 1 where there is a wall.
+  // Per cell: 1 where there is a wall. Walls, water and biomes are sent only when one changed; see
+  // maps.ts. The page fills them back in, so to the screen they are always there.
   walls: Uint8Array;
   // Per cell: 1 where there is water.
   water: Uint8Array;
@@ -214,6 +229,8 @@ export interface Snapshot {
 
   /** False when drawing is off: the map arrays are then empty. */
   rendered: boolean;
+  /** Whether walls, water and biomes came with this snapshot, rather than being unchanged and left out. */
+  mapsSent: boolean;
   /** Living species, largest first. */
   species: SpeciesView[];
 }

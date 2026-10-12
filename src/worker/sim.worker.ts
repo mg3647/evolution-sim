@@ -27,6 +27,7 @@ import {
   type HistoryData,
   type LabData,
   type HabitView,
+  type OpenViews,
   type Inspection,
   type ProfileGroup,
   type Snapshot,
@@ -34,6 +35,7 @@ import {
   type ToWorker,
   type TreeData,
 } from './protocol';
+import { SteadyMapSender } from './maps';
 import { SimRunner } from './runner';
 
 /** Wall time per loop iteration spent ticking, leaving room for messages. */
@@ -42,6 +44,8 @@ const TICK_BUDGET_MS = 12;
 const TICK_BUDGET_UNDRAWN_MS = 40;
 const SNAPSHOT_INTERVAL_MS = 1000 / 60;
 const SNAPSHOT_INTERVAL_UNDRAWN_MS = 250;
+/** A page that has not said it drew the last snapshot gets the next one after this long anyway. */
+const SNAPSHOT_STALL_MS = 500;
 const HISTORY_INTERVAL_MS = 250;
 const TREE_INTERVAL_MS = 1000;
 const TPS_WINDOW_MS = 500;
@@ -63,6 +67,11 @@ let selectedId = 0;
 /** Whether snapshots carry the map and creatures for drawing. */
 let rendering = true;
 let lastSnapshotTime = 0;
+/** Whether the page has drawn the last snapshot sent; one is not sent on top of another it has not. */
+let drawn = true;
+/** Which parts of the page are open. Until the page says, everything counts as open. */
+let views: OpenViews = { lab: true, evolution: true, creature: true };
+const steadyMaps = new SteadyMapSender();
 let lastHistoryTime = 0;
 let lastTreeTime = 0;
 /** History version last sent, or -1 to force a send. */
@@ -283,6 +292,7 @@ function sendSnapshot(now: number): void {
   }
   let plantEnergy = 0;
   for (let i = 0; i < p.energy.length; i++) plantEnergy += p.energy[i]!;
+  const maps = rendering ? steadyMaps.take(p.walls, p.water, p.biome) : null;
 
   const snapshot: Snapshot = {
     config,
@@ -306,10 +316,10 @@ function sendSnapshot(now: number): void {
     plantFill: world.plantCapacityTotal > 0 ? plantEnergy / world.plantCapacityTotal : 0,
     meat,
     scent,
-    walls: rendering ? p.walls.slice() : new Uint8Array(0),
-    water: rendering ? p.water.slice() : new Uint8Array(0),
+    walls: maps?.walls ?? new Uint8Array(0),
+    water: maps?.water ?? new Uint8Array(0),
     temperature,
-    biome: rendering ? p.biome.slice() : new Uint8Array(0),
+    biome: maps?.biome ?? new Uint8Array(0),
     fire,
     ash,
     items,
@@ -346,10 +356,14 @@ function sendSnapshot(now: number): void {
     deaths: { ...world.deaths },
     selected,
     rendered: rendering,
+    mapsSent: maps !== null,
     species: speciesViews(world),
   };
-  post({ type: 'snapshot', snapshot }, [creatures.buffer, plants.buffer, meat.buffer, scent.buffer, temperature.buffer, fire.buffer, ash.buffer, items.buffer, blocks.buffer, blockSpecies.buffer]);
+  const buffers: ArrayBufferView[] = [creatures, plants, meat, scent, temperature, fire, ash, items, blocks, blockSpecies];
+  if (maps) buffers.push(maps.walls, maps.water, maps.biome);
+  post({ type: 'snapshot', snapshot }, buffers.map((array) => array.buffer as ArrayBuffer));
   lastSnapshotTime = now;
+  drawn = false;
 }
 
 /** The per-species series with the largest totals, largest first, and the rest summed under id 0. */
@@ -463,11 +477,19 @@ function sendHistory(now: number): void {
   lastHistoryTime = now;
 }
 
-/** Send the family tree if the world has moved on since it was last sent. */
+/** Send the family tree if the world has moved on since it was last sent, and the Evolution tab is open. */
 function sendTree(now: number): void {
   if (!runner) return;
   const { world } = runner;
   if (world.tick === sentTreeTick) return;
+  if (views.evolution) postTree(world);
+  sentTreeTick = world.tick;
+  lastTreeTime = now;
+  // Profiles change as slowly as the tree does, so they go out together.
+  sendProfiles();
+}
+
+function postTree(world: World): void {
   const nodes = [...world.lineage.all()];
   const indexOf = new Map(nodes.map((node, k) => [node.id, k]));
   const tree: TreeData = {
@@ -500,13 +522,13 @@ function sendTree(now: number): void {
     tree.id.buffer,
     tree.founder.buffer,
   ]);
-  sentTreeTick = world.tick;
-  lastTreeTime = now;
-  // Profiles change as slowly as the tree does, so they go out together.
-  sendProfiles();
 }
 
-/** Send brain profiles for plant-eaters, meat-eaters and the largest species. */
+/**
+ * Send brain profiles for plant-eaters, meat-eaters and the largest species,
+ * if the Lab or the Creature tab is open. Which habits the population has is
+ * recorded either way, as the run report needs it.
+ */
 function sendProfiles(): void {
   if (!runner) return;
   const { creatures: c } = runner.world;
@@ -519,9 +541,14 @@ function sendProfiles(): void {
     if (members) members.push(i);
     else bySpecies.set(c.species[i]!, [i]);
   }
-  const largest = [...bySpecies].sort((a, b) => b[1].length - a[1].length || a[0] - b[0]).slice(0, SPECIES_SHOWN);
   const habits = Array.from({ length: c.count }, (_, i) => traceHabits(c.brain[i]!));
   const everyone = Array.from({ length: c.count }, (_, i) => i);
+  if (!views.lab && !views.creature) {
+    recordAdoption(adoption, runner.world.tick, pathwayStats(habits, everyone).share);
+    if (views.evolution) sendLab();
+    return;
+  }
+  const largest = [...bySpecies].sort((a, b) => b[1].length - a[1].length || a[0] - b[0]).slice(0, SPECIES_SHOWN);
   const group = (id: string, speciesId: number, members: number[]): ProfileGroup => ({
     id,
     speciesId,
@@ -535,9 +562,10 @@ function sendProfiles(): void {
     ...largest.map(([speciesId, members]) => group(`species-${speciesId}`, speciesId, members)),
   ];
   recordAdoption(adoption, runner.world.tick, groups[0]!.pathways.share);
-  breeding = breedingLinks(c, habits, adultAge(runner.world));
+  // Only the Lab shows it; opening the Lab sends everything afresh.
+  if (views.lab) breeding = breedingLinks(c, habits, adultAge(runner.world));
   post({ type: 'profiles', groups });
-  sendLab();
+  if (views.lab || views.evolution) sendLab();
 }
 
 /**
@@ -657,7 +685,9 @@ function loop(): void {
     windowTicks = 0;
   }
   const snapshotInterval = rendering ? SNAPSHOT_INTERVAL_MS : SNAPSHOT_INTERVAL_UNDRAWN_MS;
-  if (after - lastSnapshotTime >= snapshotInterval) sendSnapshot(after);
+  // A page still drawing the last picture is not sent another, unless it has been a while (a hidden tab draws nothing).
+  const due = after - lastSnapshotTime >= snapshotInterval;
+  if (due && (drawn || after - lastSnapshotTime >= SNAPSHOT_STALL_MS)) sendSnapshot(after);
   if (after - lastHistoryTime >= HISTORY_INTERVAL_MS) sendHistory(after);
   if (after - lastTreeTime >= TREE_INTERVAL_MS) sendTree(after);
 
@@ -677,10 +707,26 @@ function worldReplaced(): void {
   selectedId = 0;
   adoption = createAdoptionHistory();
   breeding = null;
+  steadyMaps.reset();
 }
 
 self.onmessage = (event: MessageEvent<ToWorker>) => {
   const message = event.data;
+  // These two may come before there is a world.
+  if (message.type === 'drawn') {
+    drawn = true;
+    // Nothing else to send for this: the loop sends the next picture when it is due.
+    return;
+  }
+  if (message.type === 'setViews') {
+    const opened = (Object.keys(message.views) as (keyof OpenViews)[]).some((key) => message.views[key] && !views[key]);
+    views = { ...message.views };
+    // Something just opened: send its numbers now rather than at the next round.
+    if (!opened || !runner) return;
+    sentTreeTick = -1;
+    sendTree(performance.now());
+    return;
+  }
   if (message.type === 'init') {
     const wasRunning = runner?.running ?? false;
     const speed = runner?.speed ?? 1;
@@ -729,6 +775,7 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
     runner.world.environment.randomEvents = message.enabled;
   } else if (message.type === 'setRendering') {
     rendering = message.enabled;
+    steadyMaps.reset();
   } else if (message.type === 'setConfig') {
     const config = runner.world.config as unknown as Record<string, unknown>;
     for (const [key, value] of Object.entries(message.changes)) {

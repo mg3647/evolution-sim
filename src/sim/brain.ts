@@ -555,6 +555,18 @@ export function think(brain: Brain, decay = 0): void {
  * to the next beyond a slow neuron's own lag.
  */
 export function hasLoop(brain: Brain): boolean {
+  // A brain's links never change after it is built, so the answer is worked out once.
+  let loop = loopCache.get(brain);
+  if (loop === undefined) {
+    loop = findLoop(brain);
+    loopCache.set(brain, loop);
+  }
+  return loop;
+}
+
+const loopCache = new WeakMap<Brain, boolean>();
+
+function findLoop(brain: Brain): boolean {
   const nodes = brain.activation.length;
   const outgoing: number[][] = Array.from({ length: nodes }, () => []);
   for (let k = 0; k < brain.linkFrom.length; k++) {
