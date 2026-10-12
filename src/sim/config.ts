@@ -78,6 +78,12 @@ export interface SimConfig {
    */
   socialSenses: boolean;
 
+  /**
+   * Whether creatures take their turns in a fresh random order each tick.
+   * Off, they go in order of birth, so older creatures bite and eat first.
+   */
+  shuffleActOrder: boolean;
+
   /** Energy per tick for each hidden neuron and each enabled link. */
   brainNeuronCost: number;
   brainLinkCost: number;
@@ -88,8 +94,9 @@ export interface SimConfig {
   /** Per birth: chance that each link's weight shifts, and how far relative to the mutation rate. */
   weightChangeChance: number;
   weightChangeScale: number;
-  /** Per birth: chance that each link's weight is replaced outright. */
+  /** Per birth: chance that each link's weight is replaced outright, and the spread of its new weight. */
   weightResetChance: number;
+  weightResetScale: number;
   /**
    * Links added by mutation start with a weight of this standard deviation
    * (founders' links always use 1). Small makes a new link nearly neutral, to
@@ -447,6 +454,7 @@ export const defaultConfig: SimConfig = {
   giveRate: 0.5,
   giveReserve: 0.25,
   socialSenses: true,
+  shuffleActOrder: false,
 
   brainNeuronCost: 0.002,
   brainLinkCost: 0.0005,
@@ -456,6 +464,7 @@ export const defaultConfig: SimConfig = {
   weightChangeChance: 0.5,
   weightChangeScale: 4,
   weightResetChance: 0.02,
+  weightResetScale: 1,
   newLinkWeightScale: 0.1,
   addLinkChance: 0.3,
   addNeuronChance: 0.06,

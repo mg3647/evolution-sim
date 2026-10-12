@@ -359,6 +359,24 @@ export function createWorld(config: SimConfig): World {
 }
 
 /** Advance the world by one fixed timestep. */
+/** Reused between ticks: the order in which creatures take their turns. */
+let turnOrder = new Uint32Array(0);
+
+/** The first `count` creature indices, in birth order, or shuffled when given a generator. */
+function actOrder(count: number, rng: Rng | null): Uint32Array {
+  if (turnOrder.length < count) turnOrder = new Uint32Array(Math.max(count, turnOrder.length * 2));
+  for (let k = 0; k < count; k++) turnOrder[k] = k;
+  if (rng) {
+    for (let k = count - 1; k > 0; k--) {
+      const j = rng.int(0, k + 1);
+      const swap = turnOrder[k]!;
+      turnOrder[k] = turnOrder[j]!;
+      turnOrder[j] = swap;
+    }
+  }
+  return turnOrder;
+}
+
 export function step(world: World): void {
   const { config, plants, creatures, ledger } = world;
   world.tick++;
@@ -402,7 +420,9 @@ export function step(world: World): void {
   const lab = world.lab;
   const sampling = world.tick % world.history.interval === 0;
   if (sampling) lab.resting = lab.foraging = lab.chasing = lab.fleeing = lab.acted = 0;
-  for (let i = 0; i < alive; i++) {
+  const order = actOrder(alive, config.shuffleActOrder ? world.rng : null);
+  for (let slot = 0; slot < alive; slot++) {
+    const i = order[slot]!;
     // Killed earlier this tick: it no longer acts, and leaves its body in the death pass.
     if (creatures.health[i]! <= 0) continue;
     const size = creatures.size[i]!;
